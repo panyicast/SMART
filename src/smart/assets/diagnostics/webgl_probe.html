@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMART WebGL Probe</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: #edf3f6;
+        color: #17324a;
+        font-family: "Segoe UI", sans-serif;
+      }
+
+      body {
+        display: grid;
+        gap: 14px;
+        padding: 18px;
+        box-sizing: border-box;
+      }
+
+      .panel {
+        background: rgba(255, 250, 242, 0.96);
+        border: 1px solid #d3c9b9;
+        border-radius: 14px;
+        padding: 14px 16px;
+      }
+
+      .status {
+        font-size: 20px;
+        font-weight: 700;
+      }
+
+      .status.ok {
+        color: #0f7b56;
+      }
+
+      .status.fail {
+        color: #a13f22;
+      }
+
+      #glCanvas {
+        width: 100%;
+        height: min(58vh, 620px);
+        border-radius: 14px;
+        border: 1px solid #beced7;
+        background: linear-gradient(160deg, #d5e4eb, #f0f4f7);
+        display: block;
+      }
+
+      pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        line-height: 1.45;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="panel">
+      <div id="status" class="status">Initializing WebGL probe...</div>
+      <div id="summary" style="margin-top: 8px;">If WebGL is available, the canvas below should become blue-green instead of staying at the page background color.</div>
+    </div>
+    <canvas id="glCanvas"></canvas>
+    <div class="panel">
+      <pre id="details">Collecting renderer details...</pre>
+    </div>
+    <script>
+      (function () {
+        const statusNode = document.getElementById("status");
+        const summaryNode = document.getElementById("summary");
+        const detailsNode = document.getElementById("details");
+        const canvas = document.getElementById("glCanvas");
+
+        function setStatus(text, ok) {
+          statusNode.textContent = text;
+          statusNode.className = ok ? "status ok" : "status fail";
+        }
+
+        function resizeCanvas() {
+          const ratio = window.devicePixelRatio || 1;
+          canvas.width = Math.max(640, Math.floor(canvas.clientWidth * ratio));
+          canvas.height = Math.max(360, Math.floor(canvas.clientHeight * ratio));
+        }
+
+        function runProbe() {
+          resizeCanvas();
+          const gl =
+            canvas.getContext("webgl2", { alpha: false, antialias: true }) ||
+            canvas.getContext("webgl", { alpha: false, antialias: true }) ||
+            canvas.getContext("experimental-webgl", { alpha: false, antialias: true });
+
+          if (!gl) {
+            setStatus("WebGL unavailable in QWebEngine.", false);
+            summaryNode.textContent = "The HTML/CSS layer rendered, but no WebGL context could be created.";
+            detailsNode.textContent = "No WebGL context returned from webgl2/webgl/experimental-webgl.";
+            return;
+          }
+
+          gl.viewport(0, 0, canvas.width, canvas.height);
+          gl.clearColor(0.10, 0.44, 0.66, 1.0);
+          gl.clear(gl.COLOR_BUFFER_BIT);
+
+          const lines = [];
+          lines.push(`Version: ${gl.getParameter(gl.VERSION)}`);
+          lines.push(`Shading Language: ${gl.getParameter(gl.SHADING_LANGUAGE_VERSION)}`);
+          lines.push(`Vendor: ${gl.getParameter(gl.VENDOR)}`);
+          lines.push(`Renderer: ${gl.getParameter(gl.RENDERER)}`);
+          const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
+          if (debugInfo) {
+            lines.push(`Unmasked Vendor: ${gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL)}`);
+            lines.push(`Unmasked Renderer: ${gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)}`);
+          }
+          lines.push(`Canvas: ${canvas.width} x ${canvas.height}`);
+
+          setStatus("WebGL context created successfully.", true);
+          summaryNode.textContent = "If the canvas below is teal-blue, QWebEngine WebGL itself is working and the issue is higher in the Cesium stack.";
+          detailsNode.textContent = lines.join("\n");
+        }
+
+        window.addEventListener("resize", runProbe);
+        window.addEventListener("load", runProbe, { once: true });
+      })();
+    </script>
+  </body>
+</html>

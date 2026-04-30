@@ -1,0 +1,8 @@
+{
+  "initial_altitude_km": 400.0,
+  "target_altitude_km": 1200.0,
+  "delta_v1_km_s": 0.2107678901616783,
+  "delta_v2_km_s": 0.20496830550662182,
+  "total_delta_v_km_s": 0.4157361956683001,
+  "transfer_time_s": 3026.206332080078
+}

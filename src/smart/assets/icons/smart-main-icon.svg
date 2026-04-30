@@ -1,0 +1,79 @@
+<svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 512 512"
+    role="img"
+    aria-label="SMART mission analysis icon"
+>
+    <defs>
+        <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#0d3558"/>
+            <stop offset="52%" stop-color="#134f79"/>
+            <stop offset="100%" stop-color="#1c6c8f"/>
+        </linearGradient>
+        <radialGradient id="halo" cx="50%" cy="50%" r="52%">
+            <stop offset="0%" stop-color="#77d1ff" stop-opacity="0.36"/>
+            <stop offset="100%" stop-color="#77d1ff" stop-opacity="0"/>
+        </radialGradient>
+        <linearGradient id="transferArc" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#ffba6a"/>
+            <stop offset="100%" stop-color="#ff6f3f"/>
+        </linearGradient>
+        <linearGradient id="craft" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#f2f7fb"/>
+            <stop offset="100%" stop-color="#b7d4e9"/>
+        </linearGradient>
+    </defs>
+
+    <rect x="24" y="24" width="464" height="464" rx="108" fill="url(#bg)"/>
+    <circle cx="256" cy="256" r="172" fill="url(#halo)"/>
+
+    <ellipse
+        cx="256"
+        cy="256"
+        rx="188"
+        ry="126"
+        fill="none"
+        stroke="#8ecff1"
+        stroke-opacity="0.74"
+        stroke-width="8"
+    />
+    <ellipse
+        cx="256"
+        cy="256"
+        rx="188"
+        ry="126"
+        transform="rotate(-30 256 256)"
+        fill="none"
+        stroke="#6fb9e5"
+        stroke-opacity="0.62"
+        stroke-width="5.5"
+    />
+
+    <circle cx="256" cy="256" r="86" fill="#102f48" stroke="#95d7ff" stroke-width="8"/>
+    <circle cx="256" cy="256" r="40" fill="#1f5a7f" fill-opacity="0.9"/>
+
+    <path
+        d="M144 332 C195 380, 318 374, 372 288"
+        fill="none"
+        stroke="url(#transferArc)"
+        stroke-width="14"
+        stroke-linecap="round"
+    />
+    <circle cx="142" cy="332" r="11" fill="#ffba6a"/>
+    <circle cx="372" cy="288" r="11" fill="#ff6f3f"/>
+
+    <g transform="translate(368 190) rotate(20)">
+        <path
+            d="M0 -26 L26 0 L0 26 L-10 10 L-30 14 L-20 0 L-30 -14 L-10 -10 Z"
+            fill="url(#craft)"
+        />
+        <path d="M-30 14 L-40 28 M-30 -14 L-40 -28" stroke="#d9ebf7" stroke-width="4" stroke-linecap="round"/>
+    </g>
+
+    <circle cx="114" cy="126" r="4.4" fill="#d2ebff"/>
+    <circle cx="166" cy="88" r="3.4" fill="#a8d6f4"/>
+    <circle cx="398" cy="120" r="4.0" fill="#d2ebff"/>
+    <circle cx="426" cy="164" r="2.8" fill="#a8d6f4"/>
+    <circle cx="102" cy="392" r="3.2" fill="#b5ddf6"/>
+    <circle cx="408" cy="392" r="3.8" fill="#d2ebff"/>
+</svg>

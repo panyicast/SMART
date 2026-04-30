@@ -1,0 +1,40 @@
+{
+  "launch_mass_kg": 5200.0,
+  "t0_orbit": {
+    "semi_major_axis_m": 29478137.0,
+    "eccentricity": 0.7768460924,
+    "inclination_deg": 16.5,
+    "argument_of_perigee_deg": 200.0,
+    "raan_deg": 8.53237,
+    "mean_anomaly_deg": 1.85437
+  },
+  "maneuver_count": 2,
+  "maneuvers": [
+    {
+      "maneuver_index": 1,
+      "Tn_start_min": 0.0,
+      "burn_duration_min": 0.0,
+      "control_fuel_%": 0.0,
+      "settle_duration_s": 240.0,
+      "delta_deg": 0.0,
+      "dv_direction": 1,
+      "orbit_control_thrust_n": 490.0,
+      "orbit_control_isp_s": 314.1,
+      "settle_thrust_n": 20.0,
+      "settle_isp_s": 290.0
+    },
+    {
+      "maneuver_index": 2,
+      "Tn_start_min": 0.0,
+      "burn_duration_min": 0.0,
+      "control_fuel_%": 0.0,
+      "settle_duration_s": 240.0,
+      "delta_deg": 0.0,
+      "dv_direction": 1,
+      "orbit_control_thrust_n": 490.0,
+      "orbit_control_isp_s": 314.1,
+      "settle_thrust_n": 20.0,
+      "settle_isp_s": 290.0
+    }
+  ]
+}

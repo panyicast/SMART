@@ -1,0 +1,11 @@
+{
+  "semi_major_axis_km": 7000.0,
+  "eccentricity": 0.05,
+  "inclination_deg": 28.5,
+  "raan_deg": 40.0,
+  "argument_of_periapsis_deg": 10.0,
+  "true_anomaly_deg": 0.0,
+  "mu_km3_s2": 398600.4418,
+  "central_body_radius_km": 6378.1363,
+  "central_body_name": "Earth"
+}

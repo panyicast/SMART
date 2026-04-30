@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "smart-desktop"
+version = "0.1.0"
+description = "SMART: Spacecraft Mission Analysis, Research & Toolkit"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=2.0,<3",
+  "PySide6>=6.8,<7",
+  "pyqtgraph>=0.13.7,<0.14",
+  "PyOpenGL>=3.1.7,<4",
+  "trimesh>=4.5,<5",
+  "pycollada>=0.9,<1",
+  "spiceypy>=8.1,<9",
+  "pythonnet>=3.0,<4; platform_system == 'Windows'",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3,<9",
+]
+
+[project.scripts]
+smart = "smart.main:main"
+smart-webengine-diagnostics = "smart.webengine_diagnostics:main"
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+smart = [
+  "assets/icons/*.svg",
+  "assets/textures/*.png",
+  "assets/cesium/*.html",
+  "assets/cesium/*.js",
+  "assets/cesium/vendor/**/*",
+  "assets/diagnostics/*.html",
+  "agents/*.md",
+  "agents/skills/*.md",
+]

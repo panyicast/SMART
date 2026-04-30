@@ -1,0 +1,22 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.DS_Store
+Thumbs.db
+
+# Generated STK preview scenes and assets
+projects/*/data/stk/
+*.sa
+*.sa3
+
+# Local temporary preview/test artifacts
+.tmp/
+tmp_*.png
+tmp_*.e
+*_Mnvr_*.e

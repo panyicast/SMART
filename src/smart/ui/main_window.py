@@ -1,0 +1,534 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from PySide6 import QtCore, QtGui, QtWidgets
+
+from smart.domain.models import OrbitInitializationSettings, SatelliteStatusSettings
+from smart.services.project_workspace import ProjectInfo, ProjectWorkspace
+from smart.services.spice_service import SpiceKernelManager
+from smart.ui.i18n import I18nManager
+from smart.ui.mission_state import MissionState
+from smart.ui.widgets.dashboard_page import DashboardPage
+from smart.ui.widgets.data_visualization_page import DataVisualizationPage
+from smart.ui.widgets.ai_project_analysis_page import AIProjectAnalysisPage
+from smart.ui.widgets.launch_window_page import LaunchWindowPage
+from smart.ui.widgets.maneuver_page import ManeuverPage
+from smart.ui.widgets.orbit_initialization_page import OrbitInitializationPage
+from smart.ui.widgets.placeholder_page import PlaceholderPage
+from smart.ui.widgets.satellite_status_page import SatelliteStatusPage
+from smart.ui.widgets.scene_test_page import SceneTestPage
+from smart.ui.widgets.spice_kernel_page import SpiceKernelPage
+from smart.ui.widgets.tracking_arc_page import TrackingArcPage
+
+_MAX_RECENT_PROJECTS = 8
+_NAV_KEYS = [
+    "nav.dashboard",
+    "nav.orbit_design",
+    "nav.orbit_initialization",
+    "nav.maneuver_strategy",
+    "nav.launch_window",
+    "nav.tracking_arc",
+    "nav.flight_program",
+    "nav.data_visualization",
+    "nav.scene_test",
+    "nav.spice_kernels",
+    "nav.ai_project_analysis",
+]
+
+
+class MainWindow(QtWidgets.QMainWindow):
+    def __init__(self) -> None:
+        super().__init__()
+        self.resize(1560, 920)
+        self._workspace_root = Path.cwd()
+        self._i18n = I18nManager(language="zh")
+        self._mission_state = MissionState()
+        self._workspace = ProjectWorkspace()
+        self._projects_root = self._workspace.projects_dir(self._workspace_root)
+        self._spice_manager = SpiceKernelManager()
+        self._latest_satellite_settings: SatelliteStatusSettings | None = None
+        self._latest_maneuver_strategy: dict[str, Any] | None = None
+        self._autosave_enabled = True
+        self._settings = QtCore.QSettings("SMART", "SMART")
+        self._recent_project_paths = self._load_recent_project_paths()
+        self._recent_project_actions: list[QtGui.QAction] = []
+        self._stack = QtWidgets.QStackedWidget()
+
+        shell = QtWidgets.QWidget()
+        self.setCentralWidget(shell)
+        layout = QtWidgets.QHBoxLayout(shell)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        layout.addWidget(self._build_sidebar(), 0)
+        layout.addWidget(self._stack, 1)
+
+        self._dashboard_page = DashboardPage(self._mission_state, self._i18n)
+        self._satellite_page = SatelliteStatusPage(self._i18n)
+        self._orbit_initialization_page = OrbitInitializationPage(self._mission_state, self._i18n)
+        self._maneuver_page = ManeuverPage(self._i18n, self._workspace)
+        self._launch_window_page = LaunchWindowPage(self._i18n, self._workspace)
+        self._ai_project_page = AIProjectAnalysisPage(self._i18n, self._workspace, self._settings)
+        self._tracking_arc_page = TrackingArcPage(self._i18n, self._workspace)
+        self._flight_program_page = PlaceholderPage(self._i18n, "flight_program")
+        self._viz_page = DataVisualizationPage(self._mission_state, self._i18n)
+        self._scene_test_page = SceneTestPage(self._mission_state, self._i18n)
+        self._spice_page = SpiceKernelPage(
+            self._spice_manager,
+            self._i18n,
+            initial_kernel_root=(Path.cwd() / "data" / "kernels"),
+        )
+
+        self._pages = [
+            self._dashboard_page,
+            self._satellite_page,
+            self._orbit_initialization_page,
+            self._maneuver_page,
+            self._launch_window_page,
+            self._tracking_arc_page,
+            self._flight_program_page,
+            self._viz_page,
+            self._scene_test_page,
+            self._spice_page,
+            self._ai_project_page,
+        ]
+        for page in self._pages:
+            self._stack.addWidget(page)
+
+        self._build_menu()
+        self._build_menu_language_selector()
+        self._mission_state.trajectory_changed.connect(self._on_trajectory_changed)
+        self._satellite_page.settings_changed.connect(self._on_satellite_settings_changed)
+        self._maneuver_page.strategy_changed.connect(self._on_maneuver_strategy_changed)
+        self._i18n.language_changed.connect(self.retranslate)
+        self._latest_satellite_settings = self._satellite_page.settings()
+        self._dashboard_page.set_satellite_settings(self._latest_satellite_settings)
+        self._scene_test_page.set_satellite_settings(self._latest_satellite_settings)
+        self._reset_spice_workspace(self._workspace_root / "data" / "kernels")
+
+        self.retranslate()
+        self._nav_list.setCurrentRow(0)
+        self.statusBar().showMessage(self._i18n.t("project.status.no_project"))
+
+    def _build_menu(self) -> None:
+        self._project_menu = self.menuBar().addMenu("")
+        self._new_project_action = QtGui.QAction(self)
+        self._new_project_action.setShortcut(QtGui.QKeySequence("Ctrl+Shift+N"))
+        self._new_project_action.triggered.connect(self._create_project)
+        self._project_menu.addAction(self._new_project_action)
+
+        self._open_project_action = QtGui.QAction(self)
+        self._open_project_action.setShortcut(QtGui.QKeySequence.Open)
+        self._open_project_action.triggered.connect(self._open_project)
+        self._project_menu.addAction(self._open_project_action)
+
+        self._project_menu.addSeparator()
+        self._recent_projects_header_action = QtGui.QAction(self)
+        self._recent_projects_header_action.setEnabled(False)
+        self._project_menu.addAction(self._recent_projects_header_action)
+
+        self._no_recent_projects_action = QtGui.QAction(self)
+        self._no_recent_projects_action.setEnabled(False)
+        self._project_menu.addAction(self._no_recent_projects_action)
+
+        self._refresh_recent_project_actions()
+
+    def _build_menu_language_selector(self) -> None:
+        language_widget = QtWidgets.QWidget(self.menuBar())
+        language_layout = QtWidgets.QHBoxLayout(language_widget)
+        language_layout.setContentsMargins(8, 0, 8, 0)
+        language_layout.setSpacing(8)
+
+        self._toolbar_language_label = QtWidgets.QLabel()
+        language_layout.addWidget(self._toolbar_language_label)
+
+        self._toolbar_language_combo = QtWidgets.QComboBox()
+        self._toolbar_language_combo.addItem("English", "en")
+        self._toolbar_language_combo.addItem("中文", "zh")
+        self._toolbar_language_combo.currentIndexChanged.connect(self._on_language_changed)
+        language_layout.addWidget(self._toolbar_language_combo)
+        self.menuBar().setCornerWidget(language_widget, QtCore.Qt.Corner.TopRightCorner)
+
+    def _build_sidebar(self) -> QtWidgets.QWidget:
+        sidebar = QtWidgets.QFrame()
+        sidebar.setProperty("role", "sidebar")
+        sidebar.setFixedWidth(280)
+
+        layout = QtWidgets.QVBoxLayout(sidebar)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(18)
+
+        title = QtWidgets.QLabel("SMART")
+        title.setProperty("role", "brandTitle")
+        layout.addWidget(title)
+
+        self._subtitle_label = QtWidgets.QLabel()
+        self._subtitle_label.setProperty("role", "brandSubtitle")
+        self._subtitle_label.setWordWrap(True)
+        layout.addWidget(self._subtitle_label)
+
+        self._project_header_label = QtWidgets.QLabel()
+        self._project_header_label.setProperty("role", "brandSubtitle")
+        layout.addWidget(self._project_header_label)
+
+        self._project_name_label = QtWidgets.QLabel()
+        self._project_name_label.setProperty("role", "brandSubtitle")
+        self._project_name_label.setWordWrap(True)
+        layout.addWidget(self._project_name_label)
+
+        self._project_path_label = QtWidgets.QLabel()
+        self._project_path_label.setProperty("role", "brandSubtitle")
+        self._project_path_label.setWordWrap(True)
+        layout.addWidget(self._project_path_label)
+
+        self._nav_list = QtWidgets.QListWidget()
+        self._nav_list.setProperty("role", "nav")
+        self._nav_list.setSpacing(2)
+        for _ in _NAV_KEYS:
+            self._nav_list.addItem("")
+        self._nav_list.currentRowChanged.connect(self._stack.setCurrentIndex)
+        layout.addWidget(self._nav_list, 1)
+
+        self._footer_label = QtWidgets.QLabel()
+        self._footer_label.setProperty("role", "brandSubtitle")
+        self._footer_label.setWordWrap(True)
+        layout.addWidget(self._footer_label)
+        return sidebar
+
+    def _on_language_changed(self) -> None:
+        language = self._toolbar_language_combo.currentData()
+        if isinstance(language, str):
+            self._i18n.set_language(language)
+
+    def _create_project(self) -> None:
+        t = self._i18n.t
+        project_name, ok = QtWidgets.QInputDialog.getText(
+            self,
+            t("project.new_title"),
+            t("project.new_prompt"),
+        )
+        if not ok:
+            return
+
+        normalized = project_name.strip()
+        if not normalized:
+            QtWidgets.QMessageBox.warning(
+                self,
+                t("project.error.invalid_name_title"),
+                t("project.error.invalid_name_body"),
+            )
+            return
+
+        try:
+            info = self._workspace.create_project(normalized, self._projects_root)
+        except FileExistsError:
+            QtWidgets.QMessageBox.warning(
+                self,
+                t("project.error.exists_title"),
+                t("project.error.exists_body", path=str((self._projects_root / normalized).resolve())),
+            )
+            return
+        except Exception as exc:  # pragma: no cover - UI path
+            QtWidgets.QMessageBox.critical(
+                self,
+                t("project.error.create_failed_title"),
+                t("project.error.create_failed_body", error=str(exc)),
+            )
+            return
+
+        self._activate_project(info, load_saved_data=False)
+        self.statusBar().showMessage(t("project.status.created", name=info.name), 5000)
+
+    def _open_project(self) -> None:
+        t = self._i18n.t
+        start_dir = self._projects_root if self._projects_root.exists() else self._workspace_root
+        selected_dir = QtWidgets.QFileDialog.getExistingDirectory(
+            self,
+            t("project.open_title"),
+            str(start_dir),
+        )
+        if not selected_dir:
+            return
+
+        try:
+            info = self._workspace.open_project(selected_dir)
+        except FileNotFoundError:
+            QtWidgets.QMessageBox.warning(
+                self,
+                t("project.error.not_project_title"),
+                t("project.error.not_project_body"),
+            )
+            return
+        except Exception as exc:  # pragma: no cover - UI path
+            QtWidgets.QMessageBox.critical(
+                self,
+                t("project.error.open_failed_title"),
+                t("project.error.open_failed_body", error=str(exc)),
+            )
+            return
+
+        self._activate_project(info, load_saved_data=True)
+        self.statusBar().showMessage(t("project.status.loaded", name=info.name), 5000)
+
+    def _open_recent_project(self, project_path: str) -> None:
+        t = self._i18n.t
+        try:
+            info = self._workspace.open_project(project_path)
+        except FileNotFoundError:
+            self._remove_recent_project_path(project_path)
+            QtWidgets.QMessageBox.warning(
+                self,
+                t("project.error.not_project_title"),
+                t("project.error.not_project_body"),
+            )
+            return
+        except Exception as exc:  # pragma: no cover - UI path
+            QtWidgets.QMessageBox.critical(
+                self,
+                t("project.error.open_failed_title"),
+                t("project.error.open_failed_body", error=str(exc)),
+            )
+            return
+
+        self._activate_project(info, load_saved_data=True)
+        self.statusBar().showMessage(t("project.status.loaded", name=info.name), 5000)
+
+    def _activate_project(self, info: ProjectInfo, load_saved_data: bool) -> None:
+        self._autosave_enabled = False
+        self._latest_satellite_settings = None
+        self._latest_maneuver_strategy = None
+        try:
+            self._reset_spice_workspace(self._workspace.kernels_dir())
+            if load_saved_data:
+                saved_initialization = self._workspace.load_orbit_initialization()
+                if saved_initialization is not None:
+                    self._mission_state.update_initialization(saved_initialization)
+                else:
+                    saved_elements = self._workspace.load_orbit_elements()
+                    if saved_elements is not None:
+                        self._mission_state.update_initialization(
+                            OrbitInitializationSettings(
+                                mode="classical",
+                                epoch_utc=self._mission_state.initialization.epoch_utc,
+                                elements=saved_elements,
+                            )
+                        )
+
+                saved_satellite_settings = self._workspace.load_satellite_status()
+                if saved_satellite_settings is not None:
+                    self._satellite_page.apply_settings(saved_satellite_settings)
+                    self._latest_satellite_settings = saved_satellite_settings
+                else:
+                    self._latest_satellite_settings = self._satellite_page.settings()
+
+                self._maneuver_page.refresh_from_workspace()
+                self._launch_window_page.refresh_from_workspace()
+                self._tracking_arc_page.refresh_from_workspace()
+                self._latest_maneuver_strategy = self._maneuver_page.strategy()
+            else:
+                self._latest_satellite_settings = self._satellite_page.settings()
+                self._maneuver_page.refresh_from_workspace()
+                self._launch_window_page.refresh_from_workspace()
+                self._tracking_arc_page.refresh_from_workspace()
+                self._latest_maneuver_strategy = self._maneuver_page.strategy()
+        finally:
+            self._autosave_enabled = True
+
+        self._persist_project_outputs()
+        self._persist_satellite_config()
+        self._refresh_project_labels()
+        self.setWindowTitle(f"{self._i18n.t('app.window_title')} - {info.name}")
+        self._record_recent_project_path(info.root_dir)
+
+    def _reset_spice_workspace(self, kernels_dir: Path) -> None:
+        default_kernels_dir = (self._workspace_root / "data" / "kernels").resolve()
+        self._spice_manager.configure_local_kernel_roots([kernels_dir, default_kernels_dir])
+        if self._spice_manager.available:
+            try:
+                self._spice_manager.clear()
+            except Exception as exc:  # pragma: no cover - UI path
+                self.statusBar().showMessage(
+                    self._i18n.t("spice.page_status.action_failed", error=str(exc)),
+                    8000,
+                )
+            try:
+                self._spice_manager.ensure_local_kernels_loaded()
+            except Exception as exc:  # pragma: no cover - UI path
+                self.statusBar().showMessage(
+                    self._i18n.t("spice.page_status.action_failed", error=str(exc)),
+                    8000,
+                )
+        self._spice_page.set_kernel_root(kernels_dir)
+
+    def _on_trajectory_changed(self, _trajectory: object) -> None:
+        if not self._autosave_enabled:
+            return
+        self._persist_project_outputs()
+
+    def _on_satellite_settings_changed(self, settings: SatelliteStatusSettings) -> None:
+        self._latest_satellite_settings = settings
+        self._dashboard_page.set_satellite_settings(settings)
+        self._scene_test_page.set_satellite_settings(settings)
+        if not self._autosave_enabled:
+            return
+        self._persist_satellite_config()
+
+    def _on_maneuver_strategy_changed(self, strategy: dict[str, Any]) -> None:
+        self._latest_maneuver_strategy = dict(strategy)
+        if not self._autosave_enabled:
+            return
+        self._persist_maneuver_strategy()
+
+    def _persist_project_outputs(self) -> None:
+        if self._workspace.current_project is None:
+            return
+
+        try:
+            self._workspace.save_orbit_initialization(self._mission_state.initialization)
+            self._workspace.save_orbit_elements(self._mission_state.elements)
+            if self._latest_maneuver_strategy is not None:
+                self._workspace.save_maneuver_strategy(self._latest_maneuver_strategy)
+            self._viz_page.export_charts(self._workspace.charts_dir())
+        except Exception as exc:  # pragma: no cover - UI path
+            self.statusBar().showMessage(
+                self._i18n.t("project.status.autosave_failed", error=str(exc)),
+                8000,
+            )
+
+    def _persist_maneuver_strategy(self) -> None:
+        if self._workspace.current_project is None:
+            return
+        if self._latest_maneuver_strategy is None:
+            return
+
+        try:
+            self._workspace.save_maneuver_strategy(self._latest_maneuver_strategy)
+        except Exception as exc:  # pragma: no cover - UI path
+            self.statusBar().showMessage(
+                self._i18n.t("project.status.autosave_failed", error=str(exc)),
+                8000,
+            )
+
+    def _persist_satellite_config(self) -> None:
+        if self._workspace.current_project is None:
+            return
+        if self._latest_satellite_settings is None:
+            return
+
+        try:
+            self._workspace.save_satellite_status(self._latest_satellite_settings)
+        except Exception as exc:  # pragma: no cover - UI path
+            self.statusBar().showMessage(
+                self._i18n.t("project.status.autosave_failed", error=str(exc)),
+                8000,
+            )
+
+    def _refresh_project_labels(self) -> None:
+        t = self._i18n.t
+        project = self._workspace.current_project
+        if project is None:
+            self._project_name_label.setText(t("project.status.no_project"))
+            self._project_path_label.setText("")
+            self.setWindowTitle(t("app.window_title"))
+            return
+
+        self._project_name_label.setText(project.name)
+        self._project_path_label.setText(str(project.root_dir))
+
+    def retranslate(self, _language: str | None = None) -> None:
+        t = self._i18n.t
+        project = self._workspace.current_project
+        if project is None:
+            self.setWindowTitle(t("app.window_title"))
+        else:
+            self.setWindowTitle(f"{t('app.window_title')} - {project.name}")
+
+        self._subtitle_label.setText(t("sidebar.subtitle"))
+        self._footer_label.setText(t("sidebar.footer"))
+        self._project_header_label.setText(t("sidebar.project_label"))
+        self._toolbar_language_label.setText(t("toolbar.language_label"))
+        self._toolbar_language_combo.setItemText(0, t("sidebar.language.en"))
+        self._toolbar_language_combo.setItemText(1, t("sidebar.language.zh"))
+
+        language_index = 0 if self._i18n.language == "en" else 1
+        self._toolbar_language_combo.blockSignals(True)
+        self._toolbar_language_combo.setCurrentIndex(language_index)
+        self._toolbar_language_combo.blockSignals(False)
+
+        self._project_menu.setTitle(t("project.menu_title"))
+        self._new_project_action.setText(t("project.action_new"))
+        self._open_project_action.setText(t("project.action_open"))
+        self._recent_projects_header_action.setText(t("project.recent_header"))
+        self._no_recent_projects_action.setText(t("project.recent_empty"))
+        self._refresh_recent_project_actions()
+
+        nav_labels = [t(key) for key in _NAV_KEYS]
+        for index, text in enumerate(nav_labels):
+            self._nav_list.item(index).setText(text)
+
+        self._refresh_project_labels()
+
+    def _load_recent_project_paths(self) -> list[str]:
+        raw_paths = self._settings.value("recent_projects", [], type=list)
+        if not isinstance(raw_paths, list):
+            return []
+
+        paths: list[str] = []
+        seen: set[str] = set()
+        for raw_path in raw_paths:
+            try:
+                path = Path(str(raw_path)).expanduser().resolve()
+            except OSError:
+                continue
+            key = str(path).casefold()
+            if key in seen or not (path / "smart_project.json").exists():
+                continue
+            seen.add(key)
+            paths.append(str(path))
+            if len(paths) >= _MAX_RECENT_PROJECTS:
+                break
+        return paths
+
+    def _save_recent_project_paths(self) -> None:
+        self._settings.setValue("recent_projects", self._recent_project_paths)
+
+    def _record_recent_project_path(self, project_path: str | Path) -> None:
+        path = Path(project_path).expanduser().resolve()
+        key = str(path).casefold()
+        self._recent_project_paths = [
+            existing
+            for existing in self._recent_project_paths
+            if str(Path(existing).expanduser().resolve()).casefold() != key
+        ]
+        self._recent_project_paths.insert(0, str(path))
+        self._recent_project_paths = self._recent_project_paths[:_MAX_RECENT_PROJECTS]
+        self._save_recent_project_paths()
+        self._refresh_recent_project_actions()
+
+    def _remove_recent_project_path(self, project_path: str | Path) -> None:
+        path = Path(project_path).expanduser().resolve()
+        key = str(path).casefold()
+        self._recent_project_paths = [
+            existing
+            for existing in self._recent_project_paths
+            if str(Path(existing).expanduser().resolve()).casefold() != key
+        ]
+        self._save_recent_project_paths()
+        self._refresh_recent_project_actions()
+
+    def _refresh_recent_project_actions(self) -> None:
+        for action in self._recent_project_actions:
+            self._project_menu.removeAction(action)
+        self._recent_project_actions.clear()
+
+        self._no_recent_projects_action.setVisible(not self._recent_project_paths)
+        for path_text in self._recent_project_paths:
+            path = Path(path_text)
+            label = f"{path.name} - {path}"
+            action = QtGui.QAction(label, self)
+            action.setToolTip(str(path))
+            action.triggered.connect(lambda _checked=False, item_path=path_text: self._open_recent_project(item_path))
+            self._project_menu.addAction(action)
+            self._recent_project_actions.append(action)

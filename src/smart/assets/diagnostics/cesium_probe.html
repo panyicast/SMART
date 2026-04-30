@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self' data: blob: file: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: file: https:; style-src 'self' 'unsafe-inline' file: https:; img-src 'self' data: blob: file: https:; connect-src 'self' data: blob: file: https:; worker-src 'self' data: blob: file:;"
+    >
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMART Cesium Probe</title>
+    <script>
+      window.CESIUM_BASE_URL = "../cesium/vendor/Build/Cesium/";
+    </script>
+    <link
+      rel="stylesheet"
+      href="../cesium/vendor/Build/Cesium/Widgets/widgets.css"
+    >
+    <style>
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: #edf3f6;
+        color: #17324a;
+        font-family: "Segoe UI", sans-serif;
+      }
+
+      #viewer {
+        position: absolute;
+        inset: 0;
+      }
+
+      #overlay {
+        position: absolute;
+        top: 16px;
+        left: 16px;
+        z-index: 10;
+        max-width: min(480px, calc(100% - 32px));
+        padding: 14px 16px;
+        border-radius: 14px;
+        border: 1px solid rgba(191, 202, 210, 0.86);
+        background: rgba(255, 250, 242, 0.92);
+        box-shadow: 0 10px 24px rgba(22, 38, 56, 0.12);
+      }
+
+      #status {
+        font-size: 20px;
+        font-weight: 700;
+      }
+
+      #status.ok {
+        color: #0f7b56;
+      }
+
+      #status.fail {
+        color: #a13f22;
+      }
+
+      #details {
+        margin-top: 10px;
+        white-space: pre-wrap;
+        line-height: 1.45;
+      }
+    </style>
+    <script src="../cesium/vendor/Build/Cesium/Cesium.js"></script>
+  </head>
+  <body>
+    <div id="viewer"></div>
+    <div id="overlay">
+      <div id="status">Loading Cesium probe...</div>
+      <div id="details">The background of this page should remain light even before the globe is visible.</div>
+    </div>
+    <script>
+      (function () {
+        const statusNode = document.getElementById("status");
+        const detailsNode = document.getElementById("details");
+
+        function setStatus(text, ok) {
+          statusNode.textContent = text;
+          statusNode.className = ok ? "ok" : "fail";
+        }
+
+        if (typeof window.Cesium === "undefined") {
+          setStatus("CesiumJS failed to load.", false);
+          detailsNode.textContent = "The packaged Cesium runtime was not loaded from the local SMART assets folder.";
+          return;
+        }
+
+        try {
+          const viewer = new Cesium.Viewer("viewer", {
+            animation: false,
+            timeline: false,
+            fullscreenButton: false,
+            geocoder: false,
+            homeButton: false,
+            infoBox: false,
+            navigationHelpButton: false,
+            sceneModePicker: false,
+            selectionIndicator: false,
+            baseLayerPicker: false,
+            shouldAnimate: false,
+            scene3DOnly: true,
+            terrainProvider: new Cesium.EllipsoidTerrainProvider(),
+          });
+
+          viewer.scene.backgroundColor = Cesium.Color.fromCssColorString("#edf3f6");
+          viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString("#7ea7bb");
+          viewer.scene.globe.enableLighting = false;
+          viewer.scene.globe.showGroundAtmosphere = false;
+          viewer.scene.fog.enabled = false;
+          viewer.scene.highDynamicRange = false;
+          if (viewer.scene.skyAtmosphere) {
+            viewer.scene.skyAtmosphere.show = false;
+          }
+          if (viewer.scene.skyBox) {
+            viewer.scene.skyBox.show = false;
+          }
+          if (viewer.scene.moon) {
+            viewer.scene.moon.show = false;
+          }
+
+          viewer.entities.add({
+            name: "Probe Point",
+            position: Cesium.Cartesian3.fromDegrees(110.0, 19.0, 1200000.0),
+            point: {
+              pixelSize: 15,
+              color: Cesium.Color.fromCssColorString("#c25c38"),
+              outlineColor: Cesium.Color.WHITE,
+              outlineWidth: 2,
+            },
+          });
+
+          viewer.camera.setView({
+            destination: Cesium.Cartesian3.fromDegrees(110.0, 24.0, 22000000.0),
+          });
+
+          setStatus("Cesium probe initialized.", true);
+          detailsNode.textContent =
+            "Expected result: a light background, a blue-gray Earth, and one orange probe point near East Asia.";
+        } catch (error) {
+          setStatus("Cesium probe failed.", false);
+          detailsNode.textContent = String(error && error.stack ? error.stack : error);
+        }
+      })();
+    </script>
+  </body>
+</html>
