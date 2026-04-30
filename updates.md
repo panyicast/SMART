@@ -7,5 +7,9 @@
 - 影响文件：`src/smart/__init__.py`、`src/smart/agents/mission_agent.md`、`src/smart/agents/skills/mission_analysis_calculation.md`、`src/smart/agents/skills/stk_11_6_operations.md`、`src/smart/app_runtime.py`、`src/smart/assets/cesium/mission_view.html`、`src/smart/assets/cesium/mission_view.js`、`src/smart/assets/diagnostics/cesium_probe.html` 等 551 个文件。
 
 ## 2026-05-01T00:40:21+08:00 | Update changelog after repository republish
-- 提交：`待写入本次提交`
+- 提交：`68e3099`
 - 影响文件：自动刷新记录，无额外文件。
+
+## 2026-05-01T00:42:52+08:00 | Improve GitHub repository presentation
+- 提交：`待写入本次提交`
+- 影响文件：`README.md`。
