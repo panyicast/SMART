@@ -1,15 +1,40 @@
 # SMART
 
-SMART 全称为 `Spacecraft Mission Analysis, Research & Toolkit`，是一个基于 Python 的航天任务分析桌面软件。
+SMART 全称为 `Spacecraft Mission Analysis, Research & Toolkit`，是一个面向航天任务设计与工程分析的桌面软件。项目围绕 `STK 11.6 + SPICE + 本地 Cesium + PySide6` 构建统一工作流，用来解决传统任务分析中多工具切换、时间与坐标系转换易错、结果留痕分散的问题。
 
-当前仓库提供的是第一版可运行 MVP，重点覆盖任务设计与工程可视化的基础能力：
+当前仓库提供的是一版可运行的桌面 MVP，已经覆盖轨道初始化、变轨分析、发射窗口计算、跟踪弧段分析、三维场景验证、项目化数据落盘和 AI 辅助项目解读等核心链路。
 
-- 卫星状态设置（质量、推进、天线、地面站/测控船、中继星）
-- 圆轨道霍曼转移估算
-- 高度/速度科学曲线绘制
-- 基于 SpiceyPy 的 SPICE 服务接入骨架
-- 工具栏中英文实时切换（默认中文）
-- 项目管理（新建/打开）与数据/图表自动保存
+<p align="center">
+  <img src="projects/F4/charts/orbit_3d.png" alt="SMART 3D orbit view" width="30%" />
+  <img src="projects/F4/charts/orbit_2d.png" alt="SMART 2D orbit plot" width="30%" />
+  <img src="projects/F4/charts/maneuver_transfer.png" alt="SMART maneuver transfer plot" width="30%" />
+</p>
+
+<p align="center">
+  <img src="projects/F4/charts/altitude_trend.png" alt="SMART altitude trend" width="45%" />
+  <img src="projects/F4/charts/velocity_trend.png" alt="SMART velocity trend" width="45%" />
+</p>
+
+## 项目定位
+
+SMART 的目标不是单独替代 STK 或 SPICE，而是把任务建模、约束分析、图形验证、结果导出和工程说明收敛到一个可复用、可追溯的桌面分析环境中：
+
+- UI 层统一以北京时间配置任务参数，降低人工换算成本
+- 服务层优先复用 SPICE 与本地 STK 11.6 能力，减少手写公式漂移
+- 三维场景基于本地 Cesium 运行，不依赖公网 CDN
+- 项目结果按 `config / data / charts` 结构自动沉淀，便于复算和交接
+- AI 分析页只读取摘要上下文做辅助说明，不直接修改任务配置
+
+## 当前能力
+
+- 卫星状态设置：质量、推进系统、天线、地面站/测控船、中继星等任务参数配置
+- 轨道初始化：支持轨道参数配置、项目级配置保存和初始化流程固化
+- 变轨策略分析：圆轨道霍曼转移估算、分阶段机动参数编辑、轨迹与趋势图生成
+- 发射窗口分析：约束扫描、窗口结果表、样本缓存和甘特图输出
+- 跟踪弧段分析：围绕测控可见性生成可跟踪弧段结果
+- 任务可视化：2D/3D 轨道视图、本地 Cesium 场景、科学曲线与结果图表
+- AI 辅助解读：面向项目摘要的任务分析说明页，支持报告式输出
+- 项目管理：新建/打开项目，自动保存配置、CSV、图表和中间结果
 
 ## 技术选型
 
