@@ -4,11 +4,32 @@ from pathlib import Path
 
 import numpy as np
 import pyqtgraph as pg
-from PySide6 import QtWidgets
+from PySide6 import QtGui, QtWidgets
 
 from smart.domain.models import OrbitTrajectory
 from smart.ui.i18n import I18nManager
 from smart.ui.mission_state import MissionState
+
+
+_PLOT_BACKGROUND = "#071016"
+_PLOT_AXIS = "#9fb5bf"
+_PLOT_GRID = "#244958"
+_ALTITUDE_COLOR = "#66d9ea"
+_SPEED_COLOR = "#f2b84b"
+
+
+def _style_plot(plot: pg.PlotWidget) -> None:
+    plot.setBackground(_PLOT_BACKGROUND)
+    plot.showGrid(x=True, y=True, alpha=0.18)
+    plot.setMenuEnabled(False)
+    plot.plotItem.hideButtons()
+    plot.plotItem.getViewBox().setBackgroundColor(_PLOT_BACKGROUND)
+    plot.plotItem.getViewBox().setBorder(pg.mkPen("#1e3b49", width=1))
+    for axis_name in ("left", "bottom"):
+        axis = plot.getAxis(axis_name)
+        axis.setPen(pg.mkPen(_PLOT_GRID, width=1))
+        axis.setTextPen(pg.mkPen(_PLOT_AXIS))
+        axis.setStyle(tickFont=QtGui.QFont("Noto Sans SC", 9), tickTextOffset=8)
 
 
 class DataVisualizationPage(QtWidgets.QWidget):
@@ -92,14 +113,11 @@ class DataVisualizationPage(QtWidgets.QWidget):
         self._speed_plot = pg.PlotWidget()
 
         for plot in (self._altitude_plot, self._speed_plot):
-            plot.setBackground("#fffdf8")
-            plot.showGrid(x=True, y=True, alpha=0.16)
-            plot.setMenuEnabled(False)
-            plot.plotItem.hideButtons()
+            _style_plot(plot)
             plots.addWidget(plot, 1)
 
-        self._altitude_curve = self._altitude_plot.plot(pen=pg.mkPen("#0f7b8c", width=2.2))
-        self._speed_curve = self._speed_plot.plot(pen=pg.mkPen("#c25c38", width=2.2))
+        self._altitude_curve = self._altitude_plot.plot(pen=pg.mkPen(_ALTITUDE_COLOR, width=2.6))
+        self._speed_curve = self._speed_plot.plot(pen=pg.mkPen(_SPEED_COLOR, width=2.6))
 
         layout.addWidget(container, 1)
         return card
@@ -131,10 +149,11 @@ class DataVisualizationPage(QtWidgets.QWidget):
         self._summary_caption_labels["y"].setText(t("viz.field.y"))
         self._summary_caption_labels["z"].setText(t("viz.field.z"))
         self._plot_title_label.setText(t("viz.plot_title"))
-        self._altitude_plot.setLabel("left", t("viz.axis.altitude"), units="km")
-        self._altitude_plot.setLabel("bottom", t("viz.axis.time"), units="min")
-        self._speed_plot.setLabel("left", t("viz.axis.velocity"), units="km/s")
-        self._speed_plot.setLabel("bottom", t("viz.axis.time"), units="min")
+        label_style = {"color": _PLOT_AXIS, "font-size": "10pt"}
+        self._altitude_plot.setLabel("left", t("viz.axis.altitude"), units="km", **label_style)
+        self._altitude_plot.setLabel("bottom", t("viz.axis.time"), units="min", **label_style)
+        self._speed_plot.setLabel("left", t("viz.axis.velocity"), units="km/s", **label_style)
+        self._speed_plot.setLabel("bottom", t("viz.axis.time"), units="min", **label_style)
 
     def export_charts(self, output_dir: Path) -> list[Path]:
         output_dir.mkdir(parents=True, exist_ok=True)

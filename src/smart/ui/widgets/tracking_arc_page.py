@@ -24,6 +24,7 @@ from smart.services.tracking_arc import (
 )
 from smart.ui.i18n import I18nManager
 from smart.ui.widgets.spinboxes import NoWheelComboBox, NoWheelDoubleSpinBox
+from smart.ui.widgets.table_editing import install_table_edit_delegate
 
 
 BEIJING_TZ = timezone(timedelta(hours=8))
@@ -31,11 +32,18 @@ BEIJING_TZ = timezone(timedelta(hours=8))
 
 class TrackingArcGanttWidget(QtWidgets.QWidget):
     _COLORS = {
-        "burn": QtGui.QColor("#B91C1C"),
-        "ground": QtGui.QColor("#2E7D5B"),
-        "relay": QtGui.QColor("#2563A6"),
-        "shadow": QtGui.QColor("#6B7280"),
+        "burn": QtGui.QColor("#D3222A"),
+        "ground": QtGui.QColor("#2FC18B"),
+        "relay": QtGui.QColor("#3F8FE5"),
+        "shadow": QtGui.QColor("#6B7F88"),
     }
+    _BACKGROUND = QtGui.QColor("#071016")
+    _PANEL = QtGui.QColor("#0B1A22")
+    _ROW_ALT = QtGui.QColor("#0F2530")
+    _BORDER = QtGui.QColor("#1E3B49")
+    _GRID = QtGui.QColor("#244958")
+    _TEXT = QtGui.QColor("#D8E7EF")
+    _MUTED = QtGui.QColor("#8FA8B4")
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -76,12 +84,13 @@ class TrackingArcGanttWidget(QtWidgets.QWidget):
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         rect = QtCore.QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
-        painter.fillRect(rect, QtGui.QColor("#FFFDF8"))
-        painter.setPen(QtGui.QPen(QtGui.QColor("#D8D0C2"), 1))
-        painter.drawRoundedRect(rect, 6, 6)
+        painter.fillRect(rect, self._BACKGROUND)
+        painter.setBrush(self._PANEL)
+        painter.setPen(QtGui.QPen(self._BORDER, 1))
+        painter.drawRoundedRect(rect, 10, 10)
 
         if self._result is None:
-            painter.setPen(QtGui.QColor("#6B6257"))
+            painter.setPen(self._MUTED)
             painter.drawText(rect, QtCore.Qt.AlignmentFlag.AlignCenter, "暂无跟踪弧段计算结果")
             return
 
@@ -98,7 +107,7 @@ class TrackingArcGanttWidget(QtWidgets.QWidget):
         axis_y = top - 16.0
         self._segment_rects = []
 
-        painter.setPen(QtGui.QPen(QtGui.QColor("#D8D0C2"), 1))
+        painter.setPen(QtGui.QPen(self._GRID, 1))
         painter.drawLine(QtCore.QPointF(left, axis_y), QtCore.QPointF(left + plot_width, axis_y))
         for index in range(6):
             ratio = index / 5
@@ -106,9 +115,9 @@ class TrackingArcGanttWidget(QtWidgets.QWidget):
             tick_utc = start_utc + timedelta(seconds=span_seconds * ratio)
             painter.drawLine(QtCore.QPointF(x, axis_y - 4), QtCore.QPointF(x, axis_y + 4))
             label = tick_utc.astimezone(BEIJING_TZ).strftime("%m-%d %H:%M")
-            painter.setPen(QtGui.QColor("#5F564D"))
+            painter.setPen(self._TEXT)
             painter.drawText(QtCore.QRectF(x - 42, 8, 84, 18), QtCore.Qt.AlignmentFlag.AlignCenter, label)
-            painter.setPen(QtGui.QPen(QtGui.QColor("#D8D0C2"), 1))
+            painter.setPen(QtGui.QPen(self._GRID, 1))
 
         for row_index, row_label in enumerate(self._result.row_labels):
             row_top = top + row_index * (row_height + row_gap)
@@ -116,9 +125,9 @@ class TrackingArcGanttWidget(QtWidgets.QWidget):
             if row_index % 2:
                 painter.fillRect(
                     QtCore.QRectF(1, row_top - 4, rect.width() - 2, row_height + 8),
-                    QtGui.QColor("#F6F0E6"),
+                    self._ROW_ALT,
                 )
-            painter.setPen(QtGui.QColor("#2A2520"))
+            painter.setPen(self._TEXT)
             label_text = painter.fontMetrics().elidedText(
                 row_label,
                 QtCore.Qt.TextElideMode.ElideRight,
@@ -129,7 +138,7 @@ class TrackingArcGanttWidget(QtWidgets.QWidget):
                 QtCore.Qt.AlignmentFlag.AlignVCenter | QtCore.Qt.AlignmentFlag.AlignRight,
                 label_text,
             )
-            painter.setPen(QtGui.QPen(QtGui.QColor("#E5DDD0"), 1))
+            painter.setPen(QtGui.QPen(self._GRID, 1))
             painter.drawLine(
                 QtCore.QPointF(left, row_rect.center().y()),
                 QtCore.QPointF(left + plot_width, row_rect.center().y()),
@@ -162,7 +171,7 @@ class TrackingArcGanttWidget(QtWidgets.QWidget):
                     f"{minutes:.0f} min",
                 )
 
-        painter.setPen(QtGui.QColor("#6B6257"))
+        painter.setPen(self._MUTED)
         painter.drawText(
             QtCore.QRectF(left, rect.height() - bottom + 4, plot_width, 20),
             QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter,
@@ -797,6 +806,7 @@ class TrackingArcPage(QtWidgets.QWidget):
         table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
         table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
         table.setMinimumHeight(120)
+        install_table_edit_delegate(table)
         return table
 
     def _set_asset_rows(self, table: QtWidgets.QTableWidget | None, rows: list[dict[str, Any]]) -> None:

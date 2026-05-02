@@ -13,6 +13,7 @@ from smart.domain.models import (
     SatelliteStructureConfig,
 )
 from smart.ui.i18n import I18nManager
+from smart.ui.widgets.table_editing import install_table_edit_delegate
 from smart.ui.widgets.satellite_structure_view import SatelliteStructureView
 from smart.ui.widgets.spinboxes import NoWheelDoubleSpinBox, NoWheelSpinBox
 
@@ -321,6 +322,7 @@ class SatelliteStatusPage(QtWidgets.QWidget):
         table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.Stretch)
         table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
         table.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.SingleSelection)
+        install_table_edit_delegate(table)
         layout.addWidget(table, 1)
 
         row_buttons = QtWidgets.QHBoxLayout()

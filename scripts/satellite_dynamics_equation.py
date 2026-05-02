@@ -1466,29 +1466,37 @@ def test_zero_thrust_ground_track_24h(
         longitudes_deg[i] = subpoint.longitude_deg
         latitudes_deg[i] = subpoint.latitude_deg
 
-    fig, ax = plt.subplots(figsize=(11, 6), dpi=120)
-    ax.set_title("Ground Track (F=0, 24 h)")
+    fig, ax = plt.subplots(figsize=(11, 6), dpi=120, facecolor="#071016")
+    ax.set_facecolor("#0B1A22")
+    ax.set_title("Ground Track (F=0, 24 h)", color="#D8E7EF", pad=14)
     ax.set_xlabel("Longitude [deg]")
     ax.set_ylabel("Latitude [deg]")
     ax.set_xlim(-180.0, 180.0)
     ax.set_ylim(-90.0, 90.0)
-    ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.45)
+    ax.grid(True, linestyle="--", linewidth=0.6, alpha=0.35, color="#244958")
+    ax.tick_params(colors="#9FB5BF")
+    ax.xaxis.label.set_color("#9FB5BF")
+    ax.yaxis.label.set_color("#9FB5BF")
+    for spine in ax.spines.values():
+        spine.set_color("#1E3B49")
 
     # Split the line at the dateline to avoid wrap-around artifacts.
     split_indices = np.where(np.abs(np.diff(longitudes_deg)) > 180.0)[0]
     start = 0
     for idx in split_indices:
-        ax.plot(longitudes_deg[start : idx + 1], latitudes_deg[start : idx + 1], color="tab:blue", linewidth=1.2)
+        ax.plot(longitudes_deg[start : idx + 1], latitudes_deg[start : idx + 1], color="#66D9EA", linewidth=1.5)
         start = idx + 1
-    ax.plot(longitudes_deg[start:], latitudes_deg[start:], color="tab:blue", linewidth=1.2, label="Ground track")
+    ax.plot(longitudes_deg[start:], latitudes_deg[start:], color="#66D9EA", linewidth=1.5, label="Ground track")
 
-    ax.scatter([longitudes_deg[0]], [latitudes_deg[0]], color="tab:red", s=28, zorder=3, label="T0")
-    ax.legend(loc="upper right")
+    ax.scatter([longitudes_deg[0]], [latitudes_deg[0]], color="#F2B84B", s=36, zorder=3, label="T0")
+    legend = ax.legend(loc="upper right", facecolor="#0D1C25", edgecolor="#244958", framealpha=0.96)
+    for text in legend.get_texts():
+        text.set_color("#D8E7EF")
 
     output = Path(output_path).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     fig.tight_layout()
-    fig.savefig(output)
+    fig.savefig(output, facecolor=fig.get_facecolor(), edgecolor="none")
     plt.close(fig)
     return output
 

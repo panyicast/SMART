@@ -15,6 +15,11 @@ except Exception:  # pragma: no cover - depends on local OpenGL runtime
     gl = None
 
 _EARTH_TEXTURE_PATH = Path(__file__).resolve().parents[2] / "assets" / "textures" / "earth_day_2048.png"
+_PLOT_BACKGROUND = "#071016"
+_PLOT_AXIS = "#9fb5bf"
+_PLOT_GRID = "#244958"
+_ORBIT_CYAN = "#66d9ea"
+_ORBIT_AMBER = "#f2b84b"
 
 
 def _load_texture_rgba(texture_path: Path) -> np.ndarray | None:
@@ -59,26 +64,34 @@ def _build_earth_mesh(rows: int = 72, cols: int = 144) -> tuple[object, bool]:
 class OrbitPlot2D(pg.PlotWidget):
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent=parent)
-        self.setBackground("#fffdf8")
+        self.setBackground(_PLOT_BACKGROUND)
         self.showGrid(x=True, y=True, alpha=0.18)
         self.setMenuEnabled(False)
         self.setAspectLocked(True)
         self.plotItem.hideButtons()
-        self.plotItem.setLabel("left", "Y", units="km")
-        self.plotItem.setLabel("bottom", "X", units="km")
+        self.plotItem.getViewBox().setBackgroundColor(_PLOT_BACKGROUND)
+        self.plotItem.getViewBox().setBorder(pg.mkPen("#1e3b49", width=1))
+        label_style = {"color": _PLOT_AXIS, "font-size": "10pt"}
+        self.plotItem.setLabel("left", "Y", units="km", **label_style)
+        self.plotItem.setLabel("bottom", "X", units="km", **label_style)
+        for axis_name in ("left", "bottom"):
+            axis = self.getAxis(axis_name)
+            axis.setPen(pg.mkPen(_PLOT_GRID, width=1))
+            axis.setTextPen(pg.mkPen(_PLOT_AXIS))
+            axis.setStyle(tickFont=QtGui.QFont("Noto Sans SC", 9), tickTextOffset=8)
 
         self._earth_item = QtWidgets.QGraphicsEllipseItem()
-        self._earth_item.setPen(QtGui.QPen(QtGui.QColor("#7ca1b5"), 2))
-        self._earth_item.setBrush(QtGui.QBrush(QtGui.QColor("#dbe9ef")))
+        self._earth_item.setPen(QtGui.QPen(QtGui.QColor("#2d7788"), 2))
+        self._earth_item.setBrush(QtGui.QBrush(QtGui.QColor(22, 78, 92, 170)))
         self.plotItem.addItem(self._earth_item)
 
-        self._orbit_item = self.plot(pen=pg.mkPen("#0f7b8c", width=2.4))
+        self._orbit_item = self.plot(pen=pg.mkPen(_ORBIT_CYAN, width=2.6))
         self._marker_item = self.plot(
             pen=None,
             symbol="o",
             symbolSize=10,
-            symbolBrush="#c25c38",
-            symbolPen=pg.mkPen("#8f3d21", width=1.2),
+            symbolBrush=_ORBIT_AMBER,
+            symbolPen=pg.mkPen("#f8d07a", width=1.2),
         )
 
     def set_trajectory(self, trajectory: OrbitTrajectory, body_radius_km: float) -> None:
@@ -103,8 +116,8 @@ class OrbitPlot2D(pg.PlotWidget):
 class OrbitPlot3D(QtWidgets.QWidget):
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
-        self._orbit_color = (0.06, 0.48, 0.55, 1.0)
-        self._marker_color = (0.76, 0.36, 0.22, 1.0)
+        self._orbit_color = (0.40, 0.85, 0.92, 1.0)
+        self._marker_color = (0.95, 0.72, 0.29, 1.0)
         self._maneuver_color = (1.0, 0.05, 0.02, 1.0)
         self._start_marker_color = (0.58, 1.0, 0.16, 1.0)
         self._orbit_width = 2.2
@@ -129,7 +142,7 @@ class OrbitPlot3D(QtWidgets.QWidget):
             return
 
         self._view = gl.GLViewWidget()
-        self._view.setBackgroundColor("#e7edf1")
+        self._view.setBackgroundColor(_PLOT_BACKGROUND)
         self._view.setCameraPosition(distance=22000.0, elevation=24.0, azimuth=40.0)
         layout.addWidget(self._view)
 
@@ -182,7 +195,7 @@ class OrbitPlot3D(QtWidgets.QWidget):
 
         self._start_label = None
         if hasattr(gl, "GLTextItem"):
-            font = QtGui.QFont("Microsoft YaHei UI", 12)
+            font = QtGui.QFont("Noto Sans SC", 12)
             font.setBold(True)
             self._start_label = gl.GLTextItem(
                 pos=np.zeros(3, dtype=float),
@@ -196,9 +209,9 @@ class OrbitPlot3D(QtWidgets.QWidget):
     def set_visual_style(
         self,
         *,
-        background_color: str = "#e7edf1",
-        orbit_color: tuple[float, float, float, float] = (0.06, 0.48, 0.55, 1.0),
-        marker_color: tuple[float, float, float, float] = (0.76, 0.36, 0.22, 1.0),
+        background_color: str = _PLOT_BACKGROUND,
+        orbit_color: tuple[float, float, float, float] = (0.40, 0.85, 0.92, 1.0),
+        marker_color: tuple[float, float, float, float] = (0.95, 0.72, 0.29, 1.0),
         orbit_width: float = 2.2,
     ) -> None:
         if self._view is None:

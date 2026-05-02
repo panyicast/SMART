@@ -29,6 +29,7 @@ from smart.services.launch_window import (
 from smart.services.project_workspace import ProjectWorkspace
 from smart.ui.i18n import I18nManager
 from smart.ui.widgets.spinboxes import NoWheelComboBox, NoWheelDateTimeEdit, NoWheelDoubleSpinBox
+from smart.ui.widgets.table_editing import install_table_edit_delegate
 
 
 BEIJING_TZ = timezone(timedelta(hours=8))
@@ -50,9 +51,16 @@ class _GanttSegment:
 
 class LaunchWindowGanttWidget(QtWidgets.QWidget):
     _WINDOW_ROW_LABEL = "发射窗口计算结果"
-    _WINDOW_COLOR = QtGui.QColor("#B91C1C")
+    _WINDOW_COLOR = QtGui.QColor("#D3222A")
     _PASS_ROW_LABEL = "测控条件通过"
-    _PASS_COLOR = QtGui.QColor("#2E7D5B")
+    _PASS_COLOR = QtGui.QColor("#2FC18B")
+    _BACKGROUND = QtGui.QColor("#071016")
+    _PANEL = QtGui.QColor("#0B1A22")
+    _ROW_ALT = QtGui.QColor("#0F2530")
+    _BORDER = QtGui.QColor("#1E3B49")
+    _GRID = QtGui.QColor("#244958")
+    _TEXT = QtGui.QColor("#D8E7EF")
+    _MUTED = QtGui.QColor("#8FA8B4")
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -100,12 +108,13 @@ class LaunchWindowGanttWidget(QtWidgets.QWidget):
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         rect = QtCore.QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
-        painter.fillRect(rect, QtGui.QColor("#FFFDF8"))
-        painter.setPen(QtGui.QPen(QtGui.QColor("#D8D0C2"), 1))
-        painter.drawRoundedRect(rect, 6, 6)
+        painter.fillRect(rect, self._BACKGROUND)
+        painter.setBrush(self._PANEL)
+        painter.setPen(QtGui.QPen(self._BORDER, 1))
+        painter.drawRoundedRect(rect, 10, 10)
 
         if self._start_utc is None or self._end_utc is None:
-            painter.setPen(QtGui.QColor("#6B6257"))
+            painter.setPen(self._MUTED)
             painter.drawText(rect, QtCore.Qt.AlignmentFlag.AlignCenter, "暂无发射窗口计算结果")
             return
 
@@ -120,7 +129,7 @@ class LaunchWindowGanttWidget(QtWidgets.QWidget):
         axis_y = top - 16.0
         self._segment_rects = []
 
-        painter.setPen(QtGui.QPen(QtGui.QColor("#D8D0C2"), 1))
+        painter.setPen(QtGui.QPen(self._GRID, 1))
         painter.drawLine(QtCore.QPointF(left, axis_y), QtCore.QPointF(left + plot_width, axis_y))
         tick_count = 5
         for index in range(tick_count + 1):
@@ -129,13 +138,13 @@ class LaunchWindowGanttWidget(QtWidgets.QWidget):
             tick_utc = self._start_utc + timedelta(seconds=span_seconds * ratio)
             painter.drawLine(QtCore.QPointF(x, axis_y - 4), QtCore.QPointF(x, axis_y + 4))
             label = tick_utc.astimezone(BEIJING_TZ).strftime("%m-%d %H:%M")
-            painter.setPen(QtGui.QColor("#5F564D"))
+            painter.setPen(self._TEXT)
             painter.drawText(
                 QtCore.QRectF(x - 42, 8, 84, 18),
                 QtCore.Qt.AlignmentFlag.AlignCenter,
                 label,
             )
-            painter.setPen(QtGui.QPen(QtGui.QColor("#D8D0C2"), 1))
+            painter.setPen(QtGui.QPen(self._GRID, 1))
 
         for row_index, row_label in enumerate(self._row_labels):
             row_top = top + row_index * (row_height + row_gap)
@@ -143,9 +152,9 @@ class LaunchWindowGanttWidget(QtWidgets.QWidget):
             if row_index % 2:
                 painter.fillRect(
                     QtCore.QRectF(1, row_top - 4, rect.width() - 2, row_height + 8),
-                    QtGui.QColor("#F6F0E6"),
+                    self._ROW_ALT,
                 )
-            painter.setPen(QtGui.QColor("#2A2520"))
+            painter.setPen(self._TEXT)
             label_text = painter.fontMetrics().elidedText(
                 row_label,
                 QtCore.Qt.TextElideMode.ElideRight,
@@ -156,7 +165,7 @@ class LaunchWindowGanttWidget(QtWidgets.QWidget):
                 QtCore.Qt.AlignmentFlag.AlignVCenter | QtCore.Qt.AlignmentFlag.AlignRight,
                 label_text,
             )
-            painter.setPen(QtGui.QPen(QtGui.QColor("#E5DDD0"), 1))
+            painter.setPen(QtGui.QPen(self._GRID, 1))
             painter.drawLine(
                 QtCore.QPointF(left, row_rect.center().y()),
                 QtCore.QPointF(left + plot_width, row_rect.center().y()),
@@ -182,7 +191,7 @@ class LaunchWindowGanttWidget(QtWidgets.QWidget):
                     text,
                 )
 
-        painter.setPen(QtGui.QColor("#6B6257"))
+        painter.setPen(self._MUTED)
         painter.drawText(
             QtCore.QRectF(left, rect.height() - bottom + 4, plot_width, 20),
             QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter,
@@ -474,10 +483,12 @@ class LaunchWindowPage(QtWidgets.QWidget):
         )
         self._constraint_table.setAlternatingRowColors(True)
         self._constraint_table.verticalHeader().setVisible(False)
-        self._constraint_table.horizontalHeader().setStretchLastSection(True)
-        self._constraint_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
         self._constraint_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
+        self._constraint_table.setHorizontalScrollMode(QtWidgets.QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self._constraint_table.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self._constraint_table.setMinimumHeight(300)
+        install_table_edit_delegate(self._constraint_table)
+        self._configure_constraint_table_columns()
         layout.addWidget(self._constraint_table)
 
         button_row = QtWidgets.QHBoxLayout()
@@ -899,6 +910,7 @@ class LaunchWindowPage(QtWidgets.QWidget):
             self._constraint_table.setItem(row, offset, item)
         type_box = self._constraint_type_combo(str(row_payload.get("condition_type", CONSTRAINT_TYPE_GROUND_VISIBLE)))
         self._constraint_table.setCellWidget(row, 4, type_box)
+        self._constraint_table.setRowHeight(row, max(self._constraint_table.rowHeight(row), 36))
 
     def _constraint_rows_payload(self) -> list[dict[str, Any]]:
         if self._constraint_table is None:
@@ -1151,6 +1163,7 @@ class LaunchWindowPage(QtWidgets.QWidget):
         table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
         table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
         table.setMinimumHeight(120)
+        install_table_edit_delegate(table)
         return table
 
     def _section_label(self, text: str) -> QtWidgets.QLabel:
@@ -1160,17 +1173,47 @@ class LaunchWindowPage(QtWidgets.QWidget):
 
     def _constraint_type_combo(self, current_value: str) -> QtWidgets.QComboBox:
         combo = NoWheelComboBox()
-        for value, label in (
-            (CONSTRAINT_TYPE_NO_SHADOW, "无地影"),
-            (CONSTRAINT_TYPE_GROUND_VISIBLE, "地面站可见"),
-            (CONSTRAINT_TYPE_RELAY_VISIBLE, "中继星可见"),
-            (CONSTRAINT_TYPE_GROUND_OR_RELAY_VISIBLE, "地面站或中继星可见"),
-            (CONSTRAINT_TYPE_THETA_S, "太阳角与帆板夹角"),
+        labels: list[tuple[str, str]] = []
+        for value, label, tooltip in (
+            (CONSTRAINT_TYPE_NO_SHADOW, "无地影", "转移轨道 - 无地影"),
+            (CONSTRAINT_TYPE_GROUND_VISIBLE, "地面站可见", "点火测控 - 地面站可见"),
+            (CONSTRAINT_TYPE_RELAY_VISIBLE, "中继星可见", "远点测控 - 中继星可见"),
+            (CONSTRAINT_TYPE_GROUND_OR_RELAY_VISIBLE, "站/星可见", "地面站或中继星可见"),
+            (CONSTRAINT_TYPE_THETA_S, "太阳角-帆板", "太阳角与帆板夹角"),
         ):
             combo.addItem(label, value)
+            combo.setItemData(combo.count() - 1, tooltip, QtCore.Qt.ItemDataRole.ToolTipRole)
+            labels.append((label, tooltip))
         index = combo.findData(current_value)
         combo.setCurrentIndex(index if index >= 0 else 0)
+        combo.setSizeAdjustPolicy(QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        combo.setMinimumContentsLength(max(len(label) for label, _tooltip in labels) + 1)
+        combo.setMinimumWidth(150)
+        combo.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        combo.setToolTip(combo.currentData(QtCore.Qt.ItemDataRole.ToolTipRole) or combo.currentText())
+        combo.currentIndexChanged.connect(
+            lambda _index, box=combo: box.setToolTip(
+                box.currentData(QtCore.Qt.ItemDataRole.ToolTipRole) or box.currentText()
+            )
+        )
         return combo
+
+    def _configure_constraint_table_columns(self) -> None:
+        if self._constraint_table is None:
+            return
+        header = self._constraint_table.horizontalHeader()
+        header.setStretchLastSection(False)
+        header.setMinimumSectionSize(56)
+        header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.Fixed)
+        header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(2, QtWidgets.QHeaderView.ResizeMode.Fixed)
+        header.setSectionResizeMode(3, QtWidgets.QHeaderView.ResizeMode.Fixed)
+        header.setSectionResizeMode(4, QtWidgets.QHeaderView.ResizeMode.Interactive)
+        self._constraint_table.setColumnWidth(0, 56)
+        self._constraint_table.setColumnWidth(1, 154)
+        self._constraint_table.setColumnWidth(2, 136)
+        self._constraint_table.setColumnWidth(3, 136)
+        self._constraint_table.setColumnWidth(4, 180)
 
     @staticmethod
     def _burn_sun_axis_combo(current_value: str) -> NoWheelComboBox:
