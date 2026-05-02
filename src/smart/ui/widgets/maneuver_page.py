@@ -1,12 +1,10 @@
 from __future__ import annotations
 
+import csv
 from dataclasses import dataclass
-from datetime import datetime
 import importlib.util
 import math
 from pathlib import Path
-import re
-import shutil
 import sys
 from typing import Any
 
@@ -24,7 +22,6 @@ from smart.services.project_workspace import ProjectWorkspace, default_maneuver_
 from smart.ui.i18n import I18nManager
 from smart.ui.widgets.orbit_views import OrbitPlot3D
 from smart.ui.widgets.spinboxes import NoWheelComboBox, NoWheelDoubleSpinBox, NoWheelSpinBox
-from smart.ui.widgets.stk_graphics_views import StkManeuverGraphicsWidget
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _DYNAMICS_SCRIPT_PATH = _REPO_ROOT / "scripts" / "satellite_dynamics_equation.py"
@@ -168,8 +165,11 @@ class ManeuverPage(QtWidgets.QWidget):
         self._maneuver_field_labels: list[dict[str, QtWidgets.QLabel]] = []
         self._maneuver_fields: list[dict[str, QtWidgets.QWidget]] = []
         self._result_value_labels: dict[str, QtWidgets.QLabel] = {}
-        self._stk_preview: StkManeuverGraphicsWidget | None = None
         self._orbit_3d_view: OrbitPlot3D | None = None
+        self._ground_track_plot: pg.PlotWidget | None = None
+        self._ground_track_curve: pg.PlotDataItem | None = None
+        self._ground_track_markers: pg.PlotDataItem | None = None
+        self._ground_track_start_marker: pg.PlotDataItem | None = None
         self._ground_track_start_label: pg.TextItem | None = None
         self._maneuver_number_labels: list[pg.TextItem] = []
 
@@ -273,8 +273,13 @@ class ManeuverPage(QtWidgets.QWidget):
         return scroll
 
     def _build_visualization_panel(self) -> QtWidgets.QWidget:
-        self._stk_preview = StkManeuverGraphicsWidget(self._i18n)
-        return self._stk_preview
+        panel = QtWidgets.QWidget()
+        layout = QtWidgets.QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(14)
+        layout.addWidget(self._build_ground_track_card(), 2)
+        layout.addWidget(self._build_orbit_3d_card(), 3)
+        return panel
 
     def _build_ground_track_card(self) -> QtWidgets.QWidget:
         card = QtWidgets.QFrame()
@@ -461,10 +466,6 @@ class ManeuverPage(QtWidgets.QWidget):
         self._open_result_button.setEnabled(False)
         layout.addWidget(self._open_result_button)
 
-        self._save_stk_scene_button = QtWidgets.QPushButton()
-        self._save_stk_scene_button.clicked.connect(self._save_stk_scene)
-        layout.addWidget(self._save_stk_scene_button)
-
         self._maneuver_results_label = QtWidgets.QLabel()
         self._maneuver_results_label.setProperty("role", "cardCaption")
         layout.addWidget(self._maneuver_results_label)
@@ -527,7 +528,11 @@ class ManeuverPage(QtWidgets.QWidget):
         self._refresh_strategy_path_label()
         self._update_strategy_count_label()
         self._clear_result_summary()
-        self._set_status("statusReady", self._i18n.t("maneuver.status.loaded"))
+        result_loaded = self._load_existing_result_summary()
+        if result_loaded is True:
+            self._set_status("statusReady", self._i18n.t("maneuver.status.loaded_with_result"))
+        elif result_loaded is False:
+            self._set_status("statusReady", self._i18n.t("maneuver.status.loaded"))
 
     def save_strategy(self) -> Path | None:
         if self._workspace.current_project is None:
@@ -817,7 +822,6 @@ class ManeuverPage(QtWidgets.QWidget):
         self._add_button.setEnabled(enabled)
         self._remove_button.setEnabled(enabled)
         self._calculate_button.setEnabled(enabled)
-        self._save_stk_scene_button.setEnabled(enabled)
 
     def _refresh_strategy_path_label(self) -> None:
         if self._workspace.current_project is None:
@@ -893,8 +897,17 @@ class ManeuverPage(QtWidgets.QWidget):
                 self._maneuver_result_table.setItem(row, column, item)
 
     def _clear_visualizations(self) -> None:
-        if self._stk_preview is not None:
-            self._stk_preview.clear_graphics()
+        if self._ground_track_curve is not None:
+            self._ground_track_curve.clear()
+        if self._ground_track_markers is not None:
+            self._ground_track_markers.clear()
+        if self._ground_track_start_marker is not None:
+            self._ground_track_start_marker.clear()
+        if self._ground_track_start_label is not None:
+            self._ground_track_start_label.setText("")
+        self._clear_maneuver_number_labels()
+        if self._orbit_3d_view is not None:
+            self._orbit_3d_view.clear_trajectory()
 
     def _update_visualizations(
         self,
@@ -904,58 +917,33 @@ class ManeuverPage(QtWidgets.QWidget):
         if not rows:
             self._clear_visualizations()
             return
-        if self._stk_preview is None or self._workspace.current_project is None:
-            return
-        preview_rows = self._stk_preview_rows(rows)
-        self._stk_preview.load_trajectory(
-            preview_rows,
-            ephemeris_path=self._workspace.data_dir() / "stk" / "maneuver_strategy_preview.e",
-            scenario_epoch_utc=str(self._current_strategy.get("t0_epoch", self._resolved_t0_epoch_text())),
-            satellite_name=self._workspace.current_project.name,
-            maneuver_summaries=maneuver_summaries,
-        )
+        trajectory = self._trajectory_from_result_rows(rows)
+        longitudes = np.asarray([float(row["subsatellite_longitude_deg"]) for row in rows], dtype=np.float64)
+        latitudes = np.asarray([float(row["subsatellite_latitude_deg"]) for row in rows], dtype=np.float64)
+        plot_lon, plot_lat = self._with_dateline_breaks(longitudes, latitudes)
 
-    @staticmethod
-    def _stk_preview_rows(
-        rows: list[dict[str, Any]],
-        *,
-        coast_interval_s: float = 300.0,
-    ) -> list[dict[str, Any]]:
-        if len(rows) <= 2:
-            return list(rows)
-
-        selected: list[dict[str, Any]] = []
-        last_coast_kept_s: float | None = None
-        for index, row in enumerate(rows):
-            elapsed_s = float(row["elapsed_time_s"])
-            phase = str(row.get("phase", ""))
-            is_required = (
-                index == 0
-                or index == len(rows) - 1
-                or int(row.get("is_event_point", 0)) != 0
-                or phase in _MANEUVER_PHASES
+        if self._ground_track_curve is not None:
+            self._ground_track_curve.setData(plot_lon, plot_lat)
+        if self._ground_track_markers is not None:
+            self._ground_track_markers.setData(
+                [float(summary["subsatellite_longitude_deg"]) for summary in maneuver_summaries],
+                [float(summary["subsatellite_latitude_deg"]) for summary in maneuver_summaries],
             )
-            if is_required:
-                selected.append(row)
-                if phase == "coast":
-                    last_coast_kept_s = elapsed_s
-                continue
+        self._set_ground_track_start_marker(rows[0])
+        self._set_maneuver_number_labels(maneuver_summaries)
 
-            if last_coast_kept_s is None or elapsed_s - last_coast_kept_s >= coast_interval_s:
-                selected.append(row)
-                last_coast_kept_s = elapsed_s
-
-        deduped: list[dict[str, Any]] = []
-        seen_times: set[float] = set()
-        for row in selected:
-            elapsed_s = float(row["elapsed_time_s"])
-            if elapsed_s in seen_times:
-                continue
-            seen_times.add(elapsed_s)
-            deduped.append(row)
-        return deduped
+        if self._orbit_3d_view is not None:
+            positions_km = trajectory.positions_km
+            self._orbit_3d_view.set_trajectory_overlays(
+                trajectory,
+                _EARTH_RADIUS_KM,
+                maneuver_segments_km=self._maneuver_segments_km(rows, positions_km),
+                start_label=self._i18n.t("maneuver.plot.start_label"),
+            )
 
     def _set_ground_track_start_marker(self, row: dict[str, Any]) -> None:
+        if self._ground_track_start_marker is None:
+            return
         lon = float(row["subsatellite_longitude_deg"])
         lat = float(row["subsatellite_latitude_deg"])
         self._ground_track_start_marker.setData([lon], [lat])
@@ -964,6 +952,8 @@ class ManeuverPage(QtWidgets.QWidget):
             self._ground_track_start_label.setPos(lon, lat)
 
     def _set_maneuver_number_labels(self, maneuver_summaries: list[dict[str, Any]]) -> None:
+        if self._ground_track_plot is None:
+            return
         self._clear_maneuver_number_labels()
         for summary in maneuver_summaries:
             label = pg.TextItem(
@@ -982,9 +972,117 @@ class ManeuverPage(QtWidgets.QWidget):
             self._maneuver_number_labels.append(label)
 
     def _clear_maneuver_number_labels(self) -> None:
+        if self._ground_track_plot is None:
+            self._maneuver_number_labels.clear()
+            return
         for label in self._maneuver_number_labels:
             self._ground_track_plot.removeItem(label)
         self._maneuver_number_labels.clear()
+
+    def _load_existing_result_summary(self) -> bool | None:
+        if self._workspace.current_project is None:
+            return False
+
+        result_path = self._workspace.data_dir() / "full_orbit_history.csv"
+        if not result_path.exists():
+            self._last_result_path = None
+            self._open_result_button.setEnabled(False)
+            return False
+
+        try:
+            rows = self._load_orbit_history_csv(result_path)
+            maneuver_summaries = self._build_maneuver_summaries(rows)
+        except Exception as exc:
+            self._last_result_path = None
+            self._open_result_button.setEnabled(False)
+            self._clear_result_summary()
+            self._set_status(
+                "statusDisconnected",
+                self._i18n.t("maneuver.status.result_load_failed", error=str(exc)),
+            )
+            return None
+
+        self._last_result_path = result_path
+        self._open_result_button.setEnabled(True)
+        self._update_result_summary(result_path, rows, maneuver_summaries)
+        return True
+
+    def _build_maneuver_summaries(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if self._workspace.current_project is None:
+            return []
+        strategy_path = self._workspace.maneuver_strategy_path()
+        if not strategy_path.exists():
+            return []
+
+        module = _load_dynamics_module()
+        strategy_steps = module.load_maneuver_strategy_steps(strategy_path)
+        return module.build_maneuver_result_rows(strategy_steps, rows)
+
+    @staticmethod
+    def _load_orbit_history_csv(csv_path: Path) -> list[dict[str, Any]]:
+        with csv_path.open("r", encoding="utf-8-sig", newline="") as handle:
+            reader = csv.DictReader(handle)
+            rows = [dict(row) for row in reader]
+        if not rows:
+            return []
+        required_columns = {
+            "elapsed_time_s",
+            "elapsed_time_min",
+            "phase",
+            "is_event_point",
+            "semi_major_axis_m",
+            "inclination_deg",
+            "position_x_m",
+            "position_y_m",
+            "position_z_m",
+            "velocity_x_m_s",
+            "velocity_y_m_s",
+            "velocity_z_m_s",
+            "subsatellite_longitude_deg",
+            "subsatellite_latitude_deg",
+            "mass_kg",
+        }
+        missing = required_columns.difference(rows[0])
+        if missing:
+            raise ValueError(f"Orbit history CSV is missing columns: {', '.join(sorted(missing))}")
+        return rows
+
+    @staticmethod
+    def _trajectory_from_result_rows(rows: list[dict[str, Any]]) -> OrbitTrajectory:
+        positions_km = np.asarray(
+            [
+                [
+                    float(row["position_x_m"]) / 1000.0,
+                    float(row["position_y_m"]) / 1000.0,
+                    float(row["position_z_m"]) / 1000.0,
+                ]
+                for row in rows
+            ],
+            dtype=np.float64,
+        )
+        velocities_km_s = np.asarray(
+            [
+                [
+                    float(row["velocity_x_m_s"]) / 1000.0,
+                    float(row["velocity_y_m_s"]) / 1000.0,
+                    float(row["velocity_z_m_s"]) / 1000.0,
+                ]
+                for row in rows
+            ],
+            dtype=np.float64,
+        )
+        elapsed_seconds = np.asarray([float(row["elapsed_time_s"]) for row in rows], dtype=np.float64)
+        radii_km = np.linalg.norm(positions_km, axis=1)
+        speeds_km_s = np.linalg.norm(velocities_km_s, axis=1)
+        return OrbitTrajectory(
+            positions_km=positions_km,
+            velocities_km_s=velocities_km_s,
+            radii_km=radii_km,
+            speeds_km_s=speeds_km_s,
+            elapsed_seconds=elapsed_seconds,
+            current_position_km=positions_km[-1],
+            current_velocity_km_s=velocities_km_s[-1],
+        )
 
     @staticmethod
     def _maneuver_segments_km(rows: list[dict[str, Any]], positions_km: np.ndarray) -> list[np.ndarray]:
@@ -1031,38 +1129,6 @@ class ManeuverPage(QtWidgets.QWidget):
             return
         QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(self._last_result_path)))
 
-    def _save_stk_scene(self) -> None:
-        if self._workspace.current_project is None:
-            self._set_status("statusDisconnected", self._i18n.t("maneuver.status.no_project"))
-            return
-        if self._stk_preview is None:
-            self._set_status(
-                "statusDisconnected",
-                self._i18n.t("maneuver.status.stk_scene_save_failed", error="STK preview is unavailable."),
-            )
-            return
-
-        project_name = self._safe_filename(self._workspace.current_project.name)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        target_dir = self._workspace.data_dir() / "stk" / f"{project_name}_{timestamp}"
-        target_path = target_dir / f"{project_name}_maneuver_preview.sc"
-        try:
-            saved_path = self._stk_preview.save_current_scenario(target_path)
-            source_ephemeris = self._workspace.data_dir() / "stk" / "maneuver_strategy_preview.e"
-            if source_ephemeris.exists():
-                shutil.copy2(source_ephemeris, target_dir / source_ephemeris.name)
-        except Exception as exc:
-            self._set_status(
-                "statusDisconnected",
-                self._i18n.t("maneuver.status.stk_scene_save_failed", error=str(exc)),
-            )
-            return
-
-        self._set_status(
-            "statusReady",
-            self._i18n.t("maneuver.status.stk_scene_saved", path=str(target_dir)),
-        )
-
     def _set_status(self, role: str, text: str) -> None:
         self._status_role = role
         self._status_label.setProperty("role", role)
@@ -1078,6 +1144,11 @@ class ManeuverPage(QtWidgets.QWidget):
         self._initial_state_header_label.setText(t("maneuver.initial_state_header"))
         self._initial_state_caption_label.setText(t("maneuver.initial_state_caption"))
         self._entry_aux_title_label.setText(t("maneuver.entry_aux.title"))
+        self._ground_track_title_label.setText(t("maneuver.ground_track_title"))
+        if self._ground_track_plot is not None:
+            self._ground_track_plot.plotItem.setLabel("bottom", t("maneuver.ground_track.longitude"), units="deg")
+            self._ground_track_plot.plotItem.setLabel("left", t("maneuver.ground_track.latitude"), units="deg")
+        self._orbit_3d_title_label.setText(t("maneuver.orbit_3d_title"))
         self._top_level_labels["launch_mass_kg"].setText(t("maneuver.field.launch_mass_kg"))
         for key, label in self._top_level_text_labels.items():
             label.setText(t(f"maneuver.field.{key}"))
@@ -1092,7 +1163,6 @@ class ManeuverPage(QtWidgets.QWidget):
         self._calculation_header_label.setText(t("maneuver.calculation_header"))
         self._calculate_button.setText(t("maneuver.calculate_button"))
         self._open_result_button.setText(t("maneuver.open_result_button"))
-        self._save_stk_scene_button.setText(t("maneuver.save_stk_scene_button"))
         self._maneuver_results_label.setText(t("maneuver.result.maneuver_results"))
         self._maneuver_result_table.setHorizontalHeaderLabels(
             [
@@ -1134,12 +1204,6 @@ class ManeuverPage(QtWidgets.QWidget):
         box.setDecimals(decimals)
         box.setButtonSymbols(QtWidgets.QAbstractSpinBox.ButtonSymbols.NoButtons)
         return box
-
-    @staticmethod
-    def _safe_filename(value: str) -> str:
-        cleaned = re.sub(r'[<>:"/\\\\|?*]+', "_", value.strip())
-        cleaned = re.sub(r"_+", "_", cleaned).strip("._ ")
-        return cleaned or "smart_preview"
 
     @staticmethod
     def _to_float(value: str) -> float:

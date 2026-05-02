@@ -73,6 +73,20 @@
   - `doc/launch_window_workflow.md`
 - Detailed launch-window angle definitions, formulas, and visibility rules live in:
   - `doc/launch_window_angle_reference.md`
+- Lightweight file-based planning guidance for complex tasks lives in:
+  - `doc/planning_workflow.md`
+- Planning templates for complex tasks live in:
+  - `doc/planning_templates/`
+- A helper script to initialize a local planning session lives in:
+  - `scripts/init-planning-session.ps1`
+
+## Planning Workflow
+
+- For complex tasks, prefer the lightweight file-based planning workflow described in `doc/planning_workflow.md`.
+- Use it for multi-step debugging, cross-module changes, research-heavy work, or tasks likely to span multiple sessions.
+- Keep planning artifacts local under `.planning/`; do not commit them unless the user explicitly asks.
+- Use planning files as working memory. Promote only stable, reusable conclusions into `AGENTS.md` or the relevant permanent doc.
+- Do not store secrets, full kernel contents, or large CSV dumps in planning files; record concise summaries and paths instead.
 
 ## UI Rules
 

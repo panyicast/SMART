@@ -221,6 +221,23 @@ class OrbitPlot3D(QtWidgets.QWidget):
             start_label=None,
         )
 
+    def clear_trajectory(self) -> None:
+        if self._view is None:
+            return
+
+        assert self._line is not None
+        assert self._marker is not None
+        assert self._start_marker is not None
+        assert self._body is not None
+
+        self._line.setVisible(False)
+        self._marker.setVisible(False)
+        self._start_marker.setVisible(False)
+        self._body.setVisible(False)
+        if self._start_label is not None:
+            self._start_label.setVisible(False)
+        self._set_maneuver_segments(None)
+
     def set_trajectory_overlays(
         self,
         trajectory: OrbitTrajectory,
@@ -237,6 +254,9 @@ class OrbitPlot3D(QtWidgets.QWidget):
         assert self._start_marker is not None
         assert self._body is not None
 
+        self._line.setVisible(True)
+        self._marker.setVisible(True)
+        self._body.setVisible(True)
         self._body.resetTransform()
         self._body.scale(body_radius_km, body_radius_km, body_radius_km)
         self._line.setData(

@@ -20,3 +20,9 @@ projects/*/data/stk/
 tmp_*.png
 tmp_*.e
 *_Mnvr_*.e
+
+# Local planning workflow artifacts
+.planning/
+/task_plan.md
+/findings.md
+/progress.md
