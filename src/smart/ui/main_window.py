@@ -15,7 +15,6 @@ from smart.ui.widgets.data_visualization_page import DataVisualizationPage
 from smart.ui.widgets.ai_project_analysis_page import AIProjectAnalysisPage
 from smart.ui.widgets.launch_window_page import LaunchWindowPage
 from smart.ui.widgets.maneuver_page import ManeuverPage
-from smart.ui.widgets.orbit_initialization_page import OrbitInitializationPage
 from smart.ui.widgets.placeholder_page import PlaceholderPage
 from smart.ui.widgets.satellite_status_page import SatelliteStatusPage
 from smart.ui.widgets.scene_test_page import SceneTestPage
@@ -26,7 +25,6 @@ _MAX_RECENT_PROJECTS = 8
 _NAV_KEYS = [
     "nav.dashboard",
     "nav.orbit_design",
-    "nav.orbit_initialization",
     "nav.maneuver_strategy",
     "nav.launch_window",
     "nav.tracking_arc",
@@ -66,8 +64,11 @@ class MainWindow(QtWidgets.QMainWindow):
         layout.addWidget(self._stack, 1)
 
         self._dashboard_page = DashboardPage(self._mission_state, self._i18n)
+        self._dashboard_page.new_project_requested.connect(self._create_project)
+        self._dashboard_page.open_project_requested.connect(self._open_project)
+        self._dashboard_page.recent_project_requested.connect(self._open_recent_project)
+        self._dashboard_page.set_recent_projects(self._recent_project_paths)
         self._satellite_page = SatelliteStatusPage(self._i18n)
-        self._orbit_initialization_page = OrbitInitializationPage(self._mission_state, self._i18n)
         self._maneuver_page = ManeuverPage(self._i18n, self._workspace)
         self._launch_window_page = LaunchWindowPage(self._i18n, self._workspace)
         self._ai_project_page = AIProjectAnalysisPage(self._i18n, self._workspace, self._settings)
@@ -84,7 +85,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self._pages = [
             self._dashboard_page,
             self._satellite_page,
-            self._orbit_initialization_page,
             self._maneuver_page,
             self._launch_window_page,
             self._tracking_arc_page,
@@ -110,6 +110,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.retranslate()
         self._nav_list.setCurrentRow(0)
+        self._dashboard_page.set_project(None)
         self.statusBar().showMessage(self._i18n.t("project.status.no_project"))
 
     def _build_menu(self) -> None:
@@ -340,6 +341,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._persist_satellite_config()
         self._refresh_project_labels()
         self.setWindowTitle(f"{self._i18n.t('app.window_title')} - {info.name}")
+        self._dashboard_page.set_project(info)
         self._record_recent_project_path(info.root_dir)
 
     def _reset_spice_workspace(self, kernels_dir: Path) -> None:
@@ -532,3 +534,5 @@ class MainWindow(QtWidgets.QMainWindow):
             action.triggered.connect(lambda _checked=False, item_path=path_text: self._open_recent_project(item_path))
             self._project_menu.addAction(action)
             self._recent_project_actions.append(action)
+        if hasattr(self, "_dashboard_page"):
+            self._dashboard_page.set_recent_projects(self._recent_project_paths)

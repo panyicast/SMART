@@ -16,10 +16,6 @@ def build_module_catalog() -> list[ModuleDescriptor]:
             status="Operational",
         ),
         ModuleDescriptor(
-            key="orbit_initialization",
-            status="Operational",
-        ),
-        ModuleDescriptor(
             key="maneuver_strategy",
             status="Operational",
         ),
