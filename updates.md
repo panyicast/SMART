@@ -29,3 +29,11 @@
 ## 2026-05-02T17:19:15+08:00 | Update project changelog
 - 提交：`0f3b15c`
 - 影响文件：自动刷新记录，无额外文件。
+
+## 2026-05-02T17:19:57+08:00 | Finalize update log
+- 提交：`dabba21`
+- 影响文件：自动刷新记录，无额外文件。
+
+## 2026-05-02T19:24:18+08:00 | Refresh SMART UI visual system
+- 提交：`281dc73`
+- 影响文件：`src/smart/assets/fonts/Noto_Sans_SC/OFL.txt`、`src/smart/assets/fonts/Noto_Sans_SC/README.txt`、`src/smart/ui/i18n.py`、`src/smart/ui/theme.py`、`src/smart/ui/widgets/dashboard_page.py`、`src/smart/ui/widgets/data_visualization_page.py`、`src/smart/ui/widgets/launch_window_page.py`、`src/smart/ui/widgets/orbit_views.py` 等 16 个文件。
