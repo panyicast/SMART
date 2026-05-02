@@ -23,5 +23,9 @@
 - 影响文件：`src/smart/ui/i18n.py`、`src/smart/ui/widgets/maneuver_page.py`、`src/smart/ui/widgets/orbit_views.py`、`scripts/init-planning-session.ps1`、`AGENTS.md`、`doc/planning_templates/findings.md`、`doc/planning_templates/progress.md`、`doc/planning_templates/task_plan.md` 等 10 个文件。
 
 ## 2026-05-02T17:18:57+08:00 | Update overview dashboard and remove orbit initialization page
-- 提交：`待写入本次提交`
+- 提交：`18c82dc`
 - 影响文件：`src/smart/services/module_catalog.py`、`src/smart/ui/i18n.py`、`src/smart/ui/main_window.py`、`src/smart/ui/widgets/dashboard_page.py`、`src/smart/ui/widgets/orbit_initialization_page.py`、`projects/F4/config/satellite_status.json`、`projects/F4/config/tracking_arc.json`、`projects/F4/smart_project.json`。
+
+## 2026-05-02T17:19:15+08:00 | Update project changelog
+- 提交：`0f3b15c`
+- 影响文件：自动刷新记录，无额外文件。
