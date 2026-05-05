@@ -37,3 +37,11 @@
 ## 2026-05-02T19:24:18+08:00 | Refresh SMART UI visual system
 - 提交：`281dc73`
 - 影响文件：`src/smart/assets/fonts/Noto_Sans_SC/OFL.txt`、`src/smart/assets/fonts/Noto_Sans_SC/README.txt`、`src/smart/ui/i18n.py`、`src/smart/ui/theme.py`、`src/smart/ui/widgets/dashboard_page.py`、`src/smart/ui/widgets/data_visualization_page.py`、`src/smart/ui/widgets/launch_window_page.py`、`src/smart/ui/widgets/orbit_views.py` 等 16 个文件。
+
+## 2026-05-02T19:25:57+08:00 | Update changelog for UI refresh
+- 提交：`9963915`
+- 影响文件：自动刷新记录，无额外文件。
+
+## 2026-05-05T19:45:38+08:00 | Add flight program workflow and orbit preview updates
+- 提交：`待写入本次提交`
+- 影响文件：`src/smart/assets/cesium/mission_view.html`、`src/smart/assets/cesium/mission_view.js`、`src/smart/services/flight_program.py`、`src/smart/services/project_workspace.py`、`src/smart/ui/main_window.py`、`src/smart/ui/theme.py`、`src/smart/ui/widgets/cesium_mission_view.py`、`src/smart/ui/widgets/flight_program_page.py` 等 14 个文件。
