@@ -13,9 +13,9 @@ from smart.ui.mission_state import MissionState
 from smart.ui.widgets.dashboard_page import DashboardPage
 from smart.ui.widgets.data_visualization_page import DataVisualizationPage
 from smart.ui.widgets.ai_project_analysis_page import AIProjectAnalysisPage
+from smart.ui.widgets.flight_program_page import FlightProgramPage
 from smart.ui.widgets.launch_window_page import LaunchWindowPage
 from smart.ui.widgets.maneuver_page import ManeuverPage
-from smart.ui.widgets.placeholder_page import PlaceholderPage
 from smart.ui.widgets.satellite_status_page import SatelliteStatusPage
 from smart.ui.widgets.scene_test_page import SceneTestPage
 from smart.ui.widgets.spice_kernel_page import SpiceKernelPage
@@ -73,7 +73,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._launch_window_page = LaunchWindowPage(self._i18n, self._workspace)
         self._ai_project_page = AIProjectAnalysisPage(self._i18n, self._workspace, self._settings)
         self._tracking_arc_page = TrackingArcPage(self._i18n, self._workspace)
-        self._flight_program_page = PlaceholderPage(self._i18n, "flight_program")
+        self._flight_program_page = FlightProgramPage(self._i18n, self._workspace)
         self._viz_page = DataVisualizationPage(self._mission_state, self._i18n)
         self._scene_test_page = SceneTestPage(self._mission_state, self._i18n)
         self._spice_page = SpiceKernelPage(
@@ -327,12 +327,14 @@ class MainWindow(QtWidgets.QMainWindow):
                 self._maneuver_page.refresh_from_workspace()
                 self._launch_window_page.refresh_from_workspace()
                 self._tracking_arc_page.refresh_from_workspace()
+                self._flight_program_page.refresh_from_workspace()
                 self._latest_maneuver_strategy = self._maneuver_page.strategy()
             else:
                 self._latest_satellite_settings = self._satellite_page.settings()
                 self._maneuver_page.refresh_from_workspace()
                 self._launch_window_page.refresh_from_workspace()
                 self._tracking_arc_page.refresh_from_workspace()
+                self._flight_program_page.refresh_from_workspace()
                 self._latest_maneuver_strategy = self._maneuver_page.strategy()
         finally:
             self._autosave_enabled = True

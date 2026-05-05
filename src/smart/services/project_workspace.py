@@ -16,6 +16,7 @@ from smart.domain.models import (
 )
 from smart.services.earth_orientation import format_utc, parse_utc, utc_now_iso_z
 from smart.services.launch_window import default_launch_window_config, normalize_launch_window_config
+from smart.services.flight_program import default_flight_program_payload, normalize_flight_program_payload
 
 PROJECT_META_FILE = "smart_project.json"
 PROJECTS_DIR_NAME = "projects"
@@ -30,6 +31,7 @@ ORBIT_INITIALIZATION_FILE = "orbit_initialization.json"
 MANEUVER_STRATEGY_FILE = "maneuver_strategy.json"
 LAUNCH_WINDOW_FILE = "launch_window.json"
 TRACKING_ARC_FILE = "tracking_arc.json"
+FLIGHT_PROGRAM_FILE = "flight_program.json"
 
 
 @dataclass(slots=True, frozen=True)
@@ -92,6 +94,7 @@ class ProjectWorkspace:
         launch_window_config = default_launch_window_config()
         self.save_launch_window_config(launch_window_config)
         self.save_tracking_arc_config(launch_window_config)
+        self.save_flight_program_config(default_flight_program_payload())
         return self._project
 
     def open_project(self, project_dir: str | Path) -> ProjectInfo:
@@ -140,6 +143,9 @@ class ProjectWorkspace:
 
     def tracking_arc_path(self) -> Path:
         return self.config_dir() / TRACKING_ARC_FILE
+
+    def flight_program_path(self) -> Path:
+        return self.config_dir() / FLIGHT_PROGRAM_FILE
 
     def save_orbit_elements(self, elements: OrbitalElements) -> Path:
         payload = _orbital_elements_payload(elements)
@@ -241,6 +247,20 @@ class ProjectWorkspace:
             return None
         payload = _read_json(file_path)
         return normalize_launch_window_config(payload)
+
+    def save_flight_program_config(self, config: dict[str, Any]) -> Path:
+        payload = normalize_flight_program_payload(config)
+        file_path = self.flight_program_path()
+        _write_json(file_path, payload)
+        self._touch_updated_time()
+        return file_path
+
+    def load_flight_program_config(self) -> dict[str, Any] | None:
+        file_path = self.flight_program_path()
+        if not file_path.exists():
+            return None
+        payload = _read_json(file_path)
+        return normalize_flight_program_payload(payload)
 
     def load_maneuver_snapshot(self) -> dict[str, float] | None:
         file_path = self.data_dir() / MANEUVER_SNAPSHOT_FILE

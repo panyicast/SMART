@@ -24,6 +24,8 @@ _EARTH_TEXTURE_PATH = _ASSET_ROOT / "textures" / "earth_day_2048.png"
 _CESIUM_MODEL_EXTENSIONS = {".glb", ".gltf"}
 _GEOSTATIONARY_ALTITUDE_M = 35_786_000.0
 _LOGGER = logging.getLogger(__name__)
+_CAMERA_MODE_EARTH = "earth"
+_CAMERA_MODE_SPACECRAFT = "spacecraft"
 
 
 def _as_file_uri(path: Path) -> str:
@@ -63,6 +65,7 @@ def build_scene_payload(
     settings: SatelliteStatusSettings,
     *,
     satellite_label: str = "Mission Spacecraft",
+    scene_overlays: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, str] | None]:
     orbit_positions_m = (trajectory.positions_km * 1000.0).astype(float)
     if len(orbit_positions_m) > 0:
@@ -104,6 +107,8 @@ def build_scene_payload(
         "relaySatellites": relay_satellites,
         "model": model_payload,
     }
+    if scene_overlays:
+        payload.update(scene_overlays)
     return payload, model_note
 
 
@@ -149,10 +154,30 @@ class CesiumMissionView(QtWidgets.QWidget):
         super().__init__(parent)
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
         self._last_status: dict[str, str] = {"state": "loading"}
         self._scene_payload = "{}"
+        self._raw_scene_payload: dict[str, Any] = {}
         self._scene_note: dict[str, str] | None = None
         self._page_loaded = False
+        self._camera_mode = _CAMERA_MODE_EARTH
+
+        self._camera_toolbar = QtWidgets.QFrame()
+        self._camera_toolbar.setProperty("role", "sceneToolbar")
+        toolbar_layout = QtWidgets.QHBoxLayout(self._camera_toolbar)
+        toolbar_layout.setContentsMargins(8, 6, 8, 6)
+        toolbar_layout.setSpacing(6)
+        toolbar_layout.addStretch(1)
+        self._earth_focus_button = QtWidgets.QPushButton("地球居中")
+        self._spacecraft_focus_button = QtWidgets.QPushButton("卫星居中")
+        for button in (self._earth_focus_button, self._spacecraft_focus_button):
+            button.setCheckable(True)
+            button.setProperty("variant", "secondary")
+            toolbar_layout.addWidget(button)
+        self._earth_focus_button.clicked.connect(lambda: self._set_camera_mode(_CAMERA_MODE_EARTH))
+        self._spacecraft_focus_button.clicked.connect(lambda: self._set_camera_mode(_CAMERA_MODE_SPACECRAFT))
+        layout.addWidget(self._camera_toolbar)
+        self._sync_camera_buttons()
 
         if QtWebEngineWidgets is None or QtWebEngineCore is None or QtWebChannel is None:
             message = QtWidgets.QLabel(
@@ -175,7 +200,7 @@ class CesiumMissionView(QtWidgets.QWidget):
             self._view.setPage(self._page)
         else:
             self._page = self._view.page()
-        self._page.setBackgroundColor(QtGui.QColor("#edf3f6"))
+        self._page.setBackgroundColor(QtGui.QColor("#050A12"))
         layout.addWidget(self._view)
 
         self._bridge = _SceneBridge()
@@ -211,14 +236,25 @@ class CesiumMissionView(QtWidgets.QWidget):
         settings: SatelliteStatusSettings,
         *,
         satellite_label: str = "Mission Spacecraft",
+        scene_overlays: dict[str, Any] | None = None,
     ) -> None:
         payload, scene_note = build_scene_payload(
             elements,
             trajectory,
             settings,
             satellite_label=satellite_label,
+            scene_overlays=scene_overlays,
         )
-        self._scene_payload = json.dumps(payload, ensure_ascii=False)
+        self.set_scene_payload(payload, scene_note=scene_note)
+
+    def set_scene_payload(
+        self,
+        payload: dict[str, Any],
+        *,
+        scene_note: dict[str, str] | None = None,
+    ) -> None:
+        self._raw_scene_payload = dict(payload)
+        self._scene_payload = json.dumps(self._payload_with_camera_mode(self._raw_scene_payload), ensure_ascii=False)
         self._scene_note = scene_note
         if self._page_loaded:
             self._publish_scene()
@@ -239,6 +275,26 @@ class CesiumMissionView(QtWidgets.QWidget):
             return
         self._emit_status("loading")
         self._bridge.scene_changed.emit(self._scene_payload)
+
+    def _set_camera_mode(self, mode: str) -> None:
+        self._camera_mode = mode if mode == _CAMERA_MODE_SPACECRAFT else _CAMERA_MODE_EARTH
+        self._sync_camera_buttons()
+        self._scene_payload = json.dumps(self._payload_with_camera_mode(self._raw_scene_payload), ensure_ascii=False)
+        if self._page_loaded:
+            self._publish_scene()
+
+    def _sync_camera_buttons(self) -> None:
+        self._earth_focus_button.blockSignals(True)
+        self._spacecraft_focus_button.blockSignals(True)
+        self._earth_focus_button.setChecked(self._camera_mode == _CAMERA_MODE_EARTH)
+        self._spacecraft_focus_button.setChecked(self._camera_mode == _CAMERA_MODE_SPACECRAFT)
+        self._earth_focus_button.blockSignals(False)
+        self._spacecraft_focus_button.blockSignals(False)
+
+    def _payload_with_camera_mode(self, payload: dict[str, Any]) -> dict[str, Any]:
+        result = dict(payload)
+        result["cameraMode"] = self._camera_mode
+        return result
 
     def _on_load_finished(self, ok: bool) -> None:
         self._page_loaded = bool(ok)

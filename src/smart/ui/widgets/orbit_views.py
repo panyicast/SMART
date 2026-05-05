@@ -22,6 +22,44 @@ _ORBIT_CYAN = "#66d9ea"
 _ORBIT_AMBER = "#f2b84b"
 
 
+def _normalize_vector(vector: np.ndarray) -> np.ndarray | None:
+    values = np.asarray(vector, dtype=float)
+    norm = float(np.linalg.norm(values))
+    if not np.isfinite(norm) or norm <= 1.0e-12:
+        return None
+    return values / norm
+
+
+def _perpendicular_basis(direction: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    fallback = np.array([0.0, 0.0, 1.0], dtype=float)
+    if abs(float(np.dot(direction, fallback))) > 0.92:
+        fallback = np.array([0.0, 1.0, 0.0], dtype=float)
+    right = np.cross(direction, fallback)
+    right_unit = _normalize_vector(right)
+    if right_unit is None:
+        right_unit = np.array([1.0, 0.0, 0.0], dtype=float)
+    up = np.cross(right_unit, direction)
+    up_unit = _normalize_vector(up)
+    if up_unit is None:
+        up_unit = np.array([0.0, 1.0, 0.0], dtype=float)
+    return right_unit, up_unit
+
+
+def _arrow_head_mesh(tip: np.ndarray, direction: np.ndarray, length: float, radius: float) -> object:
+    assert gl is not None
+    right, up = _perpendicular_basis(direction)
+    base_center = tip - direction * length
+    segments = 18
+    vertices = [tip]
+    for index in range(segments):
+        angle = 2.0 * np.pi * index / segments
+        vertices.append(base_center + radius * (np.cos(angle) * right + np.sin(angle) * up))
+    faces: list[list[int]] = []
+    for index in range(segments):
+        faces.append([0, index + 1, 1 + ((index + 1) % segments)])
+    return gl.MeshData(vertexes=np.asarray(vertices, dtype=float), faces=np.asarray(faces, dtype=np.int32))
+
+
 def _load_texture_rgba(texture_path: Path) -> np.ndarray | None:
     image = QtGui.QImage(str(texture_path))
     if image.isNull():
@@ -122,8 +160,26 @@ class OrbitPlot3D(QtWidgets.QWidget):
         self._start_marker_color = (0.58, 1.0, 0.16, 1.0)
         self._orbit_width = 2.2
         self._maneuver_lines: list[object] = []
+        self._direction_lines: list[object] = []
+        self._direction_heads: list[object] = []
+        self._direction_labels: list[object] = []
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        self._info_overlay = QtWidgets.QLabel(self)
+        self._info_overlay.setWordWrap(True)
+        self._info_overlay.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignTop)
+        self._info_overlay.setStyleSheet(
+            "QLabel {"
+            "background: rgba(3, 8, 16, 188);"
+            "border: 1px solid rgba(102, 217, 234, 140);"
+            "border-radius: 8px;"
+            "color: #dff6ff;"
+            "font-family: 'Noto Sans SC', 'Segoe UI';"
+            "font-size: 12px;"
+            "padding: 8px 10px;"
+            "}"
+        )
+        self._info_overlay.hide()
 
         if gl is None:
             message = QtWidgets.QLabel(
@@ -206,6 +262,26 @@ class OrbitPlot3D(QtWidgets.QWidget):
             self._start_label.setVisible(False)
             self._view.addItem(self._start_label)
 
+    def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
+        super().resizeEvent(event)
+        self._position_info_overlay()
+
+    def set_info_overlay(self, text: str) -> None:
+        clean_text = text.strip()
+        self._info_overlay.setText(clean_text)
+        self._info_overlay.setVisible(bool(clean_text))
+        self._position_info_overlay()
+
+    def _position_info_overlay(self) -> None:
+        if not self._info_overlay.text().strip():
+            return
+        margin = 12
+        width = min(max(self.width() - margin * 2, 180), 360)
+        self._info_overlay.setFixedWidth(width)
+        self._info_overlay.adjustSize()
+        self._info_overlay.move(margin, margin)
+        self._info_overlay.raise_()
+
     def set_visual_style(
         self,
         *,
@@ -250,6 +326,7 @@ class OrbitPlot3D(QtWidgets.QWidget):
         if self._start_label is not None:
             self._start_label.setVisible(False)
         self._set_maneuver_segments(None)
+        self.set_direction_vectors(None, [])
 
     def set_trajectory_overlays(
         self,
@@ -286,6 +363,82 @@ class OrbitPlot3D(QtWidgets.QWidget):
 
         max_radius = float(np.max(trajectory.radii_km))
         self._view.setCameraPosition(distance=max_radius * 2.4, elevation=22.0, azimuth=45.0)
+
+    def set_direction_vectors(
+        self,
+        origin_km: np.ndarray | Sequence[float] | None,
+        vectors: Sequence[dict[str, object]],
+    ) -> None:
+        if self._view is None:
+            return
+
+        origin = None if origin_km is None else np.asarray(origin_km, dtype=float).reshape(3)
+        valid_vectors: list[tuple[str, np.ndarray, tuple[float, float, float, float], float]] = []
+        if origin is not None:
+            base_length = max(float(np.linalg.norm(origin)) * 0.32, 3200.0)
+            for item in vectors:
+                direction = _normalize_vector(np.asarray(item.get("direction", []), dtype=float))
+                if direction is None:
+                    continue
+                label = str(item.get("label", ""))
+                color = item.get("color", (1.0, 1.0, 1.0, 1.0))
+                rgba = tuple(float(value) for value in color)  # type: ignore[arg-type]
+                length_km = float(item.get("length_km", base_length))
+                valid_vectors.append((label, direction, rgba, length_km))
+
+        while len(self._direction_lines) > len(valid_vectors):
+            item = self._direction_lines.pop()
+            self._view.removeItem(item)
+        while len(self._direction_heads) > len(valid_vectors):
+            item = self._direction_heads.pop()
+            self._view.removeItem(item)
+        while len(self._direction_labels) > len(valid_vectors):
+            item = self._direction_labels.pop()
+            self._view.removeItem(item)
+
+        while len(self._direction_lines) < len(valid_vectors):
+            item = gl.GLLinePlotItem(
+                pos=np.zeros((2, 3), dtype=float),
+                color=(1.0, 1.0, 1.0, 1.0),
+                width=max(self._orbit_width + 0.9, 3.2),
+                antialias=True,
+                mode="line_strip",
+            )
+            self._view.addItem(item)
+            self._direction_lines.append(item)
+
+        while len(self._direction_heads) < len(valid_vectors):
+            item = gl.GLMeshItem(meshdata=_arrow_head_mesh(np.array([1.0, 0.0, 0.0]), np.array([1.0, 0.0, 0.0]), 1.0, 0.35))
+            self._view.addItem(item)
+            self._direction_heads.append(item)
+
+        if hasattr(gl, "GLTextItem"):
+            while len(self._direction_labels) < len(valid_vectors):
+                item = gl.GLTextItem(pos=np.zeros(3, dtype=float), text="")
+                self._view.addItem(item)
+                self._direction_labels.append(item)
+
+        for index, (label, direction, color, length_km) in enumerate(valid_vectors):
+            assert origin is not None
+            tip = origin + direction * length_km
+            head_length = min(max(length_km * 0.18, 500.0), 1800.0)
+            shaft_end = tip - direction * head_length * 0.55
+            self._direction_lines[index].setData(
+                pos=np.vstack([origin, shaft_end]),
+                color=color,
+                width=max(self._orbit_width + 0.9, 3.2),
+            )
+            self._direction_heads[index].setMeshData(
+                meshdata=_arrow_head_mesh(tip, direction, head_length, head_length * 0.36)
+            )
+            self._direction_heads[index].setColor(color)
+            if index < len(self._direction_labels):
+                label_item = self._direction_labels[index]
+                label_item.setData(
+                    pos=tip + direction * max(head_length * 0.25, 200.0),
+                    text=label,
+                    color=QtGui.QColor.fromRgbF(color[0], color[1], color[2], color[3]),
+                )
 
     def _set_start_marker(self, position_km: np.ndarray, label: str | None) -> None:
         assert self._start_marker is not None

@@ -129,6 +129,20 @@ QFrame[role="card"] {
 QFrame[role="card"]:hover {
     border: 1px solid #2e6374;
 }
+QFrame[role="sceneToolbar"] {
+    background: #071016;
+    border: 1px solid #18313f;
+    border-radius: 10px;
+}
+QFrame[role="sceneToolbar"] QPushButton {
+    padding: 6px 12px;
+    border-radius: 8px;
+}
+QFrame[role="sceneToolbar"] QPushButton:checked {
+    background: #1c6d7b;
+    color: #ffffff;
+    border: 1px solid #4bb6c8;
+}
 QFrame[role="dashboardHero"] {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #0d2430, stop:0.52 #0b1b24, stop:1 #112f35);
     border: 1px solid #255160;

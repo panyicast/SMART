@@ -1,0 +1,910 @@
+{
+  "version": 1,
+  "time_reference": "t0_elapsed_min",
+  "selected_orbit_point": "leading",
+  "selected_t0_utc": "2026-05-15T08:03:34Z",
+  "generation": {
+    "transition_duration_min": 10.0,
+    "source": "auto_draft"
+  },
+  "events": [
+    {
+      "id": "fp-234c28a24c",
+      "name": "中继星 TL2-2 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 0.0,
+      "end_min": 443.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "中继星 TL2-2"
+      }
+    },
+    {
+      "id": "fp-fc6ad65dd4",
+      "name": "太阳翼展开",
+      "kind": "deployment",
+      "mode": "SolarArrayDeploy",
+      "start_min": 20.0,
+      "end_min": 35.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "subsystem": "solar_array"
+      }
+    },
+    {
+      "id": "fp-eed2245bfc",
+      "name": "通信天线展开",
+      "kind": "deployment",
+      "mode": "AntennaDeploy",
+      "start_min": 45.0,
+      "end_min": 55.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "subsystem": "communication_antenna"
+      }
+    },
+    {
+      "id": "fp-ddfcfd1df8",
+      "name": "太阳指向巡航",
+      "kind": "attitude",
+      "mode": "SPM",
+      "start_min": 443.0,
+      "end_min": 534.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {}
+    },
+    {
+      "id": "fp-9835508c1c",
+      "name": "中继星 TL2-3 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 534.0,
+      "end_min": 1025.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "中继星 TL2-3"
+      }
+    },
+    {
+      "id": "fp-8030de2ba2",
+      "name": "地面站 喀什站 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 1025.0,
+      "end_min": 1244.667,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "地面站 喀什站"
+      }
+    },
+    {
+      "id": "fp-2b1f87fdcf",
+      "name": "T1 点火前过渡",
+      "kind": "attitude",
+      "mode": "Transition",
+      "start_min": 1244.667,
+      "end_min": 1254.667,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "from": "SPM",
+        "to": "AFM",
+        "maneuver_index": 1
+      }
+    },
+    {
+      "id": "fp-5674a879e0",
+      "name": "T1 点火模式",
+      "kind": "attitude",
+      "mode": "AFM",
+      "start_min": 1254.667,
+      "end_min": 1326.865,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "maneuver_index": 1
+      }
+    },
+    {
+      "id": "fp-f3b9b7ce14",
+      "name": "T1 点火后过渡",
+      "kind": "attitude",
+      "mode": "Transition",
+      "start_min": 1326.865,
+      "end_min": 1336.865,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "from": "AFM",
+        "to": "SPM",
+        "maneuver_index": 1
+      }
+    },
+    {
+      "id": "fp-2ccef37535",
+      "name": "地面站 喀什站 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 1336.865,
+      "end_min": 1659.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "地面站 喀什站"
+      }
+    },
+    {
+      "id": "fp-281ef7e672",
+      "name": "地面站 渭南站 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 1659.0,
+      "end_min": 1668.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "地面站 渭南站"
+      }
+    },
+    {
+      "id": "fp-2b894e6d31",
+      "name": "中继星 TL2-2 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 1668.0,
+      "end_min": 1813.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "中继星 TL2-2"
+      }
+    },
+    {
+      "id": "fp-5ac4f1fd40",
+      "name": "太阳指向巡航",
+      "kind": "attitude",
+      "mode": "SPM",
+      "start_min": 1813.0,
+      "end_min": 1943.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {}
+    },
+    {
+      "id": "fp-f897e74c06",
+      "name": "中继星 TL2-3 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 1943.0,
+      "end_min": 2616.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "中继星 TL2-3"
+      }
+    },
+    {
+      "id": "fp-5ce3084227",
+      "name": "太阳指向巡航",
+      "kind": "attitude",
+      "mode": "SPM",
+      "start_min": 2616.0,
+      "end_min": 2797.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {}
+    },
+    {
+      "id": "fp-a68827cdfa",
+      "name": "中继星 TL2-2 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 2797.0,
+      "end_min": 3493.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "中继星 TL2-2"
+      }
+    },
+    {
+      "id": "fp-05c5ccc254",
+      "name": "中继星 TL2-3 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 3493.0,
+      "end_min": 3905.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "中继星 TL2-3"
+      }
+    },
+    {
+      "id": "fp-6d05713faf",
+      "name": "地面站 喀什站 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 3905.0,
+      "end_min": 3928.667,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "地面站 喀什站"
+      }
+    },
+    {
+      "id": "fp-dbb4d12dff",
+      "name": "T2 点火前过渡",
+      "kind": "attitude",
+      "mode": "Transition",
+      "start_min": 3928.667,
+      "end_min": 3938.667,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "from": "SPM",
+        "to": "AFM",
+        "maneuver_index": 2
+      }
+    },
+    {
+      "id": "fp-ec774eb5c3",
+      "name": "T2 点火模式",
+      "kind": "attitude",
+      "mode": "AFM",
+      "start_min": 3938.667,
+      "end_min": 3992.984,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "maneuver_index": 2
+      }
+    },
+    {
+      "id": "fp-7ffa0763cb",
+      "name": "T2 点火后过渡",
+      "kind": "attitude",
+      "mode": "Transition",
+      "start_min": 3992.984,
+      "end_min": 4002.984,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "from": "AFM",
+        "to": "SPM",
+        "maneuver_index": 2
+      }
+    },
+    {
+      "id": "fp-7f04b1035c",
+      "name": "地面站 喀什站 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 4002.984,
+      "end_min": 4431.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "地面站 喀什站"
+      }
+    },
+    {
+      "id": "fp-c19c55dd4f",
+      "name": "地面站 渭南站 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 4431.0,
+      "end_min": 4443.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "地面站 渭南站"
+      }
+    },
+    {
+      "id": "fp-117556ebda",
+      "name": "地面站 厦门站 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 4443.0,
+      "end_min": 4447.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "地面站 厦门站"
+      }
+    },
+    {
+      "id": "fp-b79e6029ff",
+      "name": "中继星 TL2-2 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 4447.0,
+      "end_min": 4629.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "中继星 TL2-2"
+      }
+    },
+    {
+      "id": "fp-aeca0b4373",
+      "name": "太阳指向巡航",
+      "kind": "attitude",
+      "mode": "SPM",
+      "start_min": 4629.0,
+      "end_min": 4820.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {}
+    },
+    {
+      "id": "fp-471b766041",
+      "name": "中继星 TL2-3 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 4820.0,
+      "end_min": 5501.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "中继星 TL2-3"
+      }
+    },
+    {
+      "id": "fp-c88912115f",
+      "name": "太阳指向巡航",
+      "kind": "attitude",
+      "mode": "SPM",
+      "start_min": 5501.0,
+      "end_min": 5720.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {}
+    },
+    {
+      "id": "fp-d2b590f61e",
+      "name": "中继星 TL2-2 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 5720.0,
+      "end_min": 6437.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "中继星 TL2-2"
+      }
+    },
+    {
+      "id": "fp-52cb05155b",
+      "name": "中继星 TL2-3 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 6437.0,
+      "end_min": 6686.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "中继星 TL2-3"
+      }
+    },
+    {
+      "id": "fp-9979671703",
+      "name": "太阳指向巡航",
+      "kind": "attitude",
+      "mode": "SPM",
+      "start_min": 6686.0,
+      "end_min": 6806.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {}
+    },
+    {
+      "id": "fp-b396294b34",
+      "name": "地面站 喀什站 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 6806.0,
+      "end_min": 7000.833,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "地面站 喀什站"
+      }
+    },
+    {
+      "id": "fp-6247ab6834",
+      "name": "T3 点火前过渡",
+      "kind": "attitude",
+      "mode": "Transition",
+      "start_min": 7000.833,
+      "end_min": 7010.833,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "from": "SPM",
+        "to": "AFM",
+        "maneuver_index": 3
+      }
+    },
+    {
+      "id": "fp-1f81af51e3",
+      "name": "T3 点火模式",
+      "kind": "attitude",
+      "mode": "AFM",
+      "start_min": 7010.833,
+      "end_min": 7081.616,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "maneuver_index": 3
+      }
+    },
+    {
+      "id": "fp-bf3a6cee6d",
+      "name": "T3 点火后过渡",
+      "kind": "attitude",
+      "mode": "Transition",
+      "start_min": 7081.616,
+      "end_min": 7091.616,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "from": "AFM",
+        "to": "SPM",
+        "maneuver_index": 3
+      }
+    },
+    {
+      "id": "fp-78ec0e38ea",
+      "name": "地面站 喀什站 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 7091.616,
+      "end_min": 7546.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "地面站 喀什站"
+      }
+    },
+    {
+      "id": "fp-a1423a1b7b",
+      "name": "中继星 TL2-2 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 7546.0,
+      "end_min": 7664.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "中继星 TL2-2"
+      }
+    },
+    {
+      "id": "fp-34cea4da17",
+      "name": "太阳指向巡航",
+      "kind": "attitude",
+      "mode": "SPM",
+      "start_min": 7664.0,
+      "end_min": 7900.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {}
+    },
+    {
+      "id": "fp-9a673b20e3",
+      "name": "中继星 TL2-3 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 7900.0,
+      "end_min": 8189.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "中继星 TL2-3"
+      }
+    },
+    {
+      "id": "fp-0ca047ecd1",
+      "name": "地面站 喀什站 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 8189.0,
+      "end_min": 8780.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "地面站 喀什站"
+      }
+    },
+    {
+      "id": "fp-6dae91a988",
+      "name": "地面站 渭南站 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 8780.0,
+      "end_min": 8795.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "地面站 渭南站"
+      }
+    },
+    {
+      "id": "fp-1a6393718e",
+      "name": "地面站 厦门站 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 8795.0,
+      "end_min": 8801.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "地面站 厦门站"
+      }
+    },
+    {
+      "id": "fp-5b815f2002",
+      "name": "中继星 TL2-2 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 8801.0,
+      "end_min": 9132.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "中继星 TL2-2"
+      }
+    },
+    {
+      "id": "fp-561c68c5b6",
+      "name": "太阳指向巡航",
+      "kind": "attitude",
+      "mode": "SPM",
+      "start_min": 9132.0,
+      "end_min": 9255.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {}
+    },
+    {
+      "id": "fp-0e8a3e07fc",
+      "name": "中继星 TL2-3 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 9255.0,
+      "end_min": 9505.667,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "中继星 TL2-3"
+      }
+    },
+    {
+      "id": "fp-97d90d59d9",
+      "name": "T4 点火前过渡",
+      "kind": "attitude",
+      "mode": "Transition",
+      "start_min": 9505.667,
+      "end_min": 9515.667,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "from": "SPM",
+        "to": "AFM",
+        "maneuver_index": 4
+      }
+    },
+    {
+      "id": "fp-841a01dba1",
+      "name": "T4 点火模式",
+      "kind": "attitude",
+      "mode": "AFM",
+      "start_min": 9515.667,
+      "end_min": 9580.975999999999,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "maneuver_index": 4
+      }
+    },
+    {
+      "id": "fp-549543c737",
+      "name": "T4 点火后过渡",
+      "kind": "attitude",
+      "mode": "Transition",
+      "start_min": 9580.975999999999,
+      "end_min": 9590.975999999999,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "from": "AFM",
+        "to": "SPM",
+        "maneuver_index": 4
+      }
+    },
+    {
+      "id": "fp-1070d78e7f",
+      "name": "中继星 TL2-3 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 9590.975999999999,
+      "end_min": 10013.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "中继星 TL2-3"
+      }
+    },
+    {
+      "id": "fp-8359391e05",
+      "name": "地面站 厦门站 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 10013.0,
+      "end_min": 10097.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "地面站 厦门站"
+      }
+    },
+    {
+      "id": "fp-616e67feb0",
+      "name": "太阳指向巡航",
+      "kind": "attitude",
+      "mode": "SPM",
+      "start_min": 10097.0,
+      "end_min": 10373.833,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {}
+    },
+    {
+      "id": "fp-68daa17103",
+      "name": "T5 点火前过渡",
+      "kind": "attitude",
+      "mode": "Transition",
+      "start_min": 10373.833,
+      "end_min": 10383.833,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "from": "SPM",
+        "to": "AFM",
+        "maneuver_index": 5
+      }
+    },
+    {
+      "id": "fp-4b5269b50a",
+      "name": "T5 点火模式",
+      "kind": "attitude",
+      "mode": "AFM",
+      "start_min": 10383.833,
+      "end_min": 10409.648000000001,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "maneuver_index": 5
+      }
+    },
+    {
+      "id": "fp-60641017dc",
+      "name": "T5 点火后过渡",
+      "kind": "attitude",
+      "mode": "Transition",
+      "start_min": 10409.648000000001,
+      "end_min": 10419.648000000001,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "from": "AFM",
+        "to": "SPM",
+        "maneuver_index": 5
+      }
+    },
+    {
+      "id": "fp-65b97f7555",
+      "name": "太阳指向巡航",
+      "kind": "attitude",
+      "mode": "SPM",
+      "start_min": 10419.648000000001,
+      "end_min": 10814.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {}
+    },
+    {
+      "id": "fp-6a6f0047db",
+      "name": "中继星 TL2-3 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 10814.0,
+      "end_min": 11450.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "中继星 TL2-3"
+      }
+    },
+    {
+      "id": "fp-dd09d0d8f0",
+      "name": "地面站 喀什站 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 11450.0,
+      "end_min": 11516.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "地面站 喀什站"
+      }
+    },
+    {
+      "id": "fp-1e20f9365b",
+      "name": "地面站 渭南站 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 11516.0,
+      "end_min": 11530.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "地面站 渭南站"
+      }
+    },
+    {
+      "id": "fp-e228b5cb89",
+      "name": "地面站 厦门站 跟踪姿态建议",
+      "kind": "attitude",
+      "mode": "EPM",
+      "start_min": 11530.0,
+      "end_min": 11537.0,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {
+        "reference": "地面站 厦门站"
+      }
+    },
+    {
+      "id": "fp-b594204e76",
+      "name": "太阳指向巡航",
+      "kind": "attitude",
+      "mode": "SPM",
+      "start_min": 11537.0,
+      "end_min": 11849.648,
+      "instant": false,
+      "source": "auto",
+      "locked": false,
+      "notes": "",
+      "properties": {}
+    }
+  ]
+}
