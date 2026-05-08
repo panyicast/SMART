@@ -57,3 +57,11 @@
 ## 2026-05-08T16:22:06+08:00 | Update changelog for v0.1
 - 提交：`bce002e`
 - 影响文件：自动刷新记录，无额外文件。
+
+## 2026-05-08T16:23:02+08:00 | Finalize updates log for v0.1
+- 提交：`966c7e7`
+- 影响文件：自动刷新记录，无额外文件。
+
+## 2026-05-08T16:57:29+08:00 | feat(flight_program): 甘特图支持滚轮缩放、中键平移与底部滚动条拖动
+- 提交：`6be4b08`
+- 影响文件：`src/smart/ui/widgets/flight_program_page.py`、`tests/test_flight_program_page.py`、`.vscode/launch.json`、`projects/F4/smart_project.json`。
