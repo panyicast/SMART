@@ -144,6 +144,164 @@ def test_timeline_drag_updates_playhead() -> None:
     assert emitted[-1] > emitted[0]
 
 
+def test_timeline_wheel_zoom_shrinks_visible_range_around_cursor() -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    widget = FlightProgramOverviewWidget()
+    widget.resize(500, 270)
+    widget.set_data(events=[], reference_segments=[], duration_min=100.0, playhead_min=0.0)
+
+    plot_rect = widget._plot_rect()
+    center_x = plot_rect.left() + plot_rect.width() / 2.0
+    assert widget._zoom_view(center_x, 0.8) is True
+    visible_start, visible_end = widget._visible_range()
+    visible_span = visible_end - visible_start
+    assert visible_span < 100.0
+    assert visible_start <= 50.0 <= visible_end
+    assert widget._can_pan() is True
+
+
+def test_timeline_zoom_resets_when_duration_changes() -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    widget = FlightProgramOverviewWidget()
+    widget.resize(500, 270)
+    widget.set_data(events=[], reference_segments=[], duration_min=100.0, playhead_min=0.0)
+
+    plot_rect = widget._plot_rect()
+    widget._zoom_view(plot_rect.left() + plot_rect.width() / 2.0, 0.5)
+    assert widget._can_pan() is True
+
+    widget.set_data(events=[], reference_segments=[], duration_min=240.0, playhead_min=0.0)
+
+    visible_start, visible_end = widget._visible_range()
+    assert visible_start == 0.0
+    assert visible_end == 240.0
+    assert widget._can_pan() is False
+
+
+def test_timeline_zoom_persists_when_duration_unchanged() -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    widget = FlightProgramOverviewWidget()
+    widget.resize(500, 270)
+    widget.set_data(events=[], reference_segments=[], duration_min=100.0, playhead_min=0.0)
+
+    plot_rect = widget._plot_rect()
+    widget._zoom_view(plot_rect.left() + plot_rect.width() / 2.0, 0.5)
+    visible_start_before, visible_end_before = widget._visible_range()
+
+    widget.set_data(events=[], reference_segments=[], duration_min=100.0, playhead_min=10.0)
+
+    visible_start_after, visible_end_after = widget._visible_range()
+    assert visible_start_after == visible_start_before
+    assert visible_end_after == visible_end_before
+
+
+def test_timeline_double_click_blank_resets_zoom() -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    widget = FlightProgramOverviewWidget()
+    widget.resize(500, 270)
+    widget.set_data(events=[], reference_segments=[], duration_min=100.0, playhead_min=0.0)
+
+    plot_rect = widget._plot_rect()
+    widget._zoom_view(plot_rect.left() + plot_rect.width() / 2.0, 0.5)
+    assert widget._can_pan() is True
+
+    target = QtCore.QPoint(int(plot_rect.center().x()), int(plot_rect.center().y()))
+    QtTest.QTest.mouseDClick(widget, Qt.MouseButton.LeftButton, pos=target)
+
+    assert widget._can_pan() is False
+    visible_start, visible_end = widget._visible_range()
+    assert visible_start == 0.0
+    assert visible_end == 100.0
+
+
+def test_timeline_middle_button_drag_pans_view() -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    widget = FlightProgramOverviewWidget()
+    widget.resize(500, 270)
+    widget.set_data(events=[], reference_segments=[], duration_min=100.0, playhead_min=0.0)
+
+    plot_rect = widget._plot_rect()
+    widget._zoom_view(plot_rect.left() + plot_rect.width() / 2.0, 0.5)
+    visible_start_before, _visible_end_before = widget._visible_range()
+
+    start = QtCore.QPoint(int(plot_rect.center().x()), int(plot_rect.center().y()))
+    end = start - QtCore.QPoint(60, 0)
+    QtTest.QTest.mousePress(widget, Qt.MouseButton.MiddleButton, pos=start)
+    QtTest.QTest.mouseMove(widget, pos=end)
+    QtTest.QTest.mouseRelease(widget, Qt.MouseButton.MiddleButton, pos=end)
+
+    visible_start_after, _visible_end_after = widget._visible_range()
+    assert visible_start_after > visible_start_before
+
+
+def test_indicator_left_drag_pans_view() -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    widget = FlightProgramOverviewWidget()
+    widget.resize(500, 270)
+    widget.set_data(events=[], reference_segments=[], duration_min=100.0, playhead_min=0.0)
+
+    plot_rect = widget._plot_rect()
+    widget._zoom_view(plot_rect.left() + plot_rect.width() / 2.0, 0.5)
+    handle = widget._indicator_handle_rect()
+    assert handle is not None
+
+    visible_start_before, _ = widget._visible_range()
+    grab = QtCore.QPoint(int(handle.center().x()), int(handle.center().y()))
+    target = grab + QtCore.QPoint(60, 0)
+    QtTest.QTest.mousePress(widget, Qt.MouseButton.LeftButton, pos=grab)
+    QtTest.QTest.mouseMove(widget, pos=target)
+    QtTest.QTest.mouseRelease(widget, Qt.MouseButton.LeftButton, pos=target)
+
+    visible_start_after, _ = widget._visible_range()
+    assert visible_start_after > visible_start_before
+
+
+def test_indicator_left_click_outside_handle_jumps_view() -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    widget = FlightProgramOverviewWidget()
+    widget.resize(500, 270)
+    widget.set_data(events=[], reference_segments=[], duration_min=100.0, playhead_min=0.0)
+
+    plot_rect = widget._plot_rect()
+    widget._zoom_view(plot_rect.left() + plot_rect.width() / 2.0, 0.3)
+    track = widget._indicator_track_rect()
+    handle = widget._indicator_handle_rect()
+    assert track is not None and handle is not None
+
+    target_x = track.right() - 6.0
+    target = QtCore.QPoint(int(target_x), int(track.center().y()))
+    QtTest.QTest.mousePress(widget, Qt.MouseButton.LeftButton, pos=target)
+    QtTest.QTest.mouseRelease(widget, Qt.MouseButton.LeftButton, pos=target)
+
+    visible_start, visible_end = widget._visible_range()
+    assert visible_end >= 100.0 - 1e-6
+    assert visible_start > 50.0
+
+
+def test_timeline_x_to_min_uses_visible_range_after_zoom() -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    widget = FlightProgramOverviewWidget()
+    widget.resize(500, 270)
+    widget.set_data(events=[], reference_segments=[], duration_min=100.0, playhead_min=0.0)
+
+    plot_rect = widget._plot_rect()
+    widget._view_start_min = 40.0
+    widget._view_end_min = 60.0
+
+    minute_at_left = widget._x_to_min(plot_rect.left())
+    minute_at_right = widget._x_to_min(plot_rect.right())
+    assert abs(minute_at_left - 40.0) < 1e-3
+    assert abs(minute_at_right - 60.0) < 1e-3
+
+
 def test_right_panel_is_full_realtime_scene_card() -> None:
     _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
 

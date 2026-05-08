@@ -1,0 +1,36 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "SMART: 启动主程序",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "smart.main",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "justMyCode": false,
+            "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
+        },
+        {
+            "name": "Python: 调试当前文件",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "justMyCode": false,
+            "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
+        },
+        {
+            "name": "SMART: 运行 pytest（当前文件）",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "args": ["${file}", "-q"],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "justMyCode": false,
+            "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
+        }
+    ]
+}
