@@ -71,6 +71,62 @@ def compute_tracking_arcs_for_window(
     window: LaunchWindowResult,
     assets: list[TrackingAsset] | None = None,
 ) -> list[TrackingArcOrbitResult]:
+    timeline, maneuvers, tracking_assets = _prepare_tracking_timeline(
+        orbit_history_csv=orbit_history_csv,
+        maneuver_strategy=maneuver_strategy,
+        config=config,
+        assets=assets,
+    )
+    return [
+        _compute_tracking_arc_for_launch(
+            point_key=point_key,
+            point_label=point_label,
+            launch_utc=launch_utc,
+            rocket_flight_time_s=config.rocket_flight_time_s,
+            timeline=timeline,
+            maneuvers=maneuvers,
+            assets=tracking_assets,
+            config=config,
+        )
+        for point_key, point_label, launch_utc in tracking_arc_launch_points(window)
+    ]
+
+
+def compute_tracking_arc_for_launch_time(
+    *,
+    orbit_history_csv: str | Path,
+    maneuver_strategy: dict[str, Any],
+    config: LaunchWindowConfig,
+    launch_utc: str | datetime,
+    assets: list[TrackingAsset] | None = None,
+    point_key: str = "manual",
+    point_label: str = "指定发射时刻轨道",
+) -> TrackingArcOrbitResult:
+    timeline, maneuvers, tracking_assets = _prepare_tracking_timeline(
+        orbit_history_csv=orbit_history_csv,
+        maneuver_strategy=maneuver_strategy,
+        config=config,
+        assets=assets,
+    )
+    return _compute_tracking_arc_for_launch(
+        point_key=point_key,
+        point_label=point_label,
+        launch_utc=parse_utc(launch_utc),
+        rocket_flight_time_s=config.rocket_flight_time_s,
+        timeline=timeline,
+        maneuvers=maneuvers,
+        assets=tracking_assets,
+        config=config,
+    )
+
+
+def _prepare_tracking_timeline(
+    *,
+    orbit_history_csv: str | Path,
+    maneuver_strategy: dict[str, Any],
+    config: LaunchWindowConfig,
+    assets: list[TrackingAsset] | None = None,
+) -> tuple[dict[str, Any], list[ManeuverInterval], list[TrackingAsset]]:
     rows = load_orbit_history_rows(orbit_history_csv)
     if assets is None:
         tracking_assets = tracking_assets_from_config(config)
@@ -87,19 +143,7 @@ def compute_tracking_arcs_for_window(
         maneuvers=maneuvers,
         reference_t0_utc=reference_t0_utc,
     )
-    return [
-        _compute_tracking_arc_for_launch(
-            point_key=point_key,
-            point_label=point_label,
-            launch_utc=launch_utc,
-            rocket_flight_time_s=config.rocket_flight_time_s,
-            timeline=timeline,
-            maneuvers=maneuvers,
-            assets=tracking_assets,
-            config=config,
-        )
-        for point_key, point_label, launch_utc in tracking_arc_launch_points(window)
-    ]
+    return timeline, maneuvers, tracking_assets
 
 
 def tracking_arc_launch_points(window: LaunchWindowResult) -> list[tuple[str, str, datetime]]:

@@ -44,18 +44,27 @@ class TrackingArcGanttWidget(QtWidgets.QWidget):
     _GRID = QtGui.QColor("#244958")
     _TEXT = QtGui.QColor("#D8E7EF")
     _MUTED = QtGui.QColor("#8FA8B4")
+    _MIN_VIEW_SPAN_SECONDS = 60.0
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self._result: TrackingArcOrbitResult | None = None
+        self._view_start_utc: Any | None = None
+        self._view_end_utc: Any | None = None
         self._segment_rects: list[tuple[QtCore.QRectF, TrackingArcSegment]] = []
+        self._drag_origin_x: float | None = None
+        self._drag_view_start_utc: Any | None = None
+        self._drag_view_end_utc: Any | None = None
         self.setMouseTracking(True)
+        self.setFocusPolicy(QtCore.Qt.FocusPolicy.WheelFocus)
         self.setMinimumHeight(260)
         self.setMinimumWidth(980)
         self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.MinimumExpanding)
 
     def clear(self) -> None:
         self._result = None
+        self._view_start_utc = None
+        self._view_end_utc = None
         self._segment_rects = []
         self.setMinimumHeight(260)
         self.updateGeometry()
@@ -63,6 +72,7 @@ class TrackingArcGanttWidget(QtWidgets.QWidget):
 
     def set_result(self, result: TrackingArcOrbitResult) -> None:
         self._result = result
+        self._reset_view_range()
         self._segment_rects = []
         self.setMinimumHeight(max(260, 92 + len(result.row_labels) * 38))
         self.updateGeometry()
@@ -73,12 +83,56 @@ class TrackingArcGanttWidget(QtWidgets.QWidget):
         return QtCore.QSize(980, max(260, 92 + row_count * 38))
 
     def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
+        if self._drag_origin_x is not None:
+            self._pan_view_from_drag(event.position().x())
+            event.accept()
+            return
         point = event.position()
         for rect, segment in self._segment_rects:
             if rect.contains(point):
                 self.setToolTip(self._segment_tooltip(segment))
                 return
         self.setToolTip("")
+
+    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
+        if (
+            event.button() == QtCore.Qt.MouseButton.LeftButton
+            and self._can_pan()
+            and self._plot_rect().contains(event.position())
+        ):
+            self._drag_origin_x = event.position().x()
+            self._drag_view_start_utc, self._drag_view_end_utc = self._visible_range()
+            self.setCursor(QtCore.Qt.CursorShape.ClosedHandCursor)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
+        if event.button() == QtCore.Qt.MouseButton.LeftButton and self._drag_origin_x is not None:
+            self._drag_origin_x = None
+            self._drag_view_start_utc = None
+            self._drag_view_end_utc = None
+            self.unsetCursor()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event: QtGui.QMouseEvent) -> None:
+        if event.button() == QtCore.Qt.MouseButton.LeftButton and self._plot_rect().contains(event.position()):
+            self._reset_view_range()
+            self.update()
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
+
+    def wheelEvent(self, event: QtGui.QWheelEvent) -> None:
+        if self._plot_rect().contains(event.position()) and event.angleDelta().y():
+            factor = 0.8 if event.angleDelta().y() > 0 else 1.25
+            if self._zoom_view(event.position().x(), factor):
+                self.update()
+            event.accept()
+            return
+        super().wheelEvent(event)
 
     def paintEvent(self, _event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
@@ -94,8 +148,11 @@ class TrackingArcGanttWidget(QtWidgets.QWidget):
             painter.drawText(rect, QtCore.Qt.AlignmentFlag.AlignCenter, "暂无跟踪弧段计算结果")
             return
 
-        start_utc = parse_utc(self._result.timeline_start_utc)
-        end_utc = parse_utc(self._result.timeline_end_utc)
+        full_start_utc = parse_utc(self._result.timeline_start_utc)
+        full_end_utc = parse_utc(self._result.timeline_end_utc)
+        start_utc, end_utc = self._visible_range()
+        if start_utc is None or end_utc is None:
+            start_utc, end_utc = full_start_utc, full_end_utc
         left = min(300.0, max(180.0, rect.width() * 0.24))
         right = 18.0
         top = 44.0
@@ -103,7 +160,7 @@ class TrackingArcGanttWidget(QtWidgets.QWidget):
         plot_width = max(1.0, rect.width() - left - right)
         row_height = 28.0
         row_gap = 10.0
-        span_seconds = max(60.0, (end_utc - start_utc).total_seconds())
+        span_seconds = max(self._MIN_VIEW_SPAN_SECONDS, (end_utc - start_utc).total_seconds())
         axis_y = top - 16.0
         self._segment_rects = []
 
@@ -177,6 +234,165 @@ class TrackingArcGanttWidget(QtWidgets.QWidget):
             QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter,
             "北京时间",
         )
+
+    def _reset_view_range(self) -> None:
+        if self._result is None:
+            self._view_start_utc = None
+            self._view_end_utc = None
+        else:
+            self._view_start_utc = parse_utc(self._result.timeline_start_utc)
+            self._view_end_utc = parse_utc(self._result.timeline_end_utc)
+        self._drag_origin_x = None
+        self._drag_view_start_utc = None
+        self._drag_view_end_utc = None
+        self.unsetCursor()
+
+    def _visible_range(self) -> tuple[Any | None, Any | None]:
+        return self._view_start_utc, self._view_end_utc
+
+    def _full_range(self) -> tuple[Any | None, Any | None]:
+        if self._result is None:
+            return None, None
+        return parse_utc(self._result.timeline_start_utc), parse_utc(self._result.timeline_end_utc)
+
+    def _full_span_seconds(self) -> float:
+        start_utc, end_utc = self._full_range()
+        if start_utc is None or end_utc is None:
+            return self._MIN_VIEW_SPAN_SECONDS
+        return max(self._MIN_VIEW_SPAN_SECONDS, (end_utc - start_utc).total_seconds())
+
+    def _plot_rect(self) -> QtCore.QRectF:
+        rect = QtCore.QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        left = min(300.0, max(180.0, rect.width() * 0.24))
+        right = 18.0
+        top = 44.0
+        bottom = 34.0
+        return QtCore.QRectF(left, top, max(1.0, rect.width() - left - right), max(1.0, rect.height() - top - bottom))
+
+    def _can_pan(self) -> bool:
+        visible_start, visible_end = self._visible_range()
+        full_start, full_end = self._full_range()
+        if visible_start is None or visible_end is None or full_start is None or full_end is None:
+            return False
+        return (visible_end - visible_start).total_seconds() < (full_end - full_start).total_seconds() - 1e-6
+
+    def _zoom_view(self, center_x: float, factor: float) -> bool:
+        visible_start, visible_end = self._visible_range()
+        full_start, full_end = self._full_range()
+        if visible_start is None or visible_end is None or full_start is None or full_end is None:
+            return False
+        plot_rect = self._plot_rect()
+        if plot_rect.width() <= 1.0:
+            return False
+        ratio = float((center_x - plot_rect.left()) / plot_rect.width())
+        ratio = min(max(ratio, 0.0), 1.0)
+        current_span = max(self._MIN_VIEW_SPAN_SECONDS, (visible_end - visible_start).total_seconds())
+        target_span = min(self._full_span_seconds(), max(self._MIN_VIEW_SPAN_SECONDS, current_span * float(factor)))
+        if abs(target_span - current_span) < 1e-6:
+            return False
+        center_utc = visible_start + timedelta(seconds=current_span * ratio)
+        candidate_start = center_utc - timedelta(seconds=target_span * ratio)
+        candidate_end = candidate_start + timedelta(seconds=target_span)
+        if candidate_start < full_start:
+            candidate_start = full_start
+            candidate_end = candidate_start + timedelta(seconds=target_span)
+        if candidate_end > full_end:
+            candidate_end = full_end
+            candidate_start = candidate_end - timedelta(seconds=target_span)
+        self._view_start_utc = candidate_start
+        self._view_end_utc = candidate_end
+        return True
+
+    def _pan_view_from_drag(self, current_x: float) -> None:
+        full_start, full_end = self._full_range()
+        if (
+            self._drag_origin_x is None
+            or self._drag_view_start_utc is None
+            or self._drag_view_end_utc is None
+            or full_start is None
+            or full_end is None
+        ):
+            return
+        plot_rect = self._plot_rect()
+        if plot_rect.width() <= 1.0:
+            return
+        span_seconds = max(self._MIN_VIEW_SPAN_SECONDS, (self._drag_view_end_utc - self._drag_view_start_utc).total_seconds())
+        delta_seconds = (self._drag_origin_x - current_x) * span_seconds / plot_rect.width()
+        candidate_start = self._drag_view_start_utc + timedelta(seconds=delta_seconds)
+        candidate_end = self._drag_view_end_utc + timedelta(seconds=delta_seconds)
+        if candidate_start < full_start:
+            candidate_end += full_start - candidate_start
+            candidate_start = full_start
+        if candidate_end > full_end:
+            candidate_start -= candidate_end - full_end
+            candidate_end = full_end
+        self._view_start_utc = candidate_start
+        self._view_end_utc = candidate_end
+        self.update()
+
+
+class _GanttScrollArea(QtWidgets.QScrollArea):
+    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.viewport().installEventFilter(self)
+        self._chart_widget: QtWidgets.QWidget | None = None
+
+    def setWidget(self, widget: QtWidgets.QWidget) -> None:
+        if self._chart_widget is not None:
+            self._chart_widget.removeEventFilter(self)
+        super().setWidget(widget)
+        self._chart_widget = widget
+        if self._chart_widget is not None:
+            self._chart_widget.installEventFilter(self)
+
+    def eventFilter(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:
+        if watched in {self.viewport(), self._chart_widget} and event.type() == QtCore.QEvent.Type.Wheel:
+            wheel_event = event
+            if isinstance(wheel_event, QtGui.QWheelEvent):
+                if watched is self.viewport():
+                    accepted = self._forward_wheel_to_chart_viewport_pos(
+                        wheel_event.position(),
+                        wheel_event.angleDelta().y(),
+                    )
+                else:
+                    accepted = self._forward_wheel_to_chart_x(
+                        wheel_event.position().x(),
+                        wheel_event.angleDelta().y(),
+                    )
+                if accepted:
+                    wheel_event.accept()
+                    return True
+        return super().eventFilter(watched, event)
+
+    def wheelEvent(self, event: QtGui.QWheelEvent) -> None:
+        chart_pos = self.widget().mapFromGlobal(event.globalPosition().toPoint()) if self.widget() is not None else None
+        if chart_pos is not None and self._forward_wheel_to_chart_x(float(chart_pos.x()), event.angleDelta().y()):
+            event.accept()
+            return
+        super().wheelEvent(event)
+
+    def _forward_wheel_to_chart_viewport_pos(self, viewport_pos: QtCore.QPointF, delta_y: int) -> bool:
+        chart = self.widget()
+        if chart is None or delta_y == 0:
+            return False
+        chart_pos = chart.mapFrom(self.viewport(), viewport_pos.toPoint())
+        return self._forward_wheel_to_chart_x(float(chart_pos.x()), delta_y)
+
+    def _forward_wheel_to_chart_x(self, chart_x: float, delta_y: int) -> bool:
+        chart = self.widget()
+        if chart is None or delta_y == 0:
+            return False
+        plot_rect = getattr(chart, "_plot_rect", None)
+        zoom_view = getattr(chart, "_zoom_view", None)
+        if not callable(plot_rect) or not callable(zoom_view):
+            return False
+        chart_point = QtCore.QPointF(chart_x, plot_rect().center().y())
+        if not plot_rect().contains(chart_point):
+            return False
+        factor = 0.8 if delta_y > 0 else 1.25
+        zoom_view(chart_x, factor)
+        chart.update()
+        return True
 
     @staticmethod
     def _segment_tooltip(segment: TrackingArcSegment) -> str:
@@ -488,12 +704,7 @@ class TrackingArcPage(QtWidgets.QWidget):
         layout.addWidget(self._asset_summary_table, 1)
 
         self._gantt_chart = TrackingArcGanttWidget()
-        gantt_scroll = QtWidgets.QScrollArea()
-        gantt_scroll.setWidgetResizable(True)
-        gantt_scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
-        gantt_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        gantt_scroll.setWidget(self._gantt_chart)
-        layout.addWidget(gantt_scroll, 2)
+        layout.addWidget(self._gantt_chart, 2)
         return panel
 
     def save_config(self) -> Path | None:

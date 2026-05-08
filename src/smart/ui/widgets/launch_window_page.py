@@ -61,6 +61,7 @@ class LaunchWindowGanttWidget(QtWidgets.QWidget):
     _GRID = QtGui.QColor("#244958")
     _TEXT = QtGui.QColor("#D8E7EF")
     _MUTED = QtGui.QColor("#8FA8B4")
+    _MIN_VIEW_SPAN_SECONDS = 60.0
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -68,8 +69,14 @@ class LaunchWindowGanttWidget(QtWidgets.QWidget):
         self._row_labels: list[str] = []
         self._start_utc: Any | None = None
         self._end_utc: Any | None = None
+        self._view_start_utc: Any | None = None
+        self._view_end_utc: Any | None = None
         self._segment_rects: list[tuple[QtCore.QRectF, _GanttSegment]] = []
+        self._drag_origin_x: float | None = None
+        self._drag_view_start_utc: Any | None = None
+        self._drag_view_end_utc: Any | None = None
         self.setMouseTracking(True)
+        self.setFocusPolicy(QtCore.Qt.FocusPolicy.WheelFocus)
         self.setMinimumHeight(220)
         self.setMinimumWidth(980)
         self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.MinimumExpanding)
@@ -79,6 +86,8 @@ class LaunchWindowGanttWidget(QtWidgets.QWidget):
         self._row_labels = []
         self._start_utc = None
         self._end_utc = None
+        self._view_start_utc = None
+        self._view_end_utc = None
         self._segment_rects = []
         self.setMinimumHeight(220)
         self.updateGeometry()
@@ -89,6 +98,7 @@ class LaunchWindowGanttWidget(QtWidgets.QWidget):
         if self._start_utc is None or self._end_utc is None:
             self._start_utc = None
             self._end_utc = None
+        self._reset_view_range()
         self.setMinimumHeight(max(220, 92 + len(self._row_labels) * 38))
         self.updateGeometry()
         self.update()
@@ -97,12 +107,56 @@ class LaunchWindowGanttWidget(QtWidgets.QWidget):
         return QtCore.QSize(980, max(220, 92 + len(self._row_labels) * 38))
 
     def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
+        if self._drag_origin_x is not None:
+            self._pan_view_from_drag(event.position().x())
+            event.accept()
+            return
         point = event.position()
         for rect, segment in self._segment_rects:
             if rect.contains(point):
                 self.setToolTip(segment.tooltip)
                 return
         self.setToolTip("")
+
+    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
+        if (
+            event.button() == QtCore.Qt.MouseButton.LeftButton
+            and self._can_pan()
+            and self._plot_rect().contains(event.position())
+        ):
+            self._drag_origin_x = event.position().x()
+            self._drag_view_start_utc, self._drag_view_end_utc = self._visible_range()
+            self.setCursor(QtCore.Qt.CursorShape.ClosedHandCursor)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
+        if event.button() == QtCore.Qt.MouseButton.LeftButton and self._drag_origin_x is not None:
+            self._drag_origin_x = None
+            self._drag_view_start_utc = None
+            self._drag_view_end_utc = None
+            self.unsetCursor()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event: QtGui.QMouseEvent) -> None:
+        if event.button() == QtCore.Qt.MouseButton.LeftButton and self._plot_rect().contains(event.position()):
+            self._reset_view_range()
+            self.update()
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
+
+    def wheelEvent(self, event: QtGui.QWheelEvent) -> None:
+        if self._plot_rect().contains(event.position()) and event.angleDelta().y():
+            factor = 0.8 if event.angleDelta().y() > 0 else 1.25
+            if self._zoom_view(event.position().x(), factor):
+                self.update()
+            event.accept()
+            return
+        super().wheelEvent(event)
 
     def paintEvent(self, _event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
@@ -125,7 +179,8 @@ class LaunchWindowGanttWidget(QtWidgets.QWidget):
         plot_width = max(1.0, rect.width() - left - right)
         row_height = 28.0
         row_gap = 10.0
-        span_seconds = max(60.0, (self._end_utc - self._start_utc).total_seconds())
+        visible_start, visible_end = self._visible_range()
+        span_seconds = max(self._MIN_VIEW_SPAN_SECONDS, (visible_end - visible_start).total_seconds())
         axis_y = top - 16.0
         self._segment_rects = []
 
@@ -135,7 +190,7 @@ class LaunchWindowGanttWidget(QtWidgets.QWidget):
         for index in range(tick_count + 1):
             ratio = index / tick_count
             x = left + plot_width * ratio
-            tick_utc = self._start_utc + timedelta(seconds=span_seconds * ratio)
+            tick_utc = visible_start + timedelta(seconds=span_seconds * ratio)
             painter.drawLine(QtCore.QPointF(x, axis_y - 4), QtCore.QPointF(x, axis_y + 4))
             label = tick_utc.astimezone(BEIJING_TZ).strftime("%m-%d %H:%M")
             painter.setPen(self._TEXT)
@@ -174,8 +229,12 @@ class LaunchWindowGanttWidget(QtWidgets.QWidget):
         for segment in self._segments:
             row_index = self._row_labels.index(segment.row_label)
             row_top = top + row_index * (row_height + row_gap)
-            x1 = left + ((segment.start_utc - self._start_utc).total_seconds() / span_seconds) * plot_width
-            x2 = left + ((segment.end_utc - self._start_utc).total_seconds() / span_seconds) * plot_width
+            if segment.end_utc <= visible_start or segment.start_utc >= visible_end:
+                continue
+            clipped_start = max(segment.start_utc, visible_start)
+            clipped_end = min(segment.end_utc, visible_end)
+            x1 = left + ((clipped_start - visible_start).total_seconds() / span_seconds) * plot_width
+            x2 = left + ((clipped_end - visible_start).total_seconds() / span_seconds) * plot_width
             bar_rect = QtCore.QRectF(x1, row_top + 4, max(3.0, x2 - x1), row_height - 8)
             painter.setPen(QtCore.Qt.PenStyle.NoPen)
             painter.setBrush(self._segment_color(segment))
@@ -311,6 +370,152 @@ class LaunchWindowGanttWidget(QtWidgets.QWidget):
         end_text = end_utc.astimezone(BEIJING_TZ).strftime("%Y-%m-%d %H:%M")
         minutes = max(0.0, (end_utc - start_utc).total_seconds() / 60.0)
         return f"{row_label}\n{start_text} - {end_text}\n通过，{minutes:.1f} min"
+
+    def _reset_view_range(self) -> None:
+        self._view_start_utc = self._start_utc
+        self._view_end_utc = self._end_utc
+        self._drag_origin_x = None
+        self._drag_view_start_utc = None
+        self._drag_view_end_utc = None
+        self.unsetCursor()
+
+    def _visible_range(self) -> tuple[Any | None, Any | None]:
+        return self._view_start_utc or self._start_utc, self._view_end_utc or self._end_utc
+
+    def _full_span_seconds(self) -> float:
+        if self._start_utc is None or self._end_utc is None:
+            return self._MIN_VIEW_SPAN_SECONDS
+        return max(self._MIN_VIEW_SPAN_SECONDS, (self._end_utc - self._start_utc).total_seconds())
+
+    def _plot_rect(self) -> QtCore.QRectF:
+        rect = QtCore.QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        left = min(300.0, max(168.0, rect.width() * 0.24))
+        right = 18.0
+        top = 44.0
+        bottom = 34.0
+        return QtCore.QRectF(left, top, max(1.0, rect.width() - left - right), max(1.0, rect.height() - top - bottom))
+
+    def _can_pan(self) -> bool:
+        visible_start, visible_end = self._visible_range()
+        if visible_start is None or visible_end is None or self._start_utc is None or self._end_utc is None:
+            return False
+        return (visible_end - visible_start).total_seconds() < (self._end_utc - self._start_utc).total_seconds() - 1e-6
+
+    def _zoom_view(self, center_x: float, factor: float) -> bool:
+        visible_start, visible_end = self._visible_range()
+        if visible_start is None or visible_end is None or self._start_utc is None or self._end_utc is None:
+            return False
+        plot_rect = self._plot_rect()
+        if plot_rect.width() <= 1.0:
+            return False
+        ratio = float((center_x - plot_rect.left()) / plot_rect.width())
+        ratio = min(max(ratio, 0.0), 1.0)
+        current_span = max(self._MIN_VIEW_SPAN_SECONDS, (visible_end - visible_start).total_seconds())
+        target_span = min(self._full_span_seconds(), max(self._MIN_VIEW_SPAN_SECONDS, current_span * float(factor)))
+        if abs(target_span - current_span) < 1e-6:
+            return False
+        center_utc = visible_start + timedelta(seconds=current_span * ratio)
+        candidate_start = center_utc - timedelta(seconds=target_span * ratio)
+        candidate_end = candidate_start + timedelta(seconds=target_span)
+        if candidate_start < self._start_utc:
+            candidate_start = self._start_utc
+            candidate_end = candidate_start + timedelta(seconds=target_span)
+        if candidate_end > self._end_utc:
+            candidate_end = self._end_utc
+            candidate_start = candidate_end - timedelta(seconds=target_span)
+        self._view_start_utc = candidate_start
+        self._view_end_utc = candidate_end
+        return True
+
+    def _pan_view_from_drag(self, current_x: float) -> None:
+        if (
+            self._drag_origin_x is None
+            or self._drag_view_start_utc is None
+            or self._drag_view_end_utc is None
+            or self._start_utc is None
+            or self._end_utc is None
+        ):
+            return
+        plot_rect = self._plot_rect()
+        if plot_rect.width() <= 1.0:
+            return
+        span_seconds = max(self._MIN_VIEW_SPAN_SECONDS, (self._drag_view_end_utc - self._drag_view_start_utc).total_seconds())
+        delta_seconds = (self._drag_origin_x - current_x) * span_seconds / plot_rect.width()
+        candidate_start = self._drag_view_start_utc + timedelta(seconds=delta_seconds)
+        candidate_end = self._drag_view_end_utc + timedelta(seconds=delta_seconds)
+        if candidate_start < self._start_utc:
+            candidate_end += self._start_utc - candidate_start
+            candidate_start = self._start_utc
+        if candidate_end > self._end_utc:
+            candidate_start -= candidate_end - self._end_utc
+            candidate_end = self._end_utc
+        self._view_start_utc = candidate_start
+        self._view_end_utc = candidate_end
+        self.update()
+
+
+class _GanttScrollArea(QtWidgets.QScrollArea):
+    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.viewport().installEventFilter(self)
+        self._chart_widget: QtWidgets.QWidget | None = None
+
+    def setWidget(self, widget: QtWidgets.QWidget) -> None:
+        if self._chart_widget is not None:
+            self._chart_widget.removeEventFilter(self)
+        super().setWidget(widget)
+        self._chart_widget = widget
+        if self._chart_widget is not None:
+            self._chart_widget.installEventFilter(self)
+
+    def eventFilter(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:
+        if watched in {self.viewport(), self._chart_widget} and event.type() == QtCore.QEvent.Type.Wheel:
+            wheel_event = event
+            if isinstance(wheel_event, QtGui.QWheelEvent):
+                if watched is self.viewport():
+                    accepted = self._forward_wheel_to_chart_viewport_pos(
+                        wheel_event.position(),
+                        wheel_event.angleDelta().y(),
+                    )
+                else:
+                    accepted = self._forward_wheel_to_chart_x(
+                        wheel_event.position().x(),
+                        wheel_event.angleDelta().y(),
+                    )
+                if accepted:
+                    wheel_event.accept()
+                    return True
+        return super().eventFilter(watched, event)
+
+    def wheelEvent(self, event: QtGui.QWheelEvent) -> None:
+        chart_pos = self.widget().mapFromGlobal(event.globalPosition().toPoint()) if self.widget() is not None else None
+        if chart_pos is not None and self._forward_wheel_to_chart_x(float(chart_pos.x()), event.angleDelta().y()):
+            event.accept()
+            return
+        super().wheelEvent(event)
+
+    def _forward_wheel_to_chart_viewport_pos(self, viewport_pos: QtCore.QPointF, delta_y: int) -> bool:
+        chart = self.widget()
+        if chart is None or delta_y == 0:
+            return False
+        chart_pos = chart.mapFrom(self.viewport(), viewport_pos.toPoint())
+        return self._forward_wheel_to_chart_x(float(chart_pos.x()), delta_y)
+
+    def _forward_wheel_to_chart_x(self, chart_x: float, delta_y: int) -> bool:
+        chart = self.widget()
+        if chart is None or delta_y == 0:
+            return False
+        plot_rect = getattr(chart, "_plot_rect", None)
+        zoom_view = getattr(chart, "_zoom_view", None)
+        if not callable(plot_rect) or not callable(zoom_view):
+            return False
+        chart_point = QtCore.QPointF(chart_x, plot_rect().center().y())
+        if not plot_rect().contains(chart_point):
+            return False
+        factor = 0.8 if delta_y > 0 else 1.25
+        zoom_view(chart_x, factor)
+        chart.update()
+        return True
 
 
 class LaunchWindowPage(QtWidgets.QWidget):
@@ -719,12 +924,7 @@ class LaunchWindowPage(QtWidgets.QWidget):
         layout.addWidget(self._result_table, 1)
 
         self._gantt_chart = LaunchWindowGanttWidget()
-        gantt_scroll = QtWidgets.QScrollArea()
-        gantt_scroll.setWidgetResizable(True)
-        gantt_scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
-        gantt_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        gantt_scroll.setWidget(self._gantt_chart)
-        layout.addWidget(gantt_scroll, 1)
+        layout.addWidget(self._gantt_chart, 1)
         return panel
 
     def save_config(self) -> Path | None:

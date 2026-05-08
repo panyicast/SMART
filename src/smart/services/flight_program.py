@@ -71,6 +71,8 @@ def default_flight_program_payload() -> dict[str, Any]:
     return {
         "version": 1,
         "time_reference": "t0_elapsed_min",
+        "launch_selection_mode": "window",
+        "selected_launch_utc": "",
         "selected_orbit_point": "leading",
         "selected_t0_utc": "",
         "generation": {
@@ -86,6 +88,9 @@ def normalize_flight_program_payload(payload: dict[str, Any] | None) -> dict[str
     result = default_flight_program_payload()
     result["version"] = int(source.get("version", result["version"]))
     result["time_reference"] = str(source.get("time_reference", result["time_reference"]) or "t0_elapsed_min")
+    launch_selection_mode = str(source.get("launch_selection_mode", result["launch_selection_mode"]) or "window")
+    result["launch_selection_mode"] = launch_selection_mode if launch_selection_mode in {"window", "manual"} else "window"
+    result["selected_launch_utc"] = str(source.get("selected_launch_utc", result["selected_launch_utc"]) or "")
     result["selected_orbit_point"] = str(source.get("selected_orbit_point", result["selected_orbit_point"]) or "leading")
     result["selected_t0_utc"] = str(source.get("selected_t0_utc", result["selected_t0_utc"]) or "")
     generation = source.get("generation")
@@ -142,6 +147,7 @@ def generate_flight_program_draft(
     maneuver_strategy: dict[str, Any],
     tracking_result: TrackingArcOrbitResult | None = None,
     selected_orbit_point: str = "leading",
+    launch_selection_mode: str = "window",
     transition_duration_min: float = DEFAULT_TRANSITION_MIN,
 ) -> dict[str, Any]:
     rows = load_orbit_history_rows(orbit_history_csv)
@@ -208,6 +214,8 @@ def generate_flight_program_draft(
     deployment_blocks = _default_deployment_events(timeline_start, timeline_end)
     t0_utc = tracking_result.t0_utc if tracking_result is not None else ""
     payload = default_flight_program_payload()
+    payload["launch_selection_mode"] = launch_selection_mode if launch_selection_mode in {"window", "manual"} else "window"
+    payload["selected_launch_utc"] = tracking_result.launch_utc if tracking_result is not None else ""
     payload["selected_orbit_point"] = selected_orbit_point
     payload["selected_t0_utc"] = t0_utc
     payload["generation"] = {
@@ -296,43 +304,31 @@ def sample_flight_program_state(
         payload=payload,
         t0_utc=t0_utc,
     )
-    rows = sampling.rows
-    timeline = sampling.timeline
     elapsed = sampling.elapsed_min
     index = int(np.argmin(np.abs(elapsed - float(elapsed_min))))
-    sample_min = float(elapsed[index])
-    event = active_attitude_event(payload, sample_min)
-    mode = MODE_SPM if event is None else str(event["mode"])
-    plus_z = _plus_z_for_mode(
-        mode=mode,
-        timeline=timeline,
-        sun_vectors=sampling.sun_vectors,
-        index=index,
-        t0_utc=sampling.t0_utc,
-        maneuvers=sampling.maneuvers,
-        afm_plus_z_ecef=sampling.afm_plus_z_ecef,
+    attitude_events = _attitude_events_for_payload(payload)
+    return _sample_from_context_index(sampling, index=index, attitude_events=attitude_events)
+
+
+def sample_flight_program_states(
+    *,
+    orbit_history_csv: str | Path,
+    maneuver_strategy: dict[str, Any],
+    payload: dict[str, Any],
+    t0_utc: str | datetime | None = None,
+    context: FlightProgramSamplingContext | None = None,
+) -> list[FlightProgramSample]:
+    sampling = context or build_flight_program_sampling_context(
+        orbit_history_csv=orbit_history_csv,
+        maneuver_strategy=maneuver_strategy,
+        payload=payload,
+        t0_utc=t0_utc,
     )
-    position = np.asarray(timeline["positions"][index], dtype=np.float64)
-    row = rows[index]
-    earth_unit = _normalize_vector(-position)
-    return FlightProgramSample(
-        elapsed_min=sample_min,
-        mode=mode,
-        event_name="" if event is None else str(event["name"]),
-        position_m=tuple(float(value) for value in position),
-        velocity_mps=(
-            float(row.get("velocity_x_m_s", 0.0)),
-            float(row.get("velocity_y_m_s", 0.0)),
-            float(row.get("velocity_z_m_s", 0.0)),
-        ),
-        subsatellite_longitude_deg=float(row.get("subsatellite_longitude_deg", 0.0)),
-        subsatellite_latitude_deg=float(row.get("subsatellite_latitude_deg", 0.0)),
-        altitude_m=float(row.get("subsatellite_altitude_m", row.get("orbit_height_m", 0.0))),
-        plus_z_ecef=tuple(float(value) for value in plus_z),
-        sun_ecef=tuple(float(value) for value in sampling.sun_vectors[index]),
-        earth_ecef=tuple(float(value) for value in earth_unit),
-        in_shadow=bool(sampling.shadow_mask[index]),
-    )
+    attitude_events = _attitude_events_for_payload(payload)
+    return [
+        _sample_from_context_index(sampling, index=index, attitude_events=attitude_events)
+        for index in range(len(sampling.elapsed_min))
+    ]
 
 
 def build_flight_program_sampling_context(
@@ -371,18 +367,82 @@ def build_flight_program_sampling_context(
 
 def active_attitude_event(payload: dict[str, Any], elapsed_min: float) -> dict[str, Any] | None:
     program = normalize_flight_program_payload(payload)
-    matches = [
-        item
-        for item in program["events"]
-        if item["kind"] == ATTITUDE_KIND
-        and not bool(item.get("instant"))
-        and float(item["start_min"]) - 1e-6 <= elapsed_min <= float(item["end_min"]) + 1e-6
-    ]
+    matches = _active_attitude_event_from_events(_attitude_events_from_program(program), elapsed_min)
     if not matches:
         return None
+    return matches[0]
+
+
+def _sample_from_context_index(
+    sampling: FlightProgramSamplingContext,
+    *,
+    index: int,
+    attitude_events: list[dict[str, Any]],
+) -> FlightProgramSample:
+    rows = sampling.rows
+    timeline = sampling.timeline
+    sample_min = float(sampling.elapsed_min[index])
+    matches = _active_attitude_event_from_events(attitude_events, sample_min)
+    event = None if not matches else matches[0]
+    mode = MODE_SPM if event is None else str(event["mode"])
+    plus_z = _plus_z_for_mode(
+        mode=mode,
+        timeline=timeline,
+        sun_vectors=sampling.sun_vectors,
+        index=index,
+        t0_utc=sampling.t0_utc,
+        maneuvers=sampling.maneuvers,
+        afm_plus_z_ecef=sampling.afm_plus_z_ecef,
+    )
+    position = np.asarray(timeline["positions"][index], dtype=np.float64)
+    row = rows[index]
+    earth_unit = _normalize_vector(-position)
+    return FlightProgramSample(
+        elapsed_min=sample_min,
+        mode=mode,
+        event_name="" if event is None else str(event["name"]),
+        position_m=tuple(float(value) for value in position),
+        velocity_mps=(
+            float(row.get("velocity_x_m_s", 0.0)),
+            float(row.get("velocity_y_m_s", 0.0)),
+            float(row.get("velocity_z_m_s", 0.0)),
+        ),
+        subsatellite_longitude_deg=float(row.get("subsatellite_longitude_deg", 0.0)),
+        subsatellite_latitude_deg=float(row.get("subsatellite_latitude_deg", 0.0)),
+        altitude_m=float(row.get("subsatellite_altitude_m", row.get("orbit_height_m", 0.0))),
+        plus_z_ecef=tuple(float(value) for value in plus_z),
+        sun_ecef=tuple(float(value) for value in sampling.sun_vectors[index]),
+        earth_ecef=tuple(float(value) for value in earth_unit),
+        in_shadow=bool(sampling.shadow_mask[index]),
+    )
+
+
+def _attitude_events_for_payload(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    return _attitude_events_from_program(normalize_flight_program_payload(payload))
+
+
+def _attitude_events_from_program(program: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        item
+        for item in program["events"]
+        if item["kind"] == ATTITUDE_KIND and not bool(item.get("instant"))
+    ]
+
+
+def _active_attitude_event_from_events(
+    attitude_events: list[dict[str, Any]],
+    elapsed_min: float,
+) -> list[dict[str, Any]]:
+    matches = [
+        item
+        for item in attitude_events
+        if float(item["start_min"]) - 1e-6 <= elapsed_min <= float(item["end_min"]) + 1e-6
+    ]
+    if not matches:
+        return []
     priority = {MODE_AFM: 0, MODE_TRANSITION: 1, MODE_EPM: 2, MODE_SPM: 3}
     matches.sort(key=lambda item: (priority.get(str(item["mode"]), 9), float(item["start_min"])))
-    return matches[0]
+    return matches
 
 
 def _event(

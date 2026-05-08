@@ -4,15 +4,20 @@ import csv
 from pathlib import Path
 
 import pytest
+from PySide6 import QtWidgets
 
+from smart.services.earth_orientation import parse_utc
 from smart.services.launch_window import LaunchWindowResult, TrackingAsset, config_from_payload, default_launch_window_config
 from smart.services.tracking_arc import (
     TRACKING_ARC_POINT_LEADING,
     TRACKING_ARC_POINT_MIDPOINT,
     TRACKING_ARC_POINT_TRAILING,
+    TrackingArcOrbitResult,
+    TrackingArcSegment,
     compute_tracking_arcs_for_window,
     tracking_arc_launch_points,
 )
+from smart.ui.widgets.tracking_arc_page import TrackingArcGanttWidget, _GanttScrollArea
 
 
 def _write_history(path: Path) -> None:
@@ -164,3 +169,74 @@ def test_compute_tracking_arcs_respects_explicit_empty_assets(tmp_path: Path) ->
 
     assert results[0].asset_summaries == []
     assert results[0].row_labels == ["变轨点火时段", "卫星地影时段"]
+
+
+def test_tracking_arc_gantt_supports_local_zoom_and_reset() -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    widget = TrackingArcGanttWidget()
+    widget.resize(1200, 360)
+    result = TrackingArcOrbitResult(
+        point_key="leading",
+        point_label="窗口前沿轨道",
+        launch_utc="2026-05-15T00:00:00Z",
+        t0_utc="2026-05-15T00:00:00Z",
+        timeline_start_utc="2026-05-15T00:00:00Z",
+        timeline_end_utc="2026-05-15T01:00:00Z",
+        row_labels=["变轨点火时段", "地面站 测试站"],
+        segments=[
+            TrackingArcSegment("变轨点火时段", "2026-05-15T00:10:00Z", "2026-05-15T00:20:00Z", "burn", ""),
+            TrackingArcSegment("地面站 测试站", "2026-05-15T00:30:00Z", "2026-05-15T00:45:00Z", "ground", ""),
+        ],
+        asset_summaries=[],
+        shadow_total_min=0.0,
+        maneuver_count=1,
+    )
+    widget.set_result(result)
+
+    original_start, original_end = widget._visible_range()
+    assert original_start == parse_utc("2026-05-15T00:00:00Z")
+    assert original_end == parse_utc("2026-05-15T01:00:00Z")
+
+    changed = widget._zoom_view(widget._plot_rect().center().x(), 0.8)
+
+    zoomed_start, zoomed_end = widget._visible_range()
+    assert changed is True
+    assert (zoomed_end - zoomed_start) < (original_end - original_start)
+
+    widget._reset_view_range()
+
+    reset_start, reset_end = widget._visible_range()
+    assert reset_start == original_start
+    assert reset_end == original_end
+
+
+def test_tracking_arc_gantt_scroll_area_forwards_wheel_to_zoom() -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    chart = TrackingArcGanttWidget()
+    chart.resize(1200, 360)
+    result = TrackingArcOrbitResult(
+        point_key="leading",
+        point_label="窗口前沿轨道",
+        launch_utc="2026-05-15T00:00:00Z",
+        t0_utc="2026-05-15T00:00:00Z",
+        timeline_start_utc="2026-05-15T00:00:00Z",
+        timeline_end_utc="2026-05-15T01:00:00Z",
+        row_labels=["变轨点火时段"],
+        segments=[TrackingArcSegment("变轨点火时段", "2026-05-15T00:10:00Z", "2026-05-15T00:20:00Z", "burn", "")],
+        asset_summaries=[],
+        shadow_total_min=0.0,
+        maneuver_count=1,
+    )
+    chart.set_result(result)
+    scroll = _GanttScrollArea()
+    scroll.resize(1200, 360)
+    scroll.setWidget(chart)
+
+    original_start, original_end = chart._visible_range()
+    forwarded = scroll._forward_wheel_to_chart_x(chart._plot_rect().center().x(), 120)
+
+    zoomed_start, zoomed_end = chart._visible_range()
+    assert forwarded is True
+    assert (zoomed_end - zoomed_start) < (original_end - original_start)

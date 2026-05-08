@@ -11,7 +11,7 @@ import numpy as np
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from smart.domain.models import EARTH_RADIUS_KM, OrbitTrajectory
-from smart.services.earth_orientation import parse_utc
+from smart.services.earth_orientation import format_utc, parse_utc
 from smart.services.flight_program import (
     ATTITUDE_KIND,
     DEPLOYMENT_KIND,
@@ -38,14 +38,25 @@ from smart.services.launch_window import (
     tracking_assets_from_config,
 )
 from smart.services.project_workspace import ProjectWorkspace
-from smart.services.tracking_arc import TrackingArcOrbitResult, compute_tracking_arcs_for_window
+from smart.services.stk_ephemeris import derive_scenario_epoch_utc
+from smart.services.tracking_arc import (
+    TrackingArcOrbitResult,
+    compute_tracking_arc_for_launch_time,
+    compute_tracking_arcs_for_window,
+    tracking_arc_launch_points,
+)
 from smart.ui.i18n import I18nManager
 from smart.ui.widgets.orbit_views import OrbitPlot3D
-from smart.ui.widgets.spinboxes import NoWheelComboBox, NoWheelDoubleSpinBox
-from smart.ui.widgets.table_editing import install_table_edit_delegate
+from smart.ui.widgets.spinboxes import NoWheelComboBox, NoWheelDateTimeEdit, NoWheelDoubleSpinBox
+from smart.ui.widgets.table_editing import install_combo_table_edit_delegate, install_table_edit_delegate
 
 BEIJING_TZ = timezone(timedelta(hours=8))
+BEIJING_QT_TIMEZONE_ID = b"Asia/Shanghai"
 _MANEUVER_PHASES = {"settle", "orbit_control"}
+
+
+def _beijing_qtimezone() -> QtCore.QTimeZone:
+    return QtCore.QTimeZone(BEIJING_QT_TIMEZONE_ID)
 
 
 class FlightProgramOverviewWidget(QtWidgets.QWidget):
@@ -245,33 +256,34 @@ class FlightProgramOverviewWidget(QtWidgets.QWidget):
 
 
 class FlightProgramPage(QtWidgets.QWidget):
-    _EVENT_COLUMNS = (
+    _ATTITUDE_COLUMNS = (
         "序号",
         "锁定",
-        "类型",
         "模式",
         "名称",
         "开始 T0+min",
         "结束 T0+min",
         "时长/min",
+    )
+    _MAJOR_EVENT_COLUMNS = (
+        "序号",
+        "锁定",
+        "名称",
+        "开始 T0+min",
+        "结束 T0+min",
+        "时长/min",
         "瞬时",
-        "来源",
-        "状态",
-        "备注",
     )
     _REFERENCE_COLUMNS = (
         "序号",
-        "显示",
-        "来源",
         "类型",
         "名称/目标",
         "开始 T0+min",
         "结束 T0+min",
         "时长/min",
-        "状态",
-        "操作",
     )
-    _EDITABLE_COLUMNS = {1, 2, 3, 4, 5, 6, 8, 11}
+    _ATTITUDE_EDITABLE_COLUMNS = {2, 3, 4, 5}
+    _MAJOR_EVENT_EDITABLE_COLUMNS = {2, 3, 4}
 
     def __init__(
         self,
@@ -289,13 +301,14 @@ class FlightProgramPage(QtWidgets.QWidget):
         self._selected_event_id = ""
         self._selected_reference_id = ""
         self._playhead_min = 0.0
-        self._suppress_inspector = False
         self._suppress_table = False
         self._suppress_reference_table = False
         self._status_role = "statusDisconnected"
         self._orbit_history_cache_key: tuple[str, int, int] | None = None
         self._orbit_history_rows_cache: list[dict[str, float | str]] | None = None
         self._orbit_positions_cache: list[list[float]] | None = None
+        self._orbit_history_epoch_cache_key: tuple[str, int, int] | None = None
+        self._orbit_history_epoch_cache: object = None
         self._sample_context_cache_key: tuple[tuple[str, int, int], str, str] | None = None
         self._sample_context_cache: FlightProgramSamplingContext | None = None
 
@@ -336,9 +349,9 @@ class FlightProgramPage(QtWidgets.QWidget):
         bottom_splitter.setMinimumHeight(520)
         bottom_splitter.addWidget(self._build_event_design_panel())
         bottom_splitter.addWidget(self._build_right_panel())
-        bottom_splitter.setStretchFactor(0, 5)
-        bottom_splitter.setStretchFactor(1, 4)
-        bottom_splitter.setSizes([860, 620])
+        bottom_splitter.setStretchFactor(0, 3)
+        bottom_splitter.setStretchFactor(1, 6)
+        bottom_splitter.setSizes([560, 920])
         main_splitter.addWidget(bottom_splitter)
         main_splitter.setStretchFactor(0, 2)
         main_splitter.setStretchFactor(1, 5)
@@ -363,24 +376,55 @@ class FlightProgramPage(QtWidgets.QWidget):
             self._program = default_flight_program_payload()
             self._set_status("statusDisconnected", f"加载飞行程序失败：{exc}")
         self._program = normalize_flight_program_payload(self._program)
+        launch_mode_index = self._launch_source_combo.findData(str(self._program.get("launch_selection_mode", "window")))
+        if launch_mode_index >= 0:
+            self._launch_source_combo.blockSignals(True)
+            self._launch_source_combo.setCurrentIndex(launch_mode_index)
+            self._launch_source_combo.blockSignals(False)
         point_index = self._orbit_point_combo.findData(str(self._program.get("selected_orbit_point", "leading")))
         if point_index >= 0:
             self._orbit_point_combo.blockSignals(True)
             self._orbit_point_combo.setCurrentIndex(point_index)
             self._orbit_point_combo.blockSignals(False)
+        self._sync_manual_launch_field_from_state()
         self._reload_windows(show_status=False)
+        self._update_launch_source_controls()
+        self._sync_selected_t0_from_launch_state()
         self._refresh_source_labels()
         self._refresh_all()
         self._set_status("statusReady", "飞行程序页面已就绪。")
 
+    def eventFilter(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:
+        if isinstance(watched, QtWidgets.QTableWidget) and event.type() == QtCore.QEvent.Type.KeyPress:
+            key_event = event
+            if isinstance(key_event, QtGui.QKeyEvent):
+                if key_event.key() in {QtCore.Qt.Key.Key_Return, QtCore.Qt.Key.Key_Enter}:
+                    if watched.state() != QtWidgets.QAbstractItemView.State.EditingState:
+                        return self._jump_to_table_current_row(watched)
+        return super().eventFilter(watched, event)
+
     def _build_toolbar(self) -> QtWidgets.QLayout:
         layout = QtWidgets.QHBoxLayout()
         layout.setSpacing(8)
+        self._launch_source_label = QtWidgets.QLabel("时间来源")
+        layout.addWidget(self._launch_source_label)
+        self._launch_source_combo = NoWheelComboBox()
+        self._launch_source_combo.addItem("发射窗口", "window")
+        self._launch_source_combo.addItem("手动发射时间", "manual")
+        self._launch_source_combo.currentIndexChanged.connect(lambda _index: self._on_launch_source_changed())
+        layout.addWidget(self._launch_source_combo)
+        self._window_label = QtWidgets.QLabel("发射窗口")
         self._window_combo = NoWheelComboBox()
         self._window_combo.setMinimumWidth(300)
         self._window_combo.currentIndexChanged.connect(lambda _index: self._on_window_changed())
-        layout.addWidget(QtWidgets.QLabel("发射窗口"))
+        layout.addWidget(self._window_label)
         layout.addWidget(self._window_combo)
+        self._manual_launch_label = QtWidgets.QLabel("发射时间")
+        layout.addWidget(self._manual_launch_label)
+        self._manual_launch_edit = self._launch_datetime_edit()
+        self._manual_launch_edit.setMinimumWidth(220)
+        self._manual_launch_edit.dateTimeChanged.connect(lambda _value: self._on_manual_launch_changed())
+        layout.addWidget(self._manual_launch_edit)
         self._orbit_point_combo = NoWheelComboBox()
         for label, key in (("窗口前沿", "leading"), ("窗口中点", "midpoint"), ("窗口后沿", "trailing")):
             self._orbit_point_combo.addItem(label, key)
@@ -432,14 +476,7 @@ class FlightProgramPage(QtWidgets.QWidget):
         card = self._card("分组事件表格")
         layout = card.layout()
 
-        meta_row = QtWidgets.QHBoxLayout()
-        meta_row.setSpacing(12)
-        self._source_labels = [QtWidgets.QLabel() for _ in range(4)]
-        for label in self._source_labels:
-            label.setProperty("role", "cardCaption")
-            label.setWordWrap(True)
-            meta_row.addWidget(label, 1)
-        layout.addLayout(meta_row)
+        self._source_labels = []
 
         filter_row = QtWidgets.QHBoxLayout()
         filter_row.setSpacing(12)
@@ -463,16 +500,39 @@ class FlightProgramPage(QtWidgets.QWidget):
         self._reference_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
         self._reference_table.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.SingleSelection)
         self._reference_table.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
-        self._reference_table.horizontalHeader().setStretchLastSection(True)
+        self._reference_table.horizontalHeader().setStretchLastSection(False)
         self._reference_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
-        self._reference_table.horizontalHeader().setSectionResizeMode(4, QtWidgets.QHeaderView.ResizeMode.Stretch)
+        for column, width in ((0, 48), (1, 92), (3, 108), (4, 108), (5, 84)):
+            self._reference_table.horizontalHeader().setSectionResizeMode(column, QtWidgets.QHeaderView.ResizeMode.Fixed)
+            self._reference_table.setColumnWidth(column, width)
+        self._reference_table.horizontalHeader().setSectionResizeMode(2, QtWidgets.QHeaderView.ResizeMode.Stretch)
         self._reference_table.itemSelectionChanged.connect(self._on_reference_selection_changed)
         self._reference_table.itemDoubleClicked.connect(self._on_reference_item_double_clicked)
         self._reference_table.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
         self._reference_table.customContextMenuRequested.connect(self._show_reference_context_menu)
+        self._reference_table.installEventFilter(self)
 
-        self._event_table = self._create_program_event_table()
-        self._major_event_table = self._create_program_event_table()
+        self._event_table = self._create_program_event_table(
+            columns=self._ATTITUDE_COLUMNS,
+            editable_columns=self._ATTITUDE_EDITABLE_COLUMNS,
+            table_kind="attitude",
+        )
+        self._major_event_table = self._create_program_event_table(
+            columns=self._MAJOR_EVENT_COLUMNS,
+            editable_columns=self._MAJOR_EVENT_EDITABLE_COLUMNS,
+            table_kind="major",
+        )
+        install_combo_table_edit_delegate(
+            self._event_table,
+            {
+                2: [
+                    (MODE_SPM, MODE_SPM),
+                    (MODE_EPM, MODE_EPM),
+                    (MODE_AFM, MODE_AFM),
+                    (MODE_TRANSITION, MODE_TRANSITION),
+                ]
+            },
+        )
         self._table_tabs.addTab(self._reference_table, "参考时段")
         self._table_tabs.addTab(self._event_table, "卫星姿态设置")
         self._table_tabs.addTab(self._major_event_table, "主要飞行事件")
@@ -481,16 +541,19 @@ class FlightProgramPage(QtWidgets.QWidget):
         self._warnings_list = QtWidgets.QListWidget()
         self._warnings_list.setMaximumHeight(92)
         layout.addWidget(self._warnings_list)
-
-        self._playhead_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
-        self._playhead_slider.setRange(0, 10000)
-        self._playhead_slider.valueChanged.connect(self._on_slider_changed)
-        layout.addWidget(self._playhead_slider)
         return card
 
-    def _create_program_event_table(self) -> QtWidgets.QTableWidget:
-        table = QtWidgets.QTableWidget(0, len(self._EVENT_COLUMNS))
-        table.setHorizontalHeaderLabels(list(self._EVENT_COLUMNS))
+    def _create_program_event_table(
+        self,
+        *,
+        columns: tuple[str, ...],
+        editable_columns: set[int],
+        table_kind: str,
+    ) -> QtWidgets.QTableWidget:
+        table = QtWidgets.QTableWidget(0, len(columns))
+        table.setHorizontalHeaderLabels(list(columns))
+        table.setProperty("tableKind", table_kind)
+        table.setProperty("editableColumns", sorted(editable_columns))
         table.verticalHeader().setVisible(False)
         table.setAlternatingRowColors(True)
         table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
@@ -500,88 +563,39 @@ class FlightProgramPage(QtWidgets.QWidget):
             | QtWidgets.QAbstractItemView.EditTrigger.EditKeyPressed
             | QtWidgets.QAbstractItemView.EditTrigger.AnyKeyPressed
         )
-        table.horizontalHeader().setStretchLastSection(True)
+        table.horizontalHeader().setStretchLastSection(False)
         table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
-        table.horizontalHeader().setSectionResizeMode(4, QtWidgets.QHeaderView.ResizeMode.Stretch)
-        table.horizontalHeader().setSectionResizeMode(11, QtWidgets.QHeaderView.ResizeMode.Stretch)
+        if table_kind == "attitude":
+            width_map = ((0, 48), (1, 64), (2, 108), (4, 108), (5, 108), (6, 84))
+            stretch_column = 3
+        else:
+            width_map = ((0, 48), (1, 64), (3, 108), (4, 108), (5, 84), (6, 64))
+            stretch_column = 2
+        for column, width in width_map:
+            table.horizontalHeader().setSectionResizeMode(column, QtWidgets.QHeaderView.ResizeMode.Fixed)
+            table.setColumnWidth(column, width)
+        table.horizontalHeader().setSectionResizeMode(stretch_column, QtWidgets.QHeaderView.ResizeMode.Stretch)
         install_table_edit_delegate(table)
         table.itemSelectionChanged.connect(self._on_table_selection_changed)
         table.itemChanged.connect(self._on_table_item_changed)
         table.itemDoubleClicked.connect(self._on_table_item_double_clicked)
         table.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
         table.customContextMenuRequested.connect(self._show_table_context_menu)
+        table.installEventFilter(self)
         return table
 
     def _build_right_panel(self) -> QtWidgets.QWidget:
-        panel = QtWidgets.QWidget()
-        layout = QtWidgets.QVBoxLayout(panel)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(12)
         preview = self._card("实时状态")
+        preview.setMinimumHeight(520)
         preview_layout = preview.layout()
         self._scene_view = OrbitPlot3D()
-        self._scene_view.setMinimumHeight(300)
+        self._scene_view.setMinimumHeight(480)
         preview_layout.addWidget(self._scene_view, 1)
-        layout.addWidget(preview, 2)
-
-        inspector = self._card("事件检查器")
-        form = QtWidgets.QFormLayout()
-        form.setLabelAlignment(QtCore.Qt.AlignmentFlag.AlignRight)
-        form.setContentsMargins(0, 0, 0, 0)
-        self._name_edit = QtWidgets.QLineEdit()
-        self._kind_combo = NoWheelComboBox()
-        self._kind_combo.addItem("姿态", ATTITUDE_KIND)
-        self._kind_combo.addItem("主要事件", DEPLOYMENT_KIND)
-        self._mode_combo = NoWheelComboBox()
-        for mode in (MODE_SPM, MODE_EPM, MODE_AFM, MODE_TRANSITION, "SolarArrayDeploy", "AntennaDeploy"):
-            self._mode_combo.addItem(mode, mode)
-        self._start_spin = self._minutes_spin()
-        self._end_spin = self._minutes_spin()
-        self._instant_check = QtWidgets.QCheckBox("瞬时事件")
-        self._locked_check = QtWidgets.QCheckBox("锁定")
-        self._source_label = QtWidgets.QLabel("--")
-        self._notes_edit = QtWidgets.QPlainTextEdit()
-        self._notes_edit.setMaximumHeight(76)
-        for widget in (
-            self._name_edit,
-            self._kind_combo,
-            self._mode_combo,
-            self._start_spin,
-            self._end_spin,
-            self._instant_check,
-            self._locked_check,
-            self._notes_edit,
-        ):
-            if isinstance(widget, QtWidgets.QLineEdit):
-                widget.textEdited.connect(self._apply_inspector)
-            elif isinstance(widget, QtWidgets.QComboBox):
-                widget.currentIndexChanged.connect(lambda _index: self._apply_inspector())
-            elif isinstance(widget, QtWidgets.QDoubleSpinBox):
-                widget.valueChanged.connect(lambda _value: self._apply_inspector())
-            elif isinstance(widget, QtWidgets.QCheckBox):
-                widget.stateChanged.connect(lambda _state: self._apply_inspector())
-            elif isinstance(widget, QtWidgets.QPlainTextEdit):
-                widget.textChanged.connect(self._apply_inspector)
-        form.addRow("名称", self._name_edit)
-        form.addRow("类型", self._kind_combo)
-        form.addRow("模式", self._mode_combo)
-        form.addRow("开始 T0+min", self._start_spin)
-        form.addRow("结束 T0+min", self._end_spin)
-        form.addRow("", self._instant_check)
-        form.addRow("", self._locked_check)
-        form.addRow("来源", self._source_label)
-        form.addRow("备注", self._notes_edit)
-        inspector.layout().addLayout(form)
-        layout.addWidget(inspector, 1)
-        return panel
+        return preview
 
     def calculate_reference_arcs(self) -> None:
         if self._workspace.current_project is None:
             self._set_status("statusDisconnected", "没有活动项目。")
-            return
-        window = self._selected_window()
-        if window is None:
-            self._set_status("statusDisconnected", "没有可用发射窗口。请先在发射窗口页面完成计算。")
             return
         try:
             strategy = self._workspace.load_maneuver_strategy()
@@ -589,21 +603,41 @@ class FlightProgramPage(QtWidgets.QWidget):
                 raise FileNotFoundError(self._workspace.maneuver_strategy_path())
             payload = self._workspace.load_tracking_arc_config() or self._workspace.load_launch_window_config() or default_launch_window_config()
             config = config_from_payload(payload)
-            results = compute_tracking_arcs_for_window(
-                orbit_history_csv=self._orbit_history_path(),
-                maneuver_strategy=strategy,
-                config=config,
-                window=window,
-                assets=tracking_assets_from_config(config),
-            )
+            if self._launch_selection_mode() == "manual":
+                launch_utc = self._manual_launch_utc()
+                result = compute_tracking_arc_for_launch_time(
+                    orbit_history_csv=self._orbit_history_path(),
+                    maneuver_strategy=strategy,
+                    config=config,
+                    launch_utc=launch_utc,
+                    assets=tracking_assets_from_config(config),
+                )
+                results = [result]
+            else:
+                window = self._selected_window()
+                if window is None:
+                    self._set_status("statusDisconnected", "没有可用发射窗口。请先在发射窗口页面完成计算。")
+                    return
+                results = compute_tracking_arcs_for_window(
+                    orbit_history_csv=self._orbit_history_path(),
+                    maneuver_strategy=strategy,
+                    config=config,
+                    window=window,
+                    assets=tracking_assets_from_config(config),
+                )
         except Exception as exc:
             self._set_status("statusDisconnected", f"计算参考轨失败：{exc}")
             return
         self._tracking_results = {item.point_key: item for item in results}
-        self._program["selected_orbit_point"] = str(self._orbit_point_combo.currentData() or "leading")
+        self._program["launch_selection_mode"] = self._launch_selection_mode()
+        if self._launch_selection_mode() == "manual":
+            self._program["selected_launch_utc"] = results[0].launch_utc
+        else:
+            self._program["selected_orbit_point"] = str(self._orbit_point_combo.currentData() or "leading")
         selected = self._selected_tracking_result()
         if selected is not None:
             self._program["selected_t0_utc"] = selected.t0_utc
+            self._program["selected_launch_utc"] = selected.launch_utc
         self._refresh_reference_segments()
         self._refresh_all()
         self._set_status("statusReady", f"参考轨计算完成：{len(results)} 条。")
@@ -612,23 +646,29 @@ class FlightProgramPage(QtWidgets.QWidget):
         if self._workspace.current_project is None:
             self._set_status("statusDisconnected", "没有活动项目。")
             return
-        if not self._tracking_results and self._selected_window() is not None:
+        if not self._tracking_results and self._can_calculate_reference_arcs():
             self.calculate_reference_arcs()
+            if not self._tracking_results:
+                return
         try:
             strategy = self._workspace.load_maneuver_strategy()
             if strategy is None:
                 raise FileNotFoundError(self._workspace.maneuver_strategy_path())
-            key = str(self._orbit_point_combo.currentData() or "leading")
+            tracking_result = self._selected_tracking_result()
+            key = "manual" if self._launch_selection_mode() == "manual" else str(self._orbit_point_combo.currentData() or "leading")
             self._program = generate_flight_program_draft(
                 orbit_history_csv=self._orbit_history_path(),
                 maneuver_strategy=strategy,
-                tracking_result=self._tracking_results.get(key),
+                tracking_result=tracking_result,
                 selected_orbit_point=key,
+                launch_selection_mode=self._launch_selection_mode(),
             )
         except Exception as exc:
             self._set_status("statusDisconnected", f"生成飞行程序草案失败：{exc}")
             return
         self._selected_event_id = ""
+        self._sync_manual_launch_field_from_state()
+        self._update_launch_source_controls()
         self._refresh_reference_segments()
         self._refresh_all()
         self._set_status("statusReady", "已生成可编辑飞行程序草案。")
@@ -648,7 +688,6 @@ class FlightProgramPage(QtWidgets.QWidget):
         self._refresh_reference_segments()
         self._refresh_timeline()
         self._refresh_warnings()
-        self._refresh_inspector()
         self._refresh_sample_preview()
 
     def _refresh_timeline(self, *, rebuild_tables: bool = True) -> None:
@@ -668,9 +707,6 @@ class FlightProgramPage(QtWidgets.QWidget):
         else:
             self._update_reference_table_statuses()
             self._update_event_table_statuses()
-        self._playhead_slider.blockSignals(True)
-        self._playhead_slider.setValue(int((self._playhead_min / max(duration, 1.0)) * 10000))
-        self._playhead_slider.blockSignals(False)
         self._time_label.setText(
             f"当前播放头：T0+{self._playhead_min:.2f} min；"
             f"事件 {len(self._program.get('events', []))} 条；"
@@ -692,29 +728,14 @@ class FlightProgramPage(QtWidgets.QWidget):
             for row in range(self._reference_table.rowCount()):
                 item = self._reference_table.item(row, 0)
                 if item is not None and item.data(QtCore.Qt.ItemDataRole.UserRole) == self._selected_reference_id:
+                    self._reference_table.setCurrentCell(row, 0)
                     self._reference_table.selectRow(row)
                     break
         self._reference_table.blockSignals(False)
         self._suppress_reference_table = False
 
     def _update_reference_table_statuses(self) -> None:
-        self._suppress_reference_table = True
-        self._reference_table.blockSignals(True)
-        try:
-            for row in range(self._reference_table.rowCount()):
-                id_item = self._reference_table.item(row, 0)
-                status_item = self._reference_table.item(row, 8)
-                if id_item is None or status_item is None:
-                    continue
-                reference = self._reference_by_id(str(id_item.data(QtCore.Qt.ItemDataRole.UserRole) or ""))
-                if reference is None:
-                    continue
-                status = self._reference_status(reference)
-                status_item.setText(status)
-                status_item.setForeground(QtCore.Qt.GlobalColor.yellow if status == "当前" else QtGui.QBrush())
-        finally:
-            self._reference_table.blockSignals(False)
-            self._suppress_reference_table = False
+        return
 
     def _set_reference_table_row(self, row: int, segment: dict[str, Any]) -> None:
         reference_id = str(segment.get("id", ""))
@@ -722,22 +743,16 @@ class FlightProgramPage(QtWidgets.QWidget):
         end_min = float(segment.get("end_min", start_min))
         values = [
             str(row + 1),
-            "是",
-            str(segment.get("source", "tracking_arc")),
             self._reference_kind_label(str(segment.get("kind", ""))),
             str(segment.get("name", segment.get("label", ""))),
             f"{start_min:.3f}",
             f"{end_min:.3f}",
             f"{max(0.0, end_min - start_min):.3f}",
-            self._reference_status(segment),
-            self._reference_action_label(str(segment.get("kind", ""))),
         ]
         for column, value in enumerate(values):
             item = QtWidgets.QTableWidgetItem(value)
             item.setData(QtCore.Qt.ItemDataRole.UserRole, reference_id)
             item.setFlags(QtCore.Qt.ItemFlag.ItemIsSelectable | QtCore.Qt.ItemFlag.ItemIsEnabled)
-            if column == 8 and value == "当前":
-                item.setForeground(QtCore.Qt.GlobalColor.yellow)
             self._reference_table.setItem(row, column, item)
 
     def _refresh_event_table(self) -> None:
@@ -766,31 +781,13 @@ class FlightProgramPage(QtWidgets.QWidget):
         self._suppress_table = False
 
     def _update_event_table_statuses(self) -> None:
-        self._suppress_table = True
-        self._event_table.blockSignals(True)
-        self._major_event_table.blockSignals(True)
-        try:
-            for table in (self._event_table, self._major_event_table):
-                for row in range(table.rowCount()):
-                    id_item = table.item(row, 0)
-                    status_item = table.item(row, 10)
-                    if id_item is None or status_item is None:
-                        continue
-                    event = self._event_by_id(str(id_item.data(QtCore.Qt.ItemDataRole.UserRole) or ""))
-                    if event is None:
-                        continue
-                    status = self._event_status(event)
-                    status_item.setText(status)
-                    status_item.setForeground(QtCore.Qt.GlobalColor.yellow if status != "正常" else QtGui.QBrush())
-        finally:
-            self._event_table.blockSignals(False)
-            self._major_event_table.blockSignals(False)
-            self._suppress_table = False
+        return
 
     def _select_event_row_in_table(self, table: QtWidgets.QTableWidget, event_id: str) -> bool:
         for row in range(table.rowCount()):
             item = table.item(row, 0)
             if item is not None and item.data(QtCore.Qt.ItemDataRole.UserRole) == event_id:
+                table.setCurrentCell(row, 0)
                 table.selectRow(row)
                 return True
         return False
@@ -801,30 +798,127 @@ class FlightProgramPage(QtWidgets.QWidget):
         end_min = float(event.get("end_min", start_min))
         instant = bool(event.get("instant"))
         duration = 0.0 if instant else max(0.0, end_min - start_min)
-        values = [
-            str(row + 1),
-            "是" if bool(event.get("locked")) else "否",
-            "姿态" if event.get("kind") == ATTITUDE_KIND else "主要事件",
-            str(event.get("mode", "")),
-            str(event.get("name", "")),
-            f"{start_min:.3f}",
-            f"{end_min:.3f}",
-            f"{duration:.3f}",
-            "是" if instant else "否",
-            str(event.get("source", "")),
-            self._event_status(event),
-            str(event.get("notes", "")),
-        ]
+        locked = bool(event.get("locked"))
+        table_kind = str(table.property("tableKind") or "")
+        if table_kind == "major":
+            values = [
+                str(row + 1),
+                "是" if locked else "否",
+                str(event.get("name", "")),
+                f"{start_min:.3f}",
+                f"{end_min:.3f}",
+                f"{duration:.3f}",
+                "是" if instant else "否",
+            ]
+            flag_columns = {"locked": 1, "instant": 6}
+        else:
+            values = [
+                str(row + 1),
+                "是" if locked else "否",
+                str(event.get("mode", "")),
+                str(event.get("name", "")),
+                f"{start_min:.3f}",
+                f"{end_min:.3f}",
+                f"{duration:.3f}",
+            ]
+            flag_columns = {"locked": 1}
+        editable_columns = {int(value) for value in (table.property("editableColumns") or [])}
         for column, value in enumerate(values):
             item = QtWidgets.QTableWidgetItem(value)
             item.setData(QtCore.Qt.ItemDataRole.UserRole, event_id)
             flags = QtCore.Qt.ItemFlag.ItemIsSelectable | QtCore.Qt.ItemFlag.ItemIsEnabled
-            if column in self._EDITABLE_COLUMNS:
+            if column in editable_columns and not locked:
                 flags |= QtCore.Qt.ItemFlag.ItemIsEditable
             item.setFlags(flags)
-            if column == 10 and value != "正常":
-                item.setForeground(QtCore.Qt.GlobalColor.yellow)
             table.setItem(row, column, item)
+        for field, column in flag_columns.items():
+            self._set_event_flag_button(table, row, column, event_id, field, bool(event.get(field)), locked)
+
+    def _set_event_flag_button(
+        self,
+        table: QtWidgets.QTableWidget,
+        row: int,
+        column: int,
+        event_id: str,
+        field: str,
+        checked: bool,
+        locked: bool,
+    ) -> None:
+        button = QtWidgets.QPushButton("是" if checked else "否")
+        button.setCheckable(True)
+        button.setChecked(checked)
+        button.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        button.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
+        button.setFixedHeight(28)
+        button.setProperty("variant", "secondary")
+        button.setEnabled(field == "locked" or not locked)
+        if not button.isEnabled():
+            button.setToolTip("事件已锁定，解锁后才能修改。")
+        button.clicked.connect(
+            lambda _checked=False, tbl=table, event=event_id, key=field: self._toggle_event_flag_from_button(tbl, event, key)
+        )
+        self._refresh_event_flag_button_style(button, checked)
+        table.setCellWidget(row, column, button)
+
+    @staticmethod
+    def _refresh_event_flag_button_style(button: QtWidgets.QPushButton, checked: bool) -> None:
+        button.setText("是" if checked else "否")
+        if checked:
+            button.setStyleSheet(
+                """
+                QPushButton {
+                    background: #1f6c7a;
+                    color: #7ff1ff;
+                    border: 1px solid #66d9ea;
+                    border-radius: 8px;
+                    padding: 4px 10px;
+                    font-weight: 700;
+                }
+                QPushButton:hover {
+                    background: #248799;
+                }
+                """
+            )
+            return
+        button.setStyleSheet(
+            """
+            QPushButton {
+                background: #132733;
+                color: #cde3ea;
+                border: 1px solid #244958;
+                border-radius: 8px;
+                padding: 4px 10px;
+                font-weight: 700;
+            }
+            QPushButton:hover {
+                background: #173343;
+                border: 1px solid #347084;
+            }
+            """
+        )
+
+    def _toggle_event_flag_from_button(self, table: QtWidgets.QTableWidget, event_id: str, field: str) -> None:
+        event = self._event_by_id(event_id)
+        if event is None:
+            return
+        if bool(event.get("locked")) and field != "locked":
+            self._set_status("statusDisconnected", "事件已锁定，请先解锁。")
+            return
+        updated = dict(event)
+        updated[field] = not bool(event.get(field))
+        if hasattr(table, "selectRow"):
+            for row in range(table.rowCount()):
+                item = table.item(row, 0)
+                if item is not None and item.data(QtCore.Qt.ItemDataRole.UserRole) == event_id:
+                    table.selectRow(row)
+                    break
+        self._selected_event_id = event_id
+        self._selected_reference_id = ""
+        self._upsert_event(updated)
+
+    def _selected_event_locked(self) -> bool:
+        event = self._selected_event()
+        return bool(event.get("locked")) if event is not None else False
 
     def _event_status(self, event: dict[str, Any]) -> str:
         try:
@@ -912,45 +1006,6 @@ class FlightProgramPage(QtWidgets.QWidget):
         for warning in warnings:
             self._warnings_list.addItem(f"[{warning.severity}] {warning.message}")
 
-    def _refresh_inspector(self) -> None:
-        event = self._selected_event()
-        widgets = [
-            self._name_edit,
-            self._kind_combo,
-            self._mode_combo,
-            self._start_spin,
-            self._end_spin,
-            self._instant_check,
-            self._locked_check,
-            self._notes_edit,
-        ]
-        self._suppress_inspector = True
-        for widget in widgets:
-            widget.setEnabled(event is not None)
-        if event is None:
-            self._name_edit.setText("")
-            self._kind_combo.setCurrentIndex(0)
-            self._mode_combo.setCurrentIndex(0)
-            self._start_spin.setValue(0.0)
-            self._end_spin.setValue(0.0)
-            self._instant_check.setChecked(False)
-            self._locked_check.setChecked(False)
-            self._source_label.setText("--")
-            self._notes_edit.setPlainText("")
-            self._suppress_inspector = False
-            return
-        self._name_edit.setText(str(event["name"]))
-        self._kind_combo.setCurrentIndex(max(0, self._kind_combo.findData(str(event["kind"]))))
-        mode_index = self._mode_combo.findData(str(event["mode"]))
-        self._mode_combo.setCurrentIndex(mode_index if mode_index >= 0 else 0)
-        self._start_spin.setValue(float(event["start_min"]))
-        self._end_spin.setValue(float(event["end_min"]))
-        self._instant_check.setChecked(bool(event.get("instant")))
-        self._locked_check.setChecked(bool(event.get("locked")))
-        self._source_label.setText(str(event.get("source", "")))
-        self._notes_edit.setPlainText(str(event.get("notes", "")))
-        self._suppress_inspector = False
-
     def _refresh_sample_preview(self) -> None:
         sample: FlightProgramSample | None = None
         if self._workspace.current_project is not None and self._orbit_history_path().exists():
@@ -977,35 +1032,39 @@ class FlightProgramPage(QtWidgets.QWidget):
         trajectory = self._orbit_trajectory_for_sample(sample)
         if trajectory is None:
             self._scene_view.clear_trajectory()
-            self._scene_view.set_info_overlay(self._sample_overlay_text(sample))
+            self._scene_view.set_info_overlays(self._sample_overlay_sections(sample))
             return
         try:
             rows = self._orbit_history_rows() or []
+            earth_rotation_rad = self._earth_rotation_rad_for_sample(sample.elapsed_min)
             self._scene_view.set_trajectory_overlays(
                 trajectory,
                 EARTH_RADIUS_KM,
                 maneuver_segments_km=self._maneuver_segments_km(rows, trajectory.positions_km),
                 start_label="起点",
+                earth_rotation_rad=earth_rotation_rad,
+                subsatellite_position_km=self._subsatellite_position_km_for_sample(sample),
             )
             self._scene_view.set_direction_vectors(
                 trajectory.current_position_km,
                 self._direction_vectors_for_sample(sample, trajectory.current_position_km),
             )
-            self._scene_view.set_info_overlay(self._sample_overlay_text(sample))
+            self._scene_view.set_info_overlays(self._sample_overlay_sections(sample))
         except Exception:
             self._scene_view.clear_trajectory()
-            self._scene_view.set_info_overlay(self._sample_overlay_text(sample))
+            self._scene_view.set_info_overlays(self._sample_overlay_sections(sample))
 
-    def _sample_overlay_text(self, sample: FlightProgramSample) -> str:
+    def _sample_overlay_sections(self, sample: FlightProgramSample) -> dict[str, str]:
         attitude = sample.mode if not sample.event_name else f"{sample.mode} / {sample.event_name}"
-        return "\n".join(
-            [
-                f"当前时间（北京）：{self._sample_time_beijing_text(sample)}",
-                f"星下点：经度 {sample.subsatellite_longitude_deg:.3f}° / 纬度 {sample.subsatellite_latitude_deg:.3f}°",
-                f"卫星姿态：{attitude}",
-                f"主要测控事件：{self._major_tracking_event_text()}",
-            ]
-        )
+        return {
+            "top_left": f"主要测控事件：{self._major_tracking_event_text()}",
+            "top_right": f"卫星姿态：{attitude}",
+            "bottom_left": f"当前时间（北京）：{self._sample_time_beijing_text(sample)}",
+            "bottom_right": (
+                "星下点："
+                f"经度 {sample.subsatellite_longitude_deg:.3f}° / 纬度 {sample.subsatellite_latitude_deg:.3f}°"
+            ),
+        }
 
     def _sample_time_beijing_text(self, sample: FlightProgramSample) -> str:
         t0_value = str(self._program.get("selected_t0_utc", "") or "")
@@ -1047,23 +1106,6 @@ class FlightProgramPage(QtWidgets.QWidget):
         name = str(segment.get("name", "") or segment.get("label", "") or kind)
         return f"{prefix} {kind}：{name}（T0+{start_min:.1f} 至 {end_min:.1f} min）"
 
-    def _apply_inspector(self) -> None:
-        if self._suppress_inspector:
-            return
-        event = self._selected_event()
-        if event is None:
-            return
-        updated = dict(event)
-        updated["name"] = self._name_edit.text().strip() or str(event["name"])
-        updated["kind"] = str(self._kind_combo.currentData() or ATTITUDE_KIND)
-        updated["mode"] = str(self._mode_combo.currentData() or MODE_SPM)
-        updated["start_min"] = float(self._start_spin.value())
-        updated["end_min"] = float(self._end_spin.value())
-        updated["instant"] = self._instant_check.isChecked()
-        updated["locked"] = self._locked_check.isChecked()
-        updated["notes"] = self._notes_edit.toPlainText()
-        self._upsert_event(updated)
-
     def _on_table_selection_changed(self) -> None:
         if self._suppress_table:
             return
@@ -1092,8 +1134,6 @@ class FlightProgramPage(QtWidgets.QWidget):
         if reference is None:
             return
         self._set_playhead(float(reference.get("start_min", self._playhead_min)))
-        if item.column() == 9:
-            self._create_event_from_reference(reference)
 
     def _on_table_item_double_clicked(self, item: QtWidgets.QTableWidgetItem) -> None:
         event_id = str(item.data(QtCore.Qt.ItemDataRole.UserRole) or "")
@@ -1109,56 +1149,149 @@ class FlightProgramPage(QtWidgets.QWidget):
         event = self._event_by_id(event_id)
         if event is None:
             return
+        if bool(event.get("locked")):
+            self._refresh_timeline()
+            self._set_status("statusDisconnected", "事件已锁定，请先解锁。")
+            return
         updated = dict(event)
+        table = item.tableWidget()
+        table_kind = str(table.property("tableKind") or "") if table is not None else ""
         column = item.column()
         text = item.text().strip()
         try:
-            if column == 1:
-                updated["locked"] = _parse_yes_no(text)
-            elif column == 2:
-                updated["kind"] = _parse_kind(text)
-                if updated["kind"] == DEPLOYMENT_KIND and updated.get("mode") in {MODE_SPM, MODE_EPM, MODE_AFM, MODE_TRANSITION}:
-                    updated["mode"] = "SolarArrayDeploy"
-                elif updated["kind"] == ATTITUDE_KIND and updated.get("mode") not in {MODE_SPM, MODE_EPM, MODE_AFM, MODE_TRANSITION}:
-                    updated["mode"] = MODE_SPM
-            elif column == 3:
+            if table_kind == "attitude" and column == 2:
                 updated["mode"] = text or str(event.get("mode", MODE_SPM))
-            elif column == 4:
+            elif table_kind == "attitude" and column == 3:
                 updated["name"] = text or str(event.get("name", "事件"))
-            elif column == 5:
+            elif table_kind == "attitude" and column == 4:
+                new_start_min = float(text)
+                if not self._apply_attitude_start_change(str(event.get("id", "")), new_start_min):
+                    return
+                updated["start_min"] = new_start_min
+            elif table_kind == "attitude" and column == 5:
+                new_end_min = float(text)
+                if not self._apply_attitude_end_change(str(event.get("id", "")), new_end_min):
+                    return
+                updated["end_min"] = new_end_min
+            elif table_kind == "major" and column == 2:
+                updated["name"] = text or str(event.get("name", "事件"))
+            elif table_kind == "major" and column == 3:
                 updated["start_min"] = float(text)
-            elif column == 6:
+            elif table_kind == "major" and column == 4:
                 updated["end_min"] = float(text)
-            elif column == 8:
-                updated["instant"] = _parse_yes_no(text)
-            elif column == 11:
-                updated["notes"] = text
         except ValueError:
             self._refresh_timeline()
-            self._set_status("statusDisconnected", "表格输入无效：时间列需要数字，布尔列使用 是/否。")
+            self._set_status("statusDisconnected", "表格输入无效：时间列需要数字。")
             return
         self._upsert_event(updated)
+
+    def _apply_attitude_start_change(self, event_id: str, new_start_min: float) -> bool:
+        attitudes = sorted(
+            [
+                dict(item)
+                for item in self._program.get("events", [])
+                if str(item.get("kind", "")) == ATTITUDE_KIND and not bool(item.get("instant"))
+            ],
+            key=lambda item: (float(item.get("start_min", 0.0)), float(item.get("end_min", 0.0)), str(item.get("name", ""))),
+        )
+        current_index = next((index for index, item in enumerate(attitudes) if str(item.get("id", "")) == event_id), -1)
+        if current_index <= 0:
+            return True
+        previous = attitudes[current_index - 1]
+        previous_start_min = float(previous.get("start_min", 0.0))
+        if new_start_min < previous_start_min:
+            self._refresh_timeline()
+            self._set_status(
+                "statusDisconnected",
+                "姿态段冲突：开始时间不能早于前一个姿态段的开始时间。",
+            )
+            return False
+        if bool(previous.get("locked")):
+            self._refresh_timeline()
+            self._set_status(
+                "statusDisconnected",
+                "姿态段冲突：前一个姿态段已锁定，无法自动调整其结束时间。",
+            )
+            return False
+        previous_id = str(previous.get("id", ""))
+        updated_events: list[dict[str, Any]] = []
+        for item in self._program.get("events", []):
+            if str(item.get("id", "")) != previous_id:
+                updated_events.append(dict(item))
+                continue
+            adjusted = dict(item)
+            adjusted["end_min"] = float(new_start_min)
+            updated_events.append(normalize_flight_event(adjusted))
+        self._program["events"] = updated_events
+        return True
+
+    def _apply_attitude_end_change(self, event_id: str, new_end_min: float) -> bool:
+        attitudes = sorted(
+            [
+                dict(item)
+                for item in self._program.get("events", [])
+                if str(item.get("kind", "")) == ATTITUDE_KIND and not bool(item.get("instant"))
+            ],
+            key=lambda item: (float(item.get("start_min", 0.0)), float(item.get("end_min", 0.0)), str(item.get("name", ""))),
+        )
+        current_index = next((index for index, item in enumerate(attitudes) if str(item.get("id", "")) == event_id), -1)
+        if current_index < 0 or current_index >= len(attitudes) - 1:
+            return True
+        following = attitudes[current_index + 1]
+        following_end_min = float(following.get("end_min", 0.0))
+        if new_end_min > following_end_min:
+            self._refresh_timeline()
+            self._set_status(
+                "statusDisconnected",
+                "姿态段冲突：结束时间不能晚于后一个姿态段的结束时间。",
+            )
+            return False
+        if bool(following.get("locked")):
+            self._refresh_timeline()
+            self._set_status(
+                "statusDisconnected",
+                "姿态段冲突：后一个姿态段已锁定，无法自动调整其开始时间。",
+            )
+            return False
+        following_id = str(following.get("id", ""))
+        updated_events: list[dict[str, Any]] = []
+        for item in self._program.get("events", []):
+            if str(item.get("id", "")) != following_id:
+                updated_events.append(dict(item))
+                continue
+            adjusted = dict(item)
+            adjusted["start_min"] = float(new_end_min)
+            updated_events.append(normalize_flight_event(adjusted))
+        self._program["events"] = updated_events
+        return True
 
     def _show_table_context_menu(self, position: QtCore.QPoint) -> None:
         table = self.sender()
         if not isinstance(table, QtWidgets.QTableWidget):
             table = self._event_table
+        table_kind = str(table.property("tableKind") or "")
         item = table.itemAt(position)
         if item is not None:
             event_id = str(item.data(QtCore.Qt.ItemDataRole.UserRole) or "")
             if event_id:
                 self._select_event(event_id)
         menu = QtWidgets.QMenu(self)
-        add_spm = menu.addAction("新增 SPM 姿态")
-        add_epm = menu.addAction("新增 EPM 姿态")
-        add_afm = menu.addAction("新增 AFM 姿态")
-        add_transition = menu.addAction("新增过渡段")
-        add_deploy = menu.addAction("新增主要事件")
-        menu.addSeparator()
-        duplicate = menu.addAction("复制选中事件")
-        delete = menu.addAction("删除选中事件")
-        duplicate.setEnabled(bool(self._selected_event_id))
-        delete.setEnabled(bool(self._selected_event_id))
+        add_spm = add_epm = add_afm = add_transition = add_deploy = duplicate = delete = jump = None
+        if table_kind == "attitude":
+            add_spm = menu.addAction("新增 SPM 姿态")
+            add_epm = menu.addAction("新增 EPM 姿态")
+            add_afm = menu.addAction("新增 AFM 姿态")
+            add_transition = menu.addAction("新增过渡段")
+            menu.addSeparator()
+            jump = menu.addAction("跳转到当前姿态段")
+            delete = menu.addAction("删除当前姿态")
+            jump.setEnabled(bool(self._selected_event_id))
+            delete.setEnabled(bool(self._selected_event_id) and not self._selected_event_locked())
+        else:
+            duplicate = menu.addAction("复制选中事件")
+            delete = menu.addAction("删除选中事件")
+            duplicate.setEnabled(bool(self._selected_event_id) and not self._selected_event_locked())
+            delete.setEnabled(bool(self._selected_event_id) and not self._selected_event_locked())
         chosen = menu.exec(table.viewport().mapToGlobal(position))
         if chosen == add_spm:
             self._add_event(MODE_SPM, self._playhead_min)
@@ -1170,6 +1303,8 @@ class FlightProgramPage(QtWidgets.QWidget):
             self._add_event(MODE_TRANSITION, self._playhead_min)
         elif chosen == add_deploy:
             self._add_event("deployment", self._playhead_min)
+        elif chosen == jump:
+            self._jump_to_selected_event()
         elif chosen == duplicate:
             self._duplicate_selected_event()
         elif chosen == delete:
@@ -1242,7 +1377,6 @@ class FlightProgramPage(QtWidgets.QWidget):
         self._selected_event_id = str(normalized["id"])
         self._refresh_timeline()
         self._refresh_warnings()
-        self._refresh_inspector()
         self._refresh_sample_preview()
 
     def _add_event(self, mode_or_kind: str, elapsed_min: float) -> None:
@@ -1270,6 +1404,9 @@ class FlightProgramPage(QtWidgets.QWidget):
         event = self._selected_event()
         if event is None:
             return
+        if bool(event.get("locked")):
+            self._set_status("statusDisconnected", "事件已锁定，请先解锁。")
+            return
         copy = dict(event)
         copy["id"] = f"fp-{uuid4().hex[:10]}"
         copy["name"] = f"{event['name']} 副本"
@@ -1280,8 +1417,39 @@ class FlightProgramPage(QtWidgets.QWidget):
         self._selected_event_id = str(copy["id"])
         self._refresh_all()
 
+    def _jump_to_selected_event(self) -> None:
+        event = self._selected_event()
+        if event is None:
+            return
+        self._set_playhead(float(event.get("start_min", self._playhead_min)))
+
+    def _jump_to_table_current_row(self, table: QtWidgets.QTableWidget) -> bool:
+        row = table.currentRow()
+        if row < 0:
+            return False
+        item = table.item(row, 0)
+        if item is None:
+            return False
+        item_id = str(item.data(QtCore.Qt.ItemDataRole.UserRole) or "")
+        if table is self._reference_table:
+            reference = self._reference_by_id(item_id)
+            if reference is None:
+                return False
+            self._select_reference(item_id)
+            self._set_playhead(float(reference.get("start_min", self._playhead_min)))
+            return True
+        event = self._event_by_id(item_id)
+        if event is None:
+            return False
+        self._select_event(item_id)
+        self._set_playhead(float(event.get("start_min", self._playhead_min)))
+        return True
+
     def _delete_selected_event(self) -> None:
         if not self._selected_event_id:
+            return
+        if self._selected_event_locked():
+            self._set_status("statusDisconnected", "事件已锁定，请先解锁。")
             return
         self._program["events"] = [
             item for item in self._program.get("events", []) if str(item.get("id")) != self._selected_event_id
@@ -1298,7 +1466,6 @@ class FlightProgramPage(QtWidgets.QWidget):
                 self._major_event_table if event is not None and event.get("kind") != ATTITUDE_KIND else self._event_table
             )
         self._refresh_timeline()
-        self._refresh_inspector()
 
     def _select_reference(self, reference_id: str) -> None:
         self._selected_reference_id = reference_id
@@ -1309,7 +1476,6 @@ class FlightProgramPage(QtWidgets.QWidget):
         if hasattr(self, "_table_tabs"):
             self._table_tabs.setCurrentWidget(self._reference_table)
         self._refresh_timeline()
-        self._refresh_inspector()
         self._refresh_sample_preview()
 
     def _set_playhead(self, elapsed_min: float) -> None:
@@ -1320,17 +1486,56 @@ class FlightProgramPage(QtWidgets.QWidget):
     def _on_slider_changed(self, value: int) -> None:
         self._set_playhead((float(value) / 10000.0) * self._timeline_duration())
 
-    def _on_window_changed(self) -> None:
+    def _on_launch_source_changed(self) -> None:
+        self._program["launch_selection_mode"] = self._launch_selection_mode()
+        if self._launch_selection_mode() == "manual":
+            self._sync_manual_launch_field_from_state()
+        else:
+            suggested_launch = self._suggested_manual_launch_utc()
+            if suggested_launch:
+                self._program["selected_launch_utc"] = suggested_launch
         self._tracking_results = {}
+        self._sync_selected_t0_from_launch_state()
+        self._refresh_reference_segments()
+        self._update_launch_source_controls()
+        self._refresh_all()
+
+    def _on_manual_launch_changed(self) -> None:
+        if self._launch_selection_mode() != "manual":
+            return
+        self._program["selected_launch_utc"] = self._manual_launch_utc()
+        self._tracking_results = {}
+        self._sync_selected_t0_from_launch_state()
+        self._refresh_reference_segments()
+        self._refresh_all()
+
+    def _on_window_changed(self) -> None:
+        if self._launch_selection_mode() == "manual":
+            return
+        self._tracking_results = {}
+        suggested_launch = self._suggested_manual_launch_utc()
+        if suggested_launch:
+            self._program["selected_launch_utc"] = suggested_launch
+            self._sync_manual_launch_field_from_state()
+        self._sync_selected_t0_from_launch_state()
         self._refresh_reference_segments()
         self._refresh_all()
 
     def _on_orbit_point_changed(self) -> None:
+        if self._launch_selection_mode() == "manual":
+            return
         key = str(self._orbit_point_combo.currentData() or "leading")
         self._program["selected_orbit_point"] = key
         selected = self._selected_tracking_result()
         if selected is not None:
             self._program["selected_t0_utc"] = selected.t0_utc
+            self._program["selected_launch_utc"] = selected.launch_utc
+        else:
+            suggested_launch = self._suggested_manual_launch_utc()
+            if suggested_launch:
+                self._program["selected_launch_utc"] = suggested_launch
+                self._sync_manual_launch_field_from_state()
+            self._sync_selected_t0_from_launch_state()
         self._refresh_all()
 
     def _selected_event(self) -> dict[str, Any] | None:
@@ -1357,8 +1562,81 @@ class FlightProgramPage(QtWidgets.QWidget):
         return None
 
     def _selected_tracking_result(self) -> TrackingArcOrbitResult | None:
+        if self._launch_selection_mode() == "manual":
+            return self._tracking_results.get("manual")
         key = str(self._orbit_point_combo.currentData() or self._program.get("selected_orbit_point", "leading"))
         return self._tracking_results.get(key)
+
+    def _launch_selection_mode(self) -> str:
+        mode = str(self._launch_source_combo.currentData() or self._program.get("launch_selection_mode", "window") or "window")
+        return mode if mode in {"window", "manual"} else "window"
+
+    def _can_calculate_reference_arcs(self) -> bool:
+        return self._launch_selection_mode() == "manual" or self._selected_window() is not None
+
+    def _update_launch_source_controls(self) -> None:
+        manual_mode = self._launch_selection_mode() == "manual"
+        self._window_label.setVisible(not manual_mode)
+        self._window_combo.setVisible(not manual_mode)
+        self._orbit_point_combo.setVisible(not manual_mode)
+        self._manual_launch_label.setVisible(manual_mode)
+        self._manual_launch_edit.setVisible(manual_mode)
+
+    def _sync_manual_launch_field_from_state(self) -> None:
+        launch_utc = str(self._program.get("selected_launch_utc", "") or self._suggested_manual_launch_utc() or "")
+        if not launch_utc:
+            return
+        try:
+            qdatetime = self._utc_to_qdatetime(launch_utc)
+        except Exception:
+            return
+        self._manual_launch_edit.blockSignals(True)
+        self._manual_launch_edit.setDateTime(qdatetime)
+        self._manual_launch_edit.blockSignals(False)
+
+    def _suggested_manual_launch_utc(self) -> str:
+        window = self._selected_window()
+        if window is None:
+            return ""
+        selected_key = str(self._orbit_point_combo.currentData() or self._program.get("selected_orbit_point", "leading") or "leading")
+        for point_key, _point_label, launch_utc in tracking_arc_launch_points(window):
+            if point_key == selected_key:
+                return format_utc(launch_utc)
+        return format_utc(tracking_arc_launch_points(window)[0][2]) if tracking_arc_launch_points(window) else ""
+
+    def _manual_launch_utc(self) -> str:
+        py_dt = self._manual_launch_edit.dateTime().toUTC().toPython()
+        return format_utc(py_dt)
+
+    def _sync_selected_t0_from_launch_state(self) -> None:
+        selected = self._selected_tracking_result()
+        if selected is not None:
+            self._program["selected_launch_utc"] = selected.launch_utc
+            self._program["selected_t0_utc"] = selected.t0_utc
+            return
+        launch_utc = str(self._program.get("selected_launch_utc", "") or "")
+        if not launch_utc:
+            self._program["selected_t0_utc"] = ""
+            return
+        try:
+            launch_dt = parse_utc(launch_utc)
+            t0_dt = launch_dt + timedelta(seconds=self._rocket_flight_time_s())
+        except Exception:
+            self._program["selected_t0_utc"] = ""
+            return
+        self._program["selected_launch_utc"] = format_utc(launch_dt)
+        self._program["selected_t0_utc"] = format_utc(t0_dt)
+
+    def _rocket_flight_time_s(self) -> float:
+        payload = (
+            self._workspace.load_tracking_arc_config()
+            or self._workspace.load_launch_window_config()
+            or default_launch_window_config()
+        )
+        try:
+            return float(config_from_payload(payload).rocket_flight_time_s)
+        except Exception:
+            return float(config_from_payload(default_launch_window_config()).rocket_flight_time_s)
 
     def _reload_windows(self, *, show_status: bool) -> None:
         if self._workspace.current_project is None:
@@ -1393,6 +1671,11 @@ class FlightProgramPage(QtWidgets.QWidget):
             )
             self._window_combo.addItem(label, index)
         self._window_combo.blockSignals(False)
+        if not str(self._program.get("selected_launch_utc", "") or ""):
+            suggested_launch = self._suggested_manual_launch_utc()
+            if suggested_launch:
+                self._program["selected_launch_utc"] = suggested_launch
+        self._sync_manual_launch_field_from_state()
 
     def _read_sample_csv(self, path: Path) -> list[dict[str, Any]]:
         samples: list[dict[str, Any]] = []
@@ -1532,13 +1815,26 @@ class FlightProgramPage(QtWidgets.QWidget):
             },
         ]
 
+    def _subsatellite_position_km_for_sample(self, sample: FlightProgramSample) -> np.ndarray:
+        lon_rad = np.deg2rad(float(sample.subsatellite_longitude_deg))
+        lat_rad = np.deg2rad(float(sample.subsatellite_latitude_deg))
+        cos_lat = np.cos(lat_rad)
+        surface_ecef = EARTH_RADIUS_KM * np.asarray(
+            [
+                cos_lat * np.cos(lon_rad),
+                cos_lat * np.sin(lon_rad),
+                np.sin(lat_rad),
+            ],
+            dtype=np.float64,
+        )
+        return self._ecef_direction_to_plot_inertial(surface_ecef, sample.elapsed_min)
+
     def _ecef_direction_to_plot_inertial(self, direction: np.ndarray, elapsed_min: float) -> np.ndarray:
         tracking = self._selected_tracking_result()
         if tracking is None:
             return direction
         try:
-            epoch = parse_utc(tracking.t0_utc) + timedelta(minutes=float(elapsed_min))
-            theta = _gmst_rad(epoch)
+            theta = self._earth_rotation_rad_for_sample(elapsed_min)
         except Exception:
             return direction
         cos_theta = np.cos(theta)
@@ -1552,12 +1848,37 @@ class FlightProgramPage(QtWidgets.QWidget):
             dtype=np.float64,
         )
 
+    def _earth_rotation_rad_for_sample(self, elapsed_min: float) -> float:
+        reference_epoch = self._orbit_history_reference_epoch()
+        if reference_epoch is None:
+            tracking = self._selected_tracking_result()
+            if tracking is None:
+                return 0.0
+            reference_epoch = parse_utc(tracking.t0_utc)
+        epoch = reference_epoch + timedelta(minutes=float(elapsed_min))
+        return float(_gmst_rad(epoch))
+
+    def _orbit_history_reference_epoch(self) -> object:
+        rows = self._orbit_history_rows()
+        if not rows or self._orbit_history_cache_key is None:
+            return None
+        if self._orbit_history_epoch_cache_key != self._orbit_history_cache_key:
+            self._orbit_history_epoch_cache_key = self._orbit_history_cache_key
+            self._orbit_history_epoch_cache = None
+            try:
+                self._orbit_history_epoch_cache = parse_utc(derive_scenario_epoch_utc(rows))
+            except Exception:
+                self._orbit_history_epoch_cache = None
+        return self._orbit_history_epoch_cache
+
     def _orbit_history_rows(self) -> list[dict[str, float | str]] | None:
         cache_key = self._orbit_history_signature()
         if cache_key != self._orbit_history_cache_key:
             self._orbit_history_cache_key = cache_key
             self._orbit_history_rows_cache = None
             self._orbit_positions_cache = None
+            self._orbit_history_epoch_cache_key = None
+            self._orbit_history_epoch_cache = None
             self._sample_context_cache = None
             self._sample_context_cache_key = None
         if cache_key is None:
@@ -1594,6 +1915,8 @@ class FlightProgramPage(QtWidgets.QWidget):
         return self._sample_context_cache
 
     def _refresh_source_labels(self) -> None:
+        if not self._source_labels:
+            return
         if self._workspace.current_project is None:
             values = ["项目：--", "变轨策略：--", "轨道历史：--", "飞行程序：--"]
         else:
@@ -1608,7 +1931,9 @@ class FlightProgramPage(QtWidgets.QWidget):
 
     def _set_controls_enabled(self, enabled: bool) -> None:
         for widget in (
+            self._launch_source_combo,
             self._window_combo,
+            self._manual_launch_edit,
             self._orbit_point_combo,
             self._reload_windows_button,
             self._calculate_refs_button,
@@ -1653,6 +1978,20 @@ class FlightProgramPage(QtWidgets.QWidget):
         spin.setDecimals(3)
         spin.setSingleStep(1.0)
         return spin
+
+    @staticmethod
+    def _launch_datetime_edit() -> NoWheelDateTimeEdit:
+        field = NoWheelDateTimeEdit()
+        field.setCalendarPopup(True)
+        field.setDisplayFormat("yyyy-MM-dd HH:mm:ss 'BJT'")
+        field.setTimeZone(_beijing_qtimezone())
+        return field
+
+    @staticmethod
+    def _utc_to_qdatetime(value: str) -> QtCore.QDateTime:
+        epoch = parse_utc(value)
+        milliseconds = int(round(epoch.timestamp() * 1000.0))
+        return QtCore.QDateTime.fromMSecsSinceEpoch(milliseconds, _beijing_qtimezone())
 
 def _parse_yes_no(value: str) -> bool:
     text = value.strip().lower()

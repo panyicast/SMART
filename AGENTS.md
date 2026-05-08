@@ -124,6 +124,13 @@
 - For STK `.e` ephemeris import, only Earth-centered files are supported right now. Inertial frames pass through directly; `Fixed` / `ITRF93` / `IAU_EARTH` require local SPICE kernels for conversion to `J2000`.
 - Keep manual math only as a fallback when SpiceyPy or the required kernels are unavailable.
 
+## Testing
+
+- In this repo, do not assume `pytest` is available on `PATH`.
+- Prefer running tests with the project virtual environment explicitly:
+  - `D:\Spark\SMART\.venv\Scripts\python.exe -m pytest`
+- Prefer this explicit interpreter form over bare `pytest` to avoid mixing Conda/system Python with the repo venv.
+
 ## Update Log
 
 - Root `updates.md` is auto-maintained by `.githooks/commit-msg` via `scripts/update_updates_md.py`.

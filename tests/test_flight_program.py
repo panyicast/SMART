@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from smart.services.flight_program import (
@@ -17,6 +18,7 @@ from smart.services.flight_program import (
     normalize_flight_event,
     normalize_flight_program_payload,
     sample_flight_program_state,
+    sample_flight_program_states,
     validate_flight_program,
 )
 from smart.services.tracking_arc import TrackingArcOrbitResult, TrackingArcSegment
@@ -249,3 +251,63 @@ def test_sample_context_reuses_precomputed_sampling_data(tmp_path: Path, monkeyp
     )
 
     assert sample.mode == MODE_AFM
+
+
+def test_sample_states_builds_full_attitude_pointing_series(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    history = tmp_path / "full_orbit_history.csv"
+    _write_history(history)
+    monkeypatch.setattr(
+        "smart.services.flight_program._body_plus_z_ecef_for_attitude",
+        lambda *_args, **_kwargs: np.tile(np.asarray([[0.0, 1.0, 0.0]], dtype=float), (13, 1)),
+    )
+    program = normalize_flight_program_payload(
+        {
+            "selected_t0_utc": "2026-05-15T00:00:00Z",
+            "events": [
+                {
+                    "name": "太阳巡航",
+                    "kind": ATTITUDE_KIND,
+                    "mode": MODE_SPM,
+                    "start_min": 0.0,
+                    "end_min": 20.0,
+                },
+                {
+                    "name": "测控姿态",
+                    "kind": ATTITUDE_KIND,
+                    "mode": MODE_EPM,
+                    "start_min": 30.0,
+                    "end_min": 40.0,
+                },
+                {
+                    "name": "点火姿态",
+                    "kind": ATTITUDE_KIND,
+                    "mode": MODE_AFM,
+                    "start_min": 50.0,
+                    "end_min": 70.0,
+                },
+                {
+                    "name": "过渡姿态",
+                    "kind": ATTITUDE_KIND,
+                    "mode": MODE_TRANSITION,
+                    "start_min": 80.0,
+                    "end_min": 90.0,
+                },
+            ],
+        }
+    )
+
+    samples = sample_flight_program_states(
+        orbit_history_csv=history,
+        maneuver_strategy=_strategy(),
+        payload=program,
+    )
+
+    assert len(samples) == 13
+    assert samples[0].mode == MODE_SPM
+    assert samples[3].mode == MODE_EPM
+    assert samples[5].mode == MODE_AFM
+    assert samples[8].mode == MODE_TRANSITION
+    assert samples[3].plus_z_ecef == pytest.approx((-1.0, 0.0, 0.0))
+    assert samples[5].plus_z_ecef == pytest.approx((0.0, 1.0, 0.0))
+    assert np.linalg.norm(np.asarray(samples[8].plus_z_ecef, dtype=float)) == pytest.approx(1.0)
+    assert samples[8].plus_z_ecef[1] > 0.0

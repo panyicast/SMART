@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import numpy as np
+
 from PySide6 import QtWidgets
 from PySide6 import QtCore, QtTest
 from PySide6.QtCore import Qt
 
+from smart.domain.models import EARTH_RADIUS_KM
+from smart.services.earth_orientation import parse_utc
 from smart.services.flight_program import DEPLOYMENT_KIND, FlightProgramSample, normalize_flight_program_payload
 from smart.services.project_workspace import ProjectWorkspace
 from smart.services.tracking_arc import TrackingArcOrbitResult
 from smart.ui.i18n import I18nManager
 from smart.ui.widgets.flight_program_page import FlightProgramOverviewWidget, FlightProgramPage
+from smart.ui.widgets.table_editing import ComboBoxTableEditDelegate
 
 
 def test_set_playhead_updates_status_without_rebuilding_tables(monkeypatch) -> None:
@@ -93,8 +98,31 @@ def test_program_tables_split_attitudes_and_main_events() -> None:
     assert page._table_tabs.tabText(page._table_tabs.indexOf(page._major_event_table)) == "主要飞行事件"
     assert page._event_table.rowCount() == 1
     assert page._major_event_table.rowCount() == 1
-    assert page._event_table.item(0, 4).text() == "太阳指向巡航"
-    assert page._major_event_table.item(0, 2).text() == "主要事件"
+    assert page._event_table.item(0, 3).text() == "太阳指向巡航"
+    assert page._major_event_table.item(0, 2).text() == "太阳翼展开"
+    assert "类型" not in [page._event_table.horizontalHeaderItem(i).text() for i in range(page._event_table.columnCount())]
+    assert "瞬时" not in [page._event_table.horizontalHeaderItem(i).text() for i in range(page._event_table.columnCount())]
+    assert "类型" not in [page._major_event_table.horizontalHeaderItem(i).text() for i in range(page._major_event_table.columnCount())]
+    assert "模式" not in [page._major_event_table.horizontalHeaderItem(i).text() for i in range(page._major_event_table.columnCount())]
+
+
+def test_manual_launch_change_updates_selected_t0_without_tracking_recompute(monkeypatch) -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    page = FlightProgramPage(I18nManager("zh"), ProjectWorkspace())
+    monkeypatch.setattr(page._workspace, "load_tracking_arc_config", lambda: {"rocket_flight_time_s": 120.0})
+    monkeypatch.setattr(page._workspace, "load_launch_window_config", lambda: None)
+    monkeypatch.setattr(page, "_refresh_reference_segments", lambda: None)
+    monkeypatch.setattr(page, "_refresh_all", lambda: None)
+
+    manual_index = page._launch_source_combo.findData("manual")
+    page._launch_source_combo.setCurrentIndex(manual_index)
+    page._manual_launch_edit.setDateTime(page._utc_to_qdatetime("2026-05-15T00:10:00Z"))
+
+    page._on_manual_launch_changed()
+
+    assert page._program["selected_launch_utc"] == "2026-05-15T00:10:00Z"
+    assert page._program["selected_t0_utc"] == "2026-05-15T00:12:00Z"
 
 
 def test_timeline_drag_updates_playhead() -> None:
@@ -114,6 +142,351 @@ def test_timeline_drag_updates_playhead() -> None:
 
     assert len(emitted) >= 2
     assert emitted[-1] > emitted[0]
+
+
+def test_right_panel_is_full_realtime_scene_card() -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    page = FlightProgramPage(I18nManager("zh"), ProjectWorkspace())
+    right_panel = page._build_right_panel()
+
+    assert right_panel.property("role") == "card"
+    assert right_panel.layout().count() == 2
+    assert right_panel.layout().itemAt(1).widget() is page._scene_view
+    assert page._scene_view.minimumHeight() == 480
+
+
+def test_reference_table_hides_source_column() -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    page = FlightProgramPage(I18nManager("zh"), ProjectWorkspace())
+
+    assert "来源" not in page._REFERENCE_COLUMNS
+    assert "显示" not in page._REFERENCE_COLUMNS
+    assert page._reference_table.columnCount() == len(page._REFERENCE_COLUMNS) == 6
+    assert page._REFERENCE_COLUMNS[1] == "类型"
+
+
+def test_attitude_mode_column_uses_preset_combo_delegate() -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    page = FlightProgramPage(I18nManager("zh"), ProjectWorkspace())
+    page._program = normalize_flight_program_payload(
+        {
+            "events": [
+                {
+                    "id": "attitude-1",
+                    "name": "测试姿态",
+                    "kind": "attitude",
+                    "mode": "SPM",
+                    "start_min": 0.0,
+                    "end_min": 10.0,
+                }
+            ]
+        }
+    )
+    page._refresh_event_table()
+    delegate = page._event_table.itemDelegate()
+    model_index = page._event_table.model().index(0, 2)
+    option = QtWidgets.QStyleOptionViewItem()
+    option.rect = page._event_table.visualRect(model_index)
+
+    assert isinstance(delegate, ComboBoxTableEditDelegate)
+    editor = delegate.createEditor(page._event_table, option, model_index)
+    assert isinstance(editor, QtWidgets.QComboBox)
+    assert [editor.itemText(i) for i in range(editor.count())] == ["SPM", "EPM", "AFM", "Transition"]
+
+
+def test_event_boolean_columns_use_toggle_buttons() -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    page = FlightProgramPage(I18nManager("zh"), ProjectWorkspace())
+    page._program = normalize_flight_program_payload(
+        {
+            "events": [
+                {
+                    "id": "attitude-1",
+                    "name": "测试姿态",
+                    "kind": "attitude",
+                    "mode": "SPM",
+                    "start_min": 0.0,
+                    "end_min": 10.0,
+                    "locked": False,
+                    "instant": False,
+                },
+                {
+                    "id": "main-1",
+                    "name": "太阳翼展开",
+                    "kind": DEPLOYMENT_KIND,
+                    "mode": "SolarArrayDeploy",
+                    "start_min": 20.0,
+                    "end_min": 21.0,
+                    "locked": False,
+                    "instant": False,
+                }
+            ]
+        }
+    )
+    page._refresh_event_table()
+
+    locked_button = page._event_table.cellWidget(0, 1)
+    instant_button = page._major_event_table.cellWidget(0, 6)
+
+    assert isinstance(locked_button, QtWidgets.QPushButton)
+    assert isinstance(instant_button, QtWidgets.QPushButton)
+    assert locked_button.text() == "否"
+    assert instant_button.text() == "否"
+
+    QtTest.QTest.mouseClick(locked_button, Qt.MouseButton.LeftButton)
+    QtTest.QTest.mouseClick(instant_button, Qt.MouseButton.LeftButton)
+
+    event = page._event_by_id("attitude-1")
+    assert event is not None
+    assert bool(event.get("locked")) is True
+    major_event = page._event_by_id("main-1")
+    assert major_event is not None
+    assert bool(major_event.get("instant")) is True
+    assert isinstance(page._event_table.cellWidget(0, 1), QtWidgets.QPushButton)
+    assert isinstance(page._major_event_table.cellWidget(0, 6), QtWidgets.QPushButton)
+    assert page._event_table.cellWidget(0, 1).text() == "是"
+    assert page._major_event_table.cellWidget(0, 6).text() == "是"
+    assert "#7ff1ff" in page._event_table.cellWidget(0, 1).styleSheet().lower()
+    assert "#7ff1ff" in page._major_event_table.cellWidget(0, 6).styleSheet().lower()
+
+
+def test_locked_event_allows_only_unlock() -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    page = FlightProgramPage(I18nManager("zh"), ProjectWorkspace())
+    page._program = normalize_flight_program_payload(
+        {
+            "events": [
+                {
+                    "id": "attitude-locked",
+                    "name": "锁定姿态",
+                    "kind": "attitude",
+                    "mode": "SPM",
+                    "start_min": 0.0,
+                    "end_min": 10.0,
+                    "locked": True,
+                },
+                {
+                    "id": "main-locked",
+                    "name": "锁定事件",
+                    "kind": DEPLOYMENT_KIND,
+                    "mode": "SolarArrayDeploy",
+                    "start_min": 20.0,
+                    "end_min": 21.0,
+                    "locked": True,
+                    "instant": False,
+                },
+            ]
+        }
+    )
+    page._refresh_event_table()
+
+    attitude_name_item = page._event_table.item(0, 3)
+    attitude_lock_button = page._event_table.cellWidget(0, 1)
+    major_instant_button = page._major_event_table.cellWidget(0, 6)
+
+    assert not bool(attitude_name_item.flags() & QtCore.Qt.ItemFlag.ItemIsEditable)
+    assert isinstance(attitude_lock_button, QtWidgets.QPushButton)
+    assert attitude_lock_button.isEnabled()
+    assert isinstance(major_instant_button, QtWidgets.QPushButton)
+    assert not major_instant_button.isEnabled()
+
+    page._select_event("main-locked")
+    before_rows = page._major_event_table.rowCount()
+    page._duplicate_selected_event()
+    assert page._major_event_table.rowCount() == before_rows
+
+    QtTest.QTest.mouseClick(attitude_lock_button, Qt.MouseButton.LeftButton)
+
+    unlocked_name_item = page._event_table.item(0, 3)
+    assert bool(unlocked_name_item.flags() & QtCore.Qt.ItemFlag.ItemIsEditable)
+
+
+def test_jump_to_selected_attitude_segment_moves_playhead() -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    page = FlightProgramPage(I18nManager("zh"), ProjectWorkspace())
+    page._program = normalize_flight_program_payload(
+        {
+            "events": [
+                {
+                    "id": "attitude-1",
+                    "name": "测试姿态",
+                    "kind": "attitude",
+                    "mode": "SPM",
+                    "start_min": 12.5,
+                    "end_min": 22.5,
+                }
+            ]
+        }
+    )
+    page._refresh_event_table()
+    page._set_playhead(0.0)
+    page._select_event("attitude-1")
+
+    page._jump_to_selected_event()
+
+    assert page._playhead_min == 12.5
+
+
+def test_pressing_enter_jumps_to_current_table_row() -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    page = FlightProgramPage(I18nManager("zh"), ProjectWorkspace())
+    page._program = normalize_flight_program_payload(
+        {
+            "events": [
+                {
+                    "id": "attitude-1",
+                    "name": "姿态一",
+                    "kind": "attitude",
+                    "mode": "SPM",
+                    "start_min": 5.0,
+                    "end_min": 15.0,
+                },
+                {
+                    "id": "attitude-2",
+                    "name": "姿态二",
+                    "kind": "attitude",
+                    "mode": "EPM",
+                    "start_min": 25.0,
+                    "end_min": 35.0,
+                },
+            ]
+        }
+    )
+    page._refresh_event_table()
+    page._event_table.setCurrentCell(1, 0)
+    page._event_table.selectRow(1)
+    page._set_playhead(0.0)
+
+    QtTest.QTest.keyClick(page._event_table, Qt.Key.Key_Return)
+
+    assert page._playhead_min == 25.0
+
+
+def test_attitude_start_change_updates_previous_segment_end() -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    page = FlightProgramPage(I18nManager("zh"), ProjectWorkspace())
+    page._program = normalize_flight_program_payload(
+        {
+            "events": [
+                {
+                    "id": "attitude-1",
+                    "name": "前一姿态",
+                    "kind": "attitude",
+                    "mode": "SPM",
+                    "start_min": 0.0,
+                    "end_min": 20.0,
+                },
+                {
+                    "id": "attitude-2",
+                    "name": "当前姿态",
+                    "kind": "attitude",
+                    "mode": "EPM",
+                    "start_min": 20.0,
+                    "end_min": 40.0,
+                },
+            ]
+        }
+    )
+    page._refresh_event_table()
+
+    start_item = page._event_table.item(1, 4)
+    start_item.setText("15.0")
+
+    previous = page._event_by_id("attitude-1")
+    current = page._event_by_id("attitude-2")
+    assert previous is not None
+    assert current is not None
+    assert float(previous["end_min"]) == 15.0
+    assert float(current["start_min"]) == 15.0
+
+
+def test_attitude_start_change_conflicts_when_previous_segment_locked() -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    page = FlightProgramPage(I18nManager("zh"), ProjectWorkspace())
+    page._program = normalize_flight_program_payload(
+        {
+            "events": [
+                {
+                    "id": "attitude-1",
+                    "name": "前一姿态",
+                    "kind": "attitude",
+                    "mode": "SPM",
+                    "start_min": 0.0,
+                    "end_min": 20.0,
+                    "locked": True,
+                },
+                {
+                    "id": "attitude-2",
+                    "name": "当前姿态",
+                    "kind": "attitude",
+                    "mode": "EPM",
+                    "start_min": 20.0,
+                    "end_min": 40.0,
+                },
+            ]
+        }
+    )
+    page._refresh_event_table()
+
+    start_item = page._event_table.item(1, 4)
+    start_item.setText("15.0")
+
+    previous = page._event_by_id("attitude-1")
+    current = page._event_by_id("attitude-2")
+    assert previous is not None
+    assert current is not None
+    assert float(previous["end_min"]) == 20.0
+    assert float(current["start_min"]) == 20.0
+    assert "前一个姿态段已锁定" in page._status_label.text()
+
+
+def test_attitude_start_change_conflicts_when_earlier_than_previous_start() -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    page = FlightProgramPage(I18nManager("zh"), ProjectWorkspace())
+    page._program = normalize_flight_program_payload(
+        {
+            "events": [
+                {
+                    "id": "attitude-1",
+                    "name": "前一姿态",
+                    "kind": "attitude",
+                    "mode": "SPM",
+                    "start_min": 10.0,
+                    "end_min": 20.0,
+                },
+                {
+                    "id": "attitude-2",
+                    "name": "当前姿态",
+                    "kind": "attitude",
+                    "mode": "EPM",
+                    "start_min": 20.0,
+                    "end_min": 40.0,
+                },
+            ]
+        }
+    )
+    page._refresh_event_table()
+
+    start_item = page._event_table.item(1, 4)
+    start_item.setText("5.0")
+
+    previous = page._event_by_id("attitude-1")
+    current = page._event_by_id("attitude-2")
+    assert previous is not None
+    assert current is not None
+    assert float(previous["end_min"]) == 20.0
+    assert float(current["start_min"]) == 20.0
+    assert "不能早于前一个姿态段的开始时间" in page._status_label.text()
 
 
 def test_timeline_duration_ignores_unreadable_orbit_history(monkeypatch) -> None:
@@ -312,16 +685,27 @@ def test_orbit_view_draws_earth_and_sun_direction_vectors(monkeypatch) -> None:
     calls: dict[str, object] = {}
 
     class FakeSceneView:
-        def set_trajectory_overlays(self, trajectory, body_radius_km, *, maneuver_segments_km=None, start_label=None):
+        def set_trajectory_overlays(
+            self,
+            trajectory,
+            body_radius_km,
+            *,
+            maneuver_segments_km=None,
+            start_label=None,
+            earth_rotation_rad=0.0,
+            subsatellite_position_km=None,
+        ):
             calls["trajectory"] = trajectory
             calls["body_radius_km"] = body_radius_km
+            calls["earth_rotation_rad"] = earth_rotation_rad
+            calls["subsatellite_position_km"] = None if subsatellite_position_km is None else subsatellite_position_km.tolist()
 
         def set_direction_vectors(self, origin_km, vectors):
             calls["origin_km"] = origin_km.tolist()
             calls["vectors"] = vectors
 
-        def set_info_overlay(self, text):
-            calls["overlay"] = text
+        def set_info_overlays(self, overlays):
+            calls["overlays"] = overlays
 
         def clear_trajectory(self):
             calls["cleared"] = True
@@ -335,7 +719,9 @@ def test_orbit_view_draws_earth_and_sun_direction_vectors(monkeypatch) -> None:
     assert [item["label"] for item in vectors] == ["Earth", "Sun"]
     assert vectors[0]["direction"].tolist() == [0.0, -2.0, 0.0]
     assert vectors[1]["direction"].tolist() == [1.0, 0.0, 0.0]
-    assert "当前时间（北京）" in calls["overlay"]
+    assert calls["earth_rotation_rad"] == 0.0
+    assert calls["subsatellite_position_km"] == [EARTH_RADIUS_KM, 0.0, 0.0]
+    assert "当前时间（北京）" in calls["overlays"]["bottom_left"]
 
 
 def test_sample_overlay_shows_beijing_time_subpoint_attitude_and_tracking_event() -> None:
@@ -368,12 +754,86 @@ def test_sample_overlay_shows_beijing_time_subpoint_attitude_and_tracking_event(
         in_shadow=False,
     )
 
-    text = page._sample_overlay_text(sample)
+    overlays = page._sample_overlay_sections(sample)
 
-    assert "当前时间（北京）：2026-05-15 08:10:00" in text
-    assert "星下点：经度 109.123° / 纬度 18.568°" in text
-    assert "卫星姿态：EPM / 测控姿态" in text
-    assert "主要测控事件：当前 地面站可见：地面站 Sanya" in text
+    assert "当前时间（北京）：2026-05-15 08:10:00" in overlays["bottom_left"]
+    assert "星下点：经度 109.123° / 纬度 18.568°" in overlays["bottom_right"]
+    assert "卫星姿态：EPM / 测控姿态" in overlays["top_right"]
+    assert "主要测控事件：当前 地面站可见：地面站 Sanya" in overlays["top_left"]
+
+
+def test_orbit_view_applies_earth_rotation_from_sample_time(monkeypatch) -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    page = FlightProgramPage(I18nManager("zh"), ProjectWorkspace())
+    monkeypatch.setattr("smart.ui.widgets.flight_program_page._gmst_rad", lambda _epoch: 1.25)
+    page._tracking_results = {"leading": _tracking_result()}
+    sample = FlightProgramSample(
+        elapsed_min=10.0,
+        mode="SPM",
+        event_name="",
+        position_m=(0.0, 2000.0, 0.0),
+        velocity_mps=(-1.0, 0.0, 0.0),
+        subsatellite_longitude_deg=0.0,
+        subsatellite_latitude_deg=0.0,
+        altitude_m=0.0,
+        plus_z_ecef=(0.0, 0.0, 1.0),
+        sun_ecef=(1.0, 0.0, 0.0),
+        earth_ecef=(0.0, -1.0, 0.0),
+        in_shadow=False,
+    )
+
+    assert page._earth_rotation_rad_for_sample(sample.elapsed_min) == 1.25
+
+
+def test_subsatellite_position_rotates_with_earth(monkeypatch) -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    page = FlightProgramPage(I18nManager("zh"), ProjectWorkspace())
+    monkeypatch.setattr("smart.ui.widgets.flight_program_page._gmst_rad", lambda _epoch: np.pi / 2.0)
+    page._tracking_results = {"leading": _tracking_result()}
+    sample = FlightProgramSample(
+        elapsed_min=10.0,
+        mode="SPM",
+        event_name="",
+        position_m=(0.0, 2000.0, 0.0),
+        velocity_mps=(-1.0, 0.0, 0.0),
+        subsatellite_longitude_deg=0.0,
+        subsatellite_latitude_deg=0.0,
+        altitude_m=0.0,
+        plus_z_ecef=(0.0, 0.0, 1.0),
+        sun_ecef=(1.0, 0.0, 0.0),
+        earth_ecef=(0.0, -1.0, 0.0),
+        in_shadow=False,
+    )
+
+    position = page._subsatellite_position_km_for_sample(sample)
+
+    assert np.isclose(position[0], 0.0)
+    assert np.isclose(position[1], EARTH_RADIUS_KM)
+    assert np.isclose(position[2], 0.0)
+
+
+def test_earth_rotation_uses_orbit_history_reference_epoch(monkeypatch) -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    page = FlightProgramPage(I18nManager("zh"), ProjectWorkspace())
+    page._tracking_results = {"leading": _tracking_result()}
+    monkeypatch.setattr(page, "_orbit_history_rows", lambda: [{"elapsed_time_min": 0.0}])
+    page._orbit_history_cache_key = ("orbit.csv", 1, 1)
+    monkeypatch.setattr("smart.ui.widgets.flight_program_page.derive_scenario_epoch_utc", lambda _rows: "2024-01-01T00:00:00Z")
+    captured = {}
+
+    def fake_gmst(epoch):
+        captured["epoch"] = epoch
+        return 0.75
+
+    monkeypatch.setattr("smart.ui.widgets.flight_program_page._gmst_rad", fake_gmst)
+
+    value = page._earth_rotation_rad_for_sample(10.0)
+
+    assert value == 0.75
+    assert captured["epoch"] == parse_utc("2024-01-01T00:10:00Z")
 
 
 def _tracking_result() -> TrackingArcOrbitResult:

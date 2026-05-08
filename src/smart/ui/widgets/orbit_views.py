@@ -15,6 +15,8 @@ except Exception:  # pragma: no cover - depends on local OpenGL runtime
     gl = None
 
 _EARTH_TEXTURE_PATH = Path(__file__).resolve().parents[2] / "assets" / "textures" / "earth_day_2048.png"
+_EARTH_MESH_ROWS = 180
+_EARTH_MESH_COLS = 360
 _PLOT_BACKGROUND = "#071016"
 _PLOT_AXIS = "#9fb5bf"
 _PLOT_GRID = "#244958"
@@ -72,7 +74,7 @@ def _load_texture_rgba(texture_path: Path) -> np.ndarray | None:
     return raw.reshape((height, bytes_per_line))[:, : width * 4].reshape((height, width, 4))
 
 
-def _build_earth_mesh(rows: int = 72, cols: int = 144) -> tuple[object, bool]:
+def _build_earth_mesh(rows: int = _EARTH_MESH_ROWS, cols: int = _EARTH_MESH_COLS) -> tuple[object, bool]:
     assert gl is not None
     mesh = gl.MeshData.sphere(rows=rows, cols=cols, radius=1.0)
     texture = _load_texture_rgba(_EARTH_TEXTURE_PATH)
@@ -158,6 +160,7 @@ class OrbitPlot3D(QtWidgets.QWidget):
         self._marker_color = (0.95, 0.72, 0.29, 1.0)
         self._maneuver_color = (1.0, 0.05, 0.02, 1.0)
         self._start_marker_color = (0.58, 1.0, 0.16, 1.0)
+        self._subsatellite_marker_color = (1.0, 0.16, 0.16, 1.0)
         self._orbit_width = 2.2
         self._maneuver_lines: list[object] = []
         self._direction_lines: list[object] = []
@@ -165,21 +168,29 @@ class OrbitPlot3D(QtWidgets.QWidget):
         self._direction_labels: list[object] = []
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        self._info_overlay = QtWidgets.QLabel(self)
-        self._info_overlay.setWordWrap(True)
-        self._info_overlay.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignTop)
-        self._info_overlay.setStyleSheet(
-            "QLabel {"
-            "background: rgba(3, 8, 16, 188);"
-            "border: 1px solid rgba(102, 217, 234, 140);"
-            "border-radius: 8px;"
-            "color: #dff6ff;"
-            "font-family: 'Noto Sans SC', 'Segoe UI';"
-            "font-size: 12px;"
-            "padding: 8px 10px;"
-            "}"
-        )
-        self._info_overlay.hide()
+        self._info_overlays: dict[str, QtWidgets.QLabel] = {}
+        for name, alignment in (
+            ("top_left", QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignTop),
+            ("top_right", QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignTop),
+            ("bottom_left", QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignBottom),
+            ("bottom_right", QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignBottom),
+        ):
+            label = QtWidgets.QLabel(self)
+            label.setWordWrap(True)
+            label.setAlignment(alignment)
+            label.setStyleSheet(
+                "QLabel {"
+                "background: rgba(3, 8, 16, 88);"
+                "border: none;"
+                "border-radius: 8px;"
+                "color: #dff6ff;"
+                "font-family: 'Noto Sans SC', 'Segoe UI';"
+                "font-size: 12px;"
+                "padding: 6px 10px;"
+                "}"
+            )
+            label.hide()
+            self._info_overlays[name] = label
 
         if gl is None:
             message = QtWidgets.QLabel(
@@ -193,6 +204,7 @@ class OrbitPlot3D(QtWidgets.QWidget):
             self._line = None
             self._marker = None
             self._start_marker = None
+            self._subsatellite_marker = None
             self._start_label = None
             self._body = None
             return
@@ -249,6 +261,15 @@ class OrbitPlot3D(QtWidgets.QWidget):
         self._start_marker.setVisible(False)
         self._view.addItem(self._start_marker)
 
+        self._subsatellite_marker = gl.GLScatterPlotItem(
+            pos=np.zeros((1, 3), dtype=float),
+            color=self._subsatellite_marker_color,
+            size=10.0,
+            pxMode=True,
+        )
+        self._subsatellite_marker.setVisible(False)
+        self._view.addItem(self._subsatellite_marker)
+
         self._start_label = None
         if hasattr(gl, "GLTextItem"):
             font = QtGui.QFont("Noto Sans SC", 12)
@@ -264,23 +285,38 @@ class OrbitPlot3D(QtWidgets.QWidget):
 
     def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
         super().resizeEvent(event)
-        self._position_info_overlay()
+        self._position_info_overlays()
 
     def set_info_overlay(self, text: str) -> None:
         clean_text = text.strip()
-        self._info_overlay.setText(clean_text)
-        self._info_overlay.setVisible(bool(clean_text))
-        self._position_info_overlay()
+        self.set_info_overlays({"top_left": clean_text} if clean_text else {})
 
-    def _position_info_overlay(self) -> None:
-        if not self._info_overlay.text().strip():
-            return
+    def set_info_overlays(self, overlays: dict[str, str]) -> None:
+        cleaned = {
+            key: str(value).strip()
+            for key, value in overlays.items()
+            if key in self._info_overlays and str(value).strip()
+        }
+        for key, label in self._info_overlays.items():
+            text = cleaned.get(key, "")
+            label.setText(text)
+            label.setVisible(bool(text))
+        self._position_info_overlays()
+
+    def _position_info_overlays(self) -> None:
         margin = 12
-        width = min(max(self.width() - margin * 2, 180), 360)
-        self._info_overlay.setFixedWidth(width)
-        self._info_overlay.adjustSize()
-        self._info_overlay.move(margin, margin)
-        self._info_overlay.raise_()
+        if self.width() <= margin * 2 or self.height() <= margin * 2:
+            return
+        width = min(max((self.width() - margin * 3) // 2, 180), 320)
+        for name, label in self._info_overlays.items():
+            if not label.isVisible() or not label.text().strip():
+                continue
+            label.setFixedWidth(width)
+            label.adjustSize()
+            x = margin if "left" in name else self.width() - margin - label.width()
+            y = margin if "top" in name else self.height() - margin - label.height()
+            label.move(max(margin, x), max(margin, y))
+            label.raise_()
 
     def set_visual_style(
         self,
@@ -308,6 +344,7 @@ class OrbitPlot3D(QtWidgets.QWidget):
             body_radius_km,
             maneuver_segments_km=None,
             start_label=None,
+            earth_rotation_rad=0.0,
         )
 
     def clear_trajectory(self) -> None:
@@ -317,11 +354,13 @@ class OrbitPlot3D(QtWidgets.QWidget):
         assert self._line is not None
         assert self._marker is not None
         assert self._start_marker is not None
+        assert self._subsatellite_marker is not None
         assert self._body is not None
 
         self._line.setVisible(False)
         self._marker.setVisible(False)
         self._start_marker.setVisible(False)
+        self._subsatellite_marker.setVisible(False)
         self._body.setVisible(False)
         if self._start_label is not None:
             self._start_label.setVisible(False)
@@ -335,6 +374,8 @@ class OrbitPlot3D(QtWidgets.QWidget):
         *,
         maneuver_segments_km: Sequence[np.ndarray] | None = None,
         start_label: str | None = None,
+        earth_rotation_rad: float = 0.0,
+        subsatellite_position_km: np.ndarray | Sequence[float] | None = None,
     ) -> None:
         if self._view is None:
             return
@@ -342,6 +383,7 @@ class OrbitPlot3D(QtWidgets.QWidget):
         assert self._line is not None
         assert self._marker is not None
         assert self._start_marker is not None
+        assert self._subsatellite_marker is not None
         assert self._body is not None
 
         self._line.setVisible(True)
@@ -349,6 +391,7 @@ class OrbitPlot3D(QtWidgets.QWidget):
         self._body.setVisible(True)
         self._body.resetTransform()
         self._body.scale(body_radius_km, body_radius_km, body_radius_km)
+        self._body.rotate(float(np.degrees(earth_rotation_rad)), 0.0, 0.0, 1.0, local=False)
         self._line.setData(
             pos=trajectory.positions_km.astype(float),
             color=self._orbit_color,
@@ -358,6 +401,14 @@ class OrbitPlot3D(QtWidgets.QWidget):
             pos=trajectory.current_position_km.reshape(1, 3).astype(float),
             color=self._marker_color,
         )
+        if subsatellite_position_km is None:
+            self._subsatellite_marker.setVisible(False)
+        else:
+            self._subsatellite_marker.setVisible(True)
+            self._subsatellite_marker.setData(
+                pos=np.asarray(subsatellite_position_km, dtype=float).reshape(1, 3),
+                color=self._subsatellite_marker_color,
+            )
         self._set_start_marker(trajectory.positions_km[0], start_label)
         self._set_maneuver_segments(maneuver_segments_km)
 
