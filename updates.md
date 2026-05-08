@@ -65,3 +65,11 @@
 ## 2026-05-08T16:57:29+08:00 | feat(flight_program): 甘特图支持滚轮缩放、中键平移与底部滚动条拖动
 - 提交：`6be4b08`
 - 影响文件：`src/smart/ui/widgets/flight_program_page.py`、`tests/test_flight_program_page.py`、`.vscode/launch.json`、`projects/F4/smart_project.json`。
+
+## 2026-05-08T16:58:42+08:00 | Finalize updates log for 6be4b08
+- 提交：`ee0a6ee`
+- 影响文件：自动刷新记录，无额外文件。
+
+## 2026-05-08T19:33:19+08:00 | feat: 侧边栏图标+折叠、AI 报告 PDF 导出、Cesium 诊断自动化、launch_window 性能优化
+- 提交：`bcc3195`
+- 影响文件：`src/smart/cesium_diagnostics_cli.py`、`src/smart/services/launch_window.py`、`src/smart/services/pdf_report_export.py`、`src/smart/ui/i18n.py`、`src/smart/ui/main_window.py`、`src/smart/ui/nav_icons.py`、`src/smart/ui/theme.py`、`src/smart/ui/widgets/ai_project_analysis_page.py` 等 21 个文件。
