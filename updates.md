@@ -73,3 +73,11 @@
 ## 2026-05-08T19:33:19+08:00 | feat: 侧边栏图标+折叠、AI 报告 PDF 导出、Cesium 诊断自动化、launch_window 性能优化
 - 提交：`bcc3195`
 - 影响文件：`src/smart/cesium_diagnostics_cli.py`、`src/smart/services/launch_window.py`、`src/smart/services/pdf_report_export.py`、`src/smart/ui/i18n.py`、`src/smart/ui/main_window.py`、`src/smart/ui/nav_icons.py`、`src/smart/ui/theme.py`、`src/smart/ui/widgets/ai_project_analysis_page.py` 等 21 个文件。
+
+## 2026-05-08T19:33:46+08:00 | Finalize updates log for bcc3195
+- 提交：`19f4893`
+- 影响文件：自动刷新记录，无额外文件。
+
+## 2026-05-08T19:49:41+08:00 | refactor + visual: 拆分大型页面文件并升级视觉主题
+- 提交：`2328243`
+- 影响文件：`src/smart/ui/theme.py`、`src/smart/ui/widgets/flight_program_overview.py`、`src/smart/ui/widgets/flight_program_page.py`、`src/smart/ui/widgets/launch_window_gantt.py`、`src/smart/ui/widgets/launch_window_page.py`、`src/smart/ui/widgets/maneuver_page.py`、`src/smart/ui/widgets/satellite_status_page.py`、`projects/F4/smart_project.json`。
