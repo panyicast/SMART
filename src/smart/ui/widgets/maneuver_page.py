@@ -177,9 +177,19 @@ class ManeuverPage(QtWidgets.QWidget):
         root.setContentsMargins(24, 24, 24, 24)
         root.setSpacing(18)
 
+        eyebrow = QtWidgets.QLabel("SMART · MANEUVER STRATEGY")
+        eyebrow.setProperty("role", "pageEyebrow")
+        root.addWidget(eyebrow)
+
         self._title_label = QtWidgets.QLabel()
         self._title_label.setProperty("role", "pageTitle")
         root.addWidget(self._title_label)
+
+        accent_rule = QtWidgets.QFrame()
+        accent_rule.setProperty("role", "accentRule")
+        accent_rule.setFixedHeight(2)
+        accent_rule.setMaximumWidth(220)
+        root.addWidget(accent_rule)
 
         self._subtitle_label = QtWidgets.QLabel()
         self._subtitle_label.setProperty("role", "pageBody")

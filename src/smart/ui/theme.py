@@ -123,10 +123,19 @@ QLabel[role="pageTitle"] {
     color: #edf8fb;
     font-size: 24pt;
     font-weight: 700;
+    letter-spacing: 0.4px;
 }
 QLabel[role="pageBody"] {
     color: #9fb5bf;
     font-size: 10.5pt;
+    line-height: 150%;
+}
+QLabel[role="pageEyebrow"] {
+    color: #6cd4e6;
+    font-size: 9pt;
+    font-weight: 700;
+    letter-spacing: 1.6px;
+    text-transform: uppercase;
 }
 QLabel[role="sectionTitle"] {
     color: #e5f4f8;
@@ -140,7 +149,7 @@ QLabel[role="eyebrow"] {
     letter-spacing: 1px;
 }
 QFrame[role="card"] {
-    background: #0c1b24;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #0e2030, stop:1 #0a1820);
     border: 1px solid #1e3b49;
     border-radius: 18px;
 }
@@ -162,14 +171,24 @@ QFrame[role="sceneToolbar"] QPushButton:checked {
     border: 1px solid #4bb6c8;
 }
 QFrame[role="dashboardHero"] {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #0d2430, stop:0.52 #0b1b24, stop:1 #112f35);
-    border: 1px solid #255160;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #0e2a38, stop:0.45 #0b1c25, stop:1 #143841);
+    border: 1px solid #2a5d6e;
     border-radius: 24px;
 }
 QFrame[role="metricTile"] {
-    background: #0b1a22;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #0d2231, stop:1 #0a1822);
     border: 1px solid #1b3a47;
+    border-top: 1px solid #3fa8bc;
     border-radius: 18px;
+}
+QFrame[role="metricTile"]:hover {
+    border: 1px solid #2e6374;
+    border-top: 1px solid #5dc4d8;
+}
+QFrame[role="sectionPanel"] {
+    background: rgba(11, 26, 34, 0.7);
+    border: 1px solid #1e3b49;
+    border-radius: 14px;
 }
 QFrame[role="glassPanel"] {
     background: rgba(12, 27, 36, 0.88);
@@ -195,7 +214,7 @@ QLabel[role="metricCaption"] {
     font-size: 9.5pt;
 }
 QPushButton {
-    background: #1c6d7b;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #1f7a8a, stop:1 #195e6c);
     color: #f4fcff;
     border: none;
     border-radius: 11px;
@@ -203,10 +222,14 @@ QPushButton {
     font-weight: 700;
 }
 QPushButton:hover {
-    background: #248799;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #2a9aae, stop:1 #1f7a8a);
 }
 QPushButton:pressed {
     background: #155a66;
+}
+QPushButton:disabled {
+    background: #182a32;
+    color: #5b7079;
 }
 QPushButton[variant="secondary"] {
     background: #132733;
@@ -216,6 +239,31 @@ QPushButton[variant="secondary"] {
 QPushButton[variant="secondary"]:hover {
     background: #173343;
     border: 1px solid #347084;
+}
+QLabel[role="kpiChip"] {
+    background: rgba(63, 168, 188, 0.12);
+    color: #7ff1ff;
+    border: 1px solid #2e6374;
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 9.5pt;
+    font-weight: 700;
+}
+QLabel[role="tagChip"] {
+    background: rgba(120, 147, 158, 0.14);
+    color: #b8c9d2;
+    border: 1px solid #244958;
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 9pt;
+    font-weight: 600;
+}
+QFrame[role="accentRule"] {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #3fa8bc, stop:1 rgba(63, 168, 188, 0));
+    min-height: 2px;
+    max-height: 2px;
+    border: none;
+    border-radius: 1px;
 }
 QDoubleSpinBox,
 QSpinBox,
