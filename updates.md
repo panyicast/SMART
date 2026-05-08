@@ -50,6 +50,10 @@
 - 提交：`53008d2`
 - 影响文件：自动刷新记录，无额外文件。
 
-## 2026-05-08T16:21:32+08:00 | Release v0.1
-- 提交：`待写入本次提交`
+## 2026-05-08T16:21:31+08:00 | Release v0.1
+- 提交：`7deb57b`
 - 影响文件：`src/smart/services/flight_program.py`、`src/smart/services/tracking_arc.py`、`src/smart/ui/widgets/flight_program_page.py`、`src/smart/ui/widgets/launch_window_page.py`、`src/smart/ui/widgets/orbit_views.py`、`src/smart/ui/widgets/table_editing.py`、`src/smart/ui/widgets/tracking_arc_page.py`、`tests/test_flight_program.py` 等 14 个文件。
+
+## 2026-05-08T16:22:06+08:00 | Update changelog for v0.1
+- 提交：`bce002e`
+- 影响文件：自动刷新记录，无额外文件。
