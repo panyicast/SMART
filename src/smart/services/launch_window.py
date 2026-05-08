@@ -732,6 +732,9 @@ def _build_timeline(
         reference_thrust_plus_z_ecef,
         reference_thrust_attitude_mask,
     )
+    attitude_active_mask, attitude_thrust_eci = _precompute_attitude_thrust(
+        elapsed_min, phases, inertial_states, maneuvers or []
+    )
 
     return {
         "elapsed_min": elapsed_min,
@@ -752,6 +755,8 @@ def _build_timeline(
         "relay_beta_deg": relay_beta_deg,
         "thrust_plus_z_ecef": thrust_plus_z_ecef,
         "thrust_attitude_mask": thrust_attitude_mask,
+        "attitude_active_mask": attitude_active_mask,
+        "attitude_thrust_eci": attitude_thrust_eci,
     }
 
 
@@ -1130,6 +1135,11 @@ def _merge_pass_samples(samples: list[dict[str, Any]], config: LaunchWindowConfi
     windows: list[LaunchWindowResult] = []
     step_min = max(config.sample_step_min, 1.0)
 
+    # 把所有 launch_utc 一次性解析，避免内层循环重复解析造成 O(N²) 行为。
+    parsed_launch_utc: list[datetime] = [
+        parse_utc(str(sample["launch_utc"])) for sample in samples
+    ]
+
     def failure_label(sample: dict[str, Any] | None) -> str:
         if sample is None or bool(sample.get("ok")):
             return ""
@@ -1141,14 +1151,15 @@ def _merge_pass_samples(samples: list[dict[str, Any]], config: LaunchWindowConfi
         return float(sample.get("longest_shadow_min", sample.get("first_orbit_shadow_min", 0.0)))
 
     def append_window(
-        active: list[dict[str, Any]],
+        active_indices: list[int],
         *,
         leading_constraint: str,
         trailing_sample: dict[str, Any] | None,
         trailing_constraint: str,
     ) -> None:
-        start = parse_utc(str(active[0]["launch_utc"]))
-        end = parse_utc(str(active[-1]["launch_utc"])) + timedelta(minutes=step_min)
+        active = [samples[i] for i in active_indices]
+        start = parsed_launch_utc[active_indices[0]]
+        end = parsed_launch_utc[active_indices[-1]] + timedelta(minutes=step_min)
         duration = (end - start).total_seconds() / 60.0
         windows.append(
             LaunchWindowResult(
@@ -1176,21 +1187,21 @@ def _merge_pass_samples(samples: list[dict[str, Any]], config: LaunchWindowConfi
             continue
 
         start_index = index
-        active = [samples[index]]
+        active_indices = [index]
         index += 1
         while index < len(samples):
-            previous_time = parse_utc(str(active[-1]["launch_utc"]))
-            sample_time = parse_utc(str(samples[index]["launch_utc"]))
+            previous_time = parsed_launch_utc[active_indices[-1]]
+            sample_time = parsed_launch_utc[index]
             contiguous = abs((sample_time - previous_time).total_seconds() / 60.0 - step_min) < 1e-6
             if not samples[index]["ok"] or not contiguous:
                 break
-            active.append(samples[index])
+            active_indices.append(index)
             index += 1
 
         leading_sample = samples[start_index - 1] if start_index > 0 else None
         trailing_sample = samples[index] if index < len(samples) else None
         append_window(
-            active,
+            active_indices,
             leading_constraint=failure_label(leading_sample),
             trailing_sample=trailing_sample,
             trailing_constraint=failure_label(trailing_sample),
@@ -1331,29 +1342,100 @@ def _body_plus_z_ecef_for_attitude(
     maneuvers: list[ManeuverInterval],
     sun_vectors_ecef: np.ndarray,
 ) -> np.ndarray:
-    elapsed_min: np.ndarray = timeline["elapsed_min"]
-    phases: list[str] = timeline["phases"]
-    inertial_states: np.ndarray = timeline["inertial_states"]
     plus_z = -sun_vectors_ecef.copy()
     reference_plus_z: np.ndarray | None = timeline.get("thrust_plus_z_ecef")
     reference_mask: np.ndarray | None = timeline.get("thrust_attitude_mask")
     if reference_plus_z is not None and reference_mask is not None and bool(reference_mask.any()):
         plus_z[reference_mask] = reference_plus_z[reference_mask]
         return _normalize(plus_z)
-    for index, (minute, phase) in enumerate(zip(elapsed_min, phases, strict=True)):
-        maneuver = _maneuver_for_time(float(minute), maneuvers)
-        if phase not in {"settle", "orbit_control"} and maneuver is None:
-            continue
-        if maneuver is None:
-            maneuver = ManeuverInterval(float(minute), float(minute), 0.0, 1)
-        direction_eci = _thrust_direction_for_state(
-            inertial_states[index],
-            maneuver.delta_deg,
-            maneuver.dv_direction,
-        )
-        epoch = t0_utc + timedelta(minutes=float(minute))
-        plus_z[index] = _eci_direction_to_ecef(direction_eci, epoch)
+
+    active_mask: np.ndarray | None = timeline.get("attitude_active_mask")
+    if active_mask is None or not bool(active_mask.any()):
+        # 无变轨/姿态需求 → 默认即指向反阳方向。
+        return _normalize(plus_z)
+
+    elapsed_min: np.ndarray = timeline["elapsed_min"]
+    thrust_eci: np.ndarray = timeline["attitude_thrust_eci"]
+    eci_active = thrust_eci[active_mask]
+    minutes_active = elapsed_min[active_mask]
+    gmst_active = _gmst_rad_array(t0_utc, minutes_active)
+    cos_g = np.cos(gmst_active)
+    sin_g = np.sin(gmst_active)
+    x = eci_active[:, 0]
+    y = eci_active[:, 1]
+    z = eci_active[:, 2]
+    plus_z[active_mask] = np.column_stack(
+        (cos_g * x + sin_g * y, -sin_g * x + cos_g * y, z)
+    )
     return _normalize(plus_z)
+
+
+def _precompute_attitude_thrust(
+    elapsed_min: np.ndarray,
+    phases: list[str],
+    inertial_states: np.ndarray,
+    maneuvers: list[ManeuverInterval],
+) -> tuple[np.ndarray, np.ndarray]:
+    """在 timeline 构建阶段一次性算出每个采样点的姿态推力方向（ECI）。
+
+    返回 ``(active_mask, thrust_eci)``，其中 ``thrust_eci`` 仅在 ``active_mask``
+    位置上有效；非激活位置由 ``_body_plus_z_ecef_for_attitude`` 的反阳默认值
+    填充。
+    """
+
+    n = int(elapsed_min.size)
+    active = np.zeros(n, dtype=bool)
+    thrust_eci = np.zeros((n, 3), dtype=np.float64)
+    if n == 0:
+        return active, thrust_eci
+
+    # 阶段过滤：与原 _maneuver_for_time + 阶段判定保持完全一致语义。
+    phase_array = np.asarray(phases, dtype=object)
+    needs_attitude_phase = np.isin(phase_array, np.asarray(["settle", "orbit_control"]))
+
+    # 把 maneuver 列表向量化成区间映射；保留首匹配语义。
+    maneuver_idx = np.full(n, -1, dtype=np.int64)
+    for j, maneuver in enumerate(maneuvers):
+        in_range = (elapsed_min >= maneuver.start_min - 1e-9) & (
+            elapsed_min <= maneuver.end_min + 1e-9
+        )
+        new_assignments = in_range & (maneuver_idx == -1)
+        maneuver_idx[new_assignments] = j
+
+    has_maneuver = maneuver_idx >= 0
+    active = needs_attitude_phase | has_maneuver
+    if not bool(active.any()):
+        return active, thrust_eci
+
+    for index in np.flatnonzero(active):
+        midx = int(maneuver_idx[index])
+        if midx >= 0:
+            maneuver = maneuvers[midx]
+            delta_deg = maneuver.delta_deg
+            dv_direction = maneuver.dv_direction
+        else:
+            delta_deg = 0.0
+            dv_direction = 1
+        thrust_eci[index] = _thrust_direction_for_state(
+            inertial_states[index],
+            delta_deg,
+            dv_direction,
+        )
+    return active, thrust_eci
+
+
+def _gmst_rad_array(t0_utc: datetime, elapsed_min: np.ndarray) -> np.ndarray:
+    """向量化版 GMST：与 ``_gmst_rad`` 数学公式严格一致，但接受 elapsed_min 数组。"""
+
+    jd = _julian_date(t0_utc) + elapsed_min / 1440.0
+    t = (jd - 2451545.0) / 36525.0
+    gmst_deg = (
+        280.46061837
+        + 360.98564736629 * (jd - 2451545.0)
+        + 0.000387933 * t * t
+        - (t * t * t) / 38710000.0
+    )
+    return np.deg2rad(np.mod(gmst_deg, 360.0))
 
 
 def _maneuver_for_time(minute: float, maneuvers: list[ManeuverInterval]) -> ManeuverInterval | None:

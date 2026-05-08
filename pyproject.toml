@@ -17,16 +17,21 @@ dependencies = [
   "pycollada>=0.9,<1",
   "spiceypy>=8.1,<9",
   "pythonnet>=3.0,<4; platform_system == 'Windows'",
+  "reportlab>=4.0,<5",
 ]
 
 [project.optional-dependencies]
 dev = [
   "pytest>=8.3,<9",
 ]
+diagnostics = [
+  "playwright>=1.50,<2",
+]
 
 [project.scripts]
 smart = "smart.main:main"
 smart-webengine-diagnostics = "smart.webengine_diagnostics:main"
+smart-cesium-diagnostics = "smart.cesium_diagnostics_cli:main"
 
 [tool.setuptools.package-dir]
 "" = "src"

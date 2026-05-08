@@ -21,6 +21,10 @@ tmp_*.png
 tmp_*.e
 *_Mnvr_*.e
 
+# Playwright / Cesium diagnostics output
+output/
+data/smoke_ai_report.pdf
+
 # Local planning workflow artifacts
 .planning/
 /task_plan.md

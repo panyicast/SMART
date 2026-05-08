@@ -29,6 +29,39 @@
 4. 启动 SMART，先打开左侧 `3D 场景测试` 页面。
 5. 只有当 `3D 场景测试` 页面正常而 Dashboard 不正常时，才继续排查 Dashboard 的布局嵌入问题。
 
+## 自动化冒烟（不依赖 Qt WebEngine）
+
+当不确定问题是 Qt 集成层还是页面 / Cesium 资源本身时，可先用无头 Chromium
+直接打开仓库中的诊断 HTML，把 Qt 这一层从因果链中剔除：
+
+```powershell
+# 安装可选诊断依赖（首次执行时需要）
+.\.venv\Scripts\python.exe -m pip install "playwright>=1.50,<2"
+.\.venv\Scripts\python.exe -m playwright install chromium
+
+# 跑一遍 webgl_probe + cesium_probe
+.\.venv\Scripts\python.exe scripts\cesium_diagnostics.py
+
+# 加上 mission_view，并以可见模式打开浏览器
+.\.venv\Scripts\python.exe scripts\cesium_diagnostics.py --include-mission --headed
+```
+
+输出位于 `output/playwright/`：
+
+- `webgl_probe.png` / `cesium_probe.png` 等截图
+- `report.json` 含每个页面的状态、耗时、控制台告警与错误列表
+
+**判读规则：**
+
+- 两个探针都 `PASS` → 资源 / Cesium / WebGL 链路 OK，问题大概率在 Qt WebEngine
+  集成层（CSP、frame、graphics backend、scene 时序），按 `AGENTS.md`
+  *Cesium / Qt WebEngine Pitfalls* 顺序排查。
+- 探针 `FAIL` → 问题在本地资源（Cesium 包、HTML、CSP 自身）。检查
+  `src/smart/assets/cesium/vendor/Build/Cesium` 是否完整，必要时执行
+  `.\scripts\vendor-cesium.ps1` 重新拉取。
+
+也提供了一个 console script：装包后可直接 `smart-cesium-diagnostics`。
+
 ## 现象与根因对照
 
 ### 现象 1

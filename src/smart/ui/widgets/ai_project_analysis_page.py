@@ -26,12 +26,14 @@ from smart.services.mission_agent import (
 from smart.services.mission_agent_tools import MissionAgentToolExecutor
 from smart.services.project_ai_context import build_project_analysis_context, build_project_analysis_prompt
 from smart.services.project_workspace import ProjectWorkspace
+from smart.services.pdf_report_export import export_pdf_report
 from smart.services.report_export import export_docx_report, export_markdown_report
 from smart.ui.i18n import I18nManager
 
 
 REPORT_FILENAME = "ai_project_analysis.md"
 DOCX_REPORT_FILENAME = "ai_project_analysis.docx"
+PDF_REPORT_FILENAME = "ai_project_analysis.pdf"
 
 
 class _ProjectAnalysisWorker(QtCore.QObject):
@@ -300,8 +302,11 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
         self._export_md_button.clicked.connect(self._export_markdown_report)
         self._export_docx_button = QtWidgets.QPushButton("导出 DOCX")
         self._export_docx_button.clicked.connect(self._export_docx_report)
+        self._export_pdf_button = QtWidgets.QPushButton("导出 PDF")
+        self._export_pdf_button.clicked.connect(self._export_pdf_report)
         report_header.addWidget(self._export_md_button)
         report_header.addWidget(self._export_docx_button)
+        report_header.addWidget(self._export_pdf_button)
         report_layout.addLayout(report_header)
         self._report_view = QtWidgets.QTextBrowser()
         self._report_view.setReadOnly(True)
@@ -525,6 +530,7 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
         enabled = bool(self._current_report_markdown.strip())
         if busy is None:
             busy = self._thread is not None
+        self._export_pdf_button.setEnabled(enabled and not busy)
         self._export_md_button.setEnabled(enabled and not busy)
         self._export_docx_button.setEnabled(enabled and not busy)
 
@@ -577,6 +583,34 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
             self._set_status(f"导出 DOCX 报告失败：{exc}")
             return
         self._set_status(f"DOCX 报告已导出：{output_path}")
+
+    @QtCore.Slot()
+    def _export_pdf_report(self) -> None:
+        if not self._current_report_markdown.strip():
+            self._set_status("当前没有可导出的 AI 分析报告。")
+            return
+        default_path = self._default_export_path(PDF_REPORT_FILENAME)
+        file_path, _selected_filter = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "导出 PDF 报告",
+            str(default_path),
+            "PDF 文档 (*.pdf);;所有文件 (*)",
+        )
+        if not file_path:
+            return
+        try:
+            project = self._workspace.current_project
+            project_name = project.name if project is not None else ""
+            output_path = export_pdf_report(
+                self._current_report_markdown,
+                self._normalized_export_path(file_path, ".pdf"),
+                project_name=project_name,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.critical(self, "导出失败", f"导出 PDF 报告失败：{exc}")
+            self._set_status(f"导出 PDF 报告失败：{exc}")
+            return
+        self._set_status(f"PDF 报告已导出：{output_path}")
 
     def _default_export_path(self, filename: str) -> Path:
         if self._workspace.current_project is not None:

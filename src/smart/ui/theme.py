@@ -101,6 +101,24 @@ QListWidget[role="nav"]::item:selected {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #133847, stop:1 #0c5961);
     color: #ffffff;
 }
+QListWidget[role="nav"][collapsed="true"]::item {
+    padding: 12px 0px;
+    margin: 4px 4px;
+    text-align: center;
+}
+QToolButton[role="sidebarToggle"] {
+    background: rgba(31, 64, 79, 0.55);
+    border: 1px solid #244958;
+    border-radius: 8px;
+    padding: 2px;
+}
+QToolButton[role="sidebarToggle"]:hover {
+    background: rgba(63, 168, 188, 0.32);
+    border-color: #3fa8bc;
+}
+QToolButton[role="sidebarToggle"]:pressed {
+    background: rgba(15, 45, 56, 0.85);
+}
 QLabel[role="pageTitle"] {
     color: #edf8fb;
     font-size: 24pt;

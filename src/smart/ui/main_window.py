@@ -10,6 +10,7 @@ from smart.services.project_workspace import ProjectInfo, ProjectWorkspace
 from smart.services.spice_service import SpiceKernelManager
 from smart.ui.i18n import I18nManager
 from smart.ui.mission_state import MissionState
+from smart.ui.nav_icons import chevron_icon, nav_icon
 from smart.ui.widgets.dashboard_page import DashboardPage
 from smart.ui.widgets.data_visualization_page import DataVisualizationPage
 from smart.ui.widgets.ai_project_analysis_page import AIProjectAnalysisPage
@@ -52,6 +53,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self._settings = QtCore.QSettings("SMART", "SMART")
         self._recent_project_paths = self._load_recent_project_paths()
         self._recent_project_actions: list[QtGui.QAction] = []
+        self._sidebar_expanded_width = 280
+        self._sidebar_collapsed_width = 72
+        self._sidebar_collapsed = bool(self._settings.value("sidebar/collapsed", False, type=bool))
         self._stack = QtWidgets.QStackedWidget()
 
         shell = QtWidgets.QWidget()
@@ -155,15 +159,29 @@ class MainWindow(QtWidgets.QMainWindow):
     def _build_sidebar(self) -> QtWidgets.QWidget:
         sidebar = QtWidgets.QFrame()
         sidebar.setProperty("role", "sidebar")
-        sidebar.setFixedWidth(280)
+        self._sidebar_frame = sidebar
 
         layout = QtWidgets.QVBoxLayout(sidebar)
-        layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(18)
+        layout.setContentsMargins(20, 22, 20, 22)
+        layout.setSpacing(16)
+        self._sidebar_layout = layout
 
-        title = QtWidgets.QLabel("SMART")
-        title.setProperty("role", "brandTitle")
-        layout.addWidget(title)
+        header_row = QtWidgets.QHBoxLayout()
+        header_row.setContentsMargins(0, 0, 0, 0)
+        header_row.setSpacing(8)
+        self._brand_title_label = QtWidgets.QLabel("SMART")
+        self._brand_title_label.setProperty("role", "brandTitle")
+        header_row.addWidget(self._brand_title_label, 1)
+
+        self._sidebar_toggle_button = QtWidgets.QToolButton()
+        self._sidebar_toggle_button.setProperty("role", "sidebarToggle")
+        self._sidebar_toggle_button.setAutoRaise(True)
+        self._sidebar_toggle_button.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        self._sidebar_toggle_button.setIconSize(QtCore.QSize(20, 20))
+        self._sidebar_toggle_button.setFixedSize(32, 32)
+        self._sidebar_toggle_button.clicked.connect(self._toggle_sidebar_collapsed)
+        header_row.addWidget(self._sidebar_toggle_button, 0, QtCore.Qt.AlignmentFlag.AlignTop)
+        layout.addLayout(header_row)
 
         self._subtitle_label = QtWidgets.QLabel()
         self._subtitle_label.setProperty("role", "brandSubtitle")
@@ -187,8 +205,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self._nav_list = QtWidgets.QListWidget()
         self._nav_list.setProperty("role", "nav")
         self._nav_list.setSpacing(2)
-        for _ in _NAV_KEYS:
-            self._nav_list.addItem("")
+        self._nav_list.setIconSize(QtCore.QSize(22, 22))
+        self._nav_list.setUniformItemSizes(True)
+        for key in _NAV_KEYS:
+            item = QtWidgets.QListWidgetItem()
+            item.setIcon(nav_icon(key))
+            item.setData(QtCore.Qt.ItemDataRole.UserRole, key)
+            self._nav_list.addItem(item)
         self._nav_list.currentRowChanged.connect(self._stack.setCurrentIndex)
         layout.addWidget(self._nav_list, 1)
 
@@ -196,7 +219,76 @@ class MainWindow(QtWidgets.QMainWindow):
         self._footer_label.setProperty("role", "brandSubtitle")
         self._footer_label.setWordWrap(True)
         layout.addWidget(self._footer_label)
+
+        # Collapsible labels grouped for easy hide/show.
+        self._sidebar_collapsible_widgets: list[QtWidgets.QWidget] = [
+            self._subtitle_label,
+            self._project_header_label,
+            self._project_name_label,
+            self._project_path_label,
+            self._footer_label,
+        ]
+
+        self._apply_sidebar_collapsed(self._sidebar_collapsed, persist=False)
         return sidebar
+
+    def _toggle_sidebar_collapsed(self) -> None:
+        self._apply_sidebar_collapsed(not self._sidebar_collapsed, persist=True)
+
+    def _apply_sidebar_collapsed(self, collapsed: bool, *, persist: bool) -> None:
+        self._sidebar_collapsed = bool(collapsed)
+        target_width = self._sidebar_collapsed_width if collapsed else self._sidebar_expanded_width
+        self._sidebar_frame.setFixedWidth(target_width)
+        self._sidebar_frame.setProperty("collapsed", "true" if collapsed else "false")
+        self._nav_list.setProperty("collapsed", "true" if collapsed else "false")
+
+        if collapsed:
+            self._sidebar_layout.setContentsMargins(8, 18, 8, 18)
+            self._sidebar_layout.setSpacing(10)
+            self._brand_title_label.setVisible(False)
+        else:
+            self._sidebar_layout.setContentsMargins(20, 22, 20, 22)
+            self._sidebar_layout.setSpacing(16)
+            self._brand_title_label.setVisible(True)
+
+        for widget in self._sidebar_collapsible_widgets:
+            widget.setVisible(not collapsed)
+
+        # Force style refresh because dynamic property changed.
+        for widget in (self._sidebar_frame, self._nav_list):
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+            widget.update()
+
+        self._refresh_nav_item_labels()
+        self._refresh_sidebar_toggle_button()
+
+        if persist:
+            self._settings.setValue("sidebar/collapsed", self._sidebar_collapsed)
+
+    def _refresh_nav_item_labels(self) -> None:
+        t = self._i18n.t
+        for index, key in enumerate(_NAV_KEYS):
+            item = self._nav_list.item(index)
+            if item is None:
+                continue
+            label = t(key)
+            item.setText("" if self._sidebar_collapsed else label)
+            item.setToolTip(label)
+            item.setTextAlignment(
+                QtCore.Qt.AlignmentFlag.AlignCenter
+                if self._sidebar_collapsed
+                else QtCore.Qt.AlignmentFlag.AlignVCenter | QtCore.Qt.AlignmentFlag.AlignLeft
+            )
+
+    def _refresh_sidebar_toggle_button(self) -> None:
+        t = self._i18n.t
+        if self._sidebar_collapsed:
+            self._sidebar_toggle_button.setIcon(chevron_icon("right"))
+            self._sidebar_toggle_button.setToolTip(t("sidebar.toggle_expand"))
+        else:
+            self._sidebar_toggle_button.setIcon(chevron_icon("left"))
+            self._sidebar_toggle_button.setToolTip(t("sidebar.toggle_collapse"))
 
     def _on_language_changed(self) -> None:
         language = self._toolbar_language_combo.currentData()
@@ -468,9 +560,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._no_recent_projects_action.setText(t("project.recent_empty"))
         self._refresh_recent_project_actions()
 
-        nav_labels = [t(key) for key in _NAV_KEYS]
-        for index, text in enumerate(nav_labels):
-            self._nav_list.item(index).setText(text)
+        self._refresh_nav_item_labels()
+        self._refresh_sidebar_toggle_button()
 
         self._refresh_project_labels()
 
