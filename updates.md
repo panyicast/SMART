@@ -122,6 +122,6 @@
 - 提交：`cf9c706`
 - 影响文件：自动刷新记录，无额外文件。
 
-## 2026-05-09T20:31:25+08:00 | 改进跟踪弧段窗口同步与存档
-- 提交：`待写入本次提交`
+## 2026-05-09T20:31:23+08:00 | 改进跟踪弧段窗口同步与存档
+- 提交：`e99b7a8`
 - 影响文件：`src/smart/app_runtime.py`、`src/smart/assets/cesium/mission_view.html`、`src/smart/assets/cesium/mission_view.js`、`src/smart/assets/cesium/vendor/Build/Cesium/Assets/IAU2006_XYS/IAU2006_XYS_0.json`、`src/smart/assets/cesium/vendor/Build/Cesium/Assets/IAU2006_XYS/IAU2006_XYS_1.json`、`src/smart/assets/cesium/vendor/Build/Cesium/Assets/IAU2006_XYS/IAU2006_XYS_10.json`、`src/smart/assets/cesium/vendor/Build/Cesium/Assets/IAU2006_XYS/IAU2006_XYS_11.json`、`src/smart/assets/cesium/vendor/Build/Cesium/Assets/IAU2006_XYS/IAU2006_XYS_12.json` 等 423 个文件。
