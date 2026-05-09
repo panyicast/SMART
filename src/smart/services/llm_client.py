@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 import json
+import os
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -15,6 +16,9 @@ DEEPSEEK_REASONING_EFFORT_HIGH = "high"
 DEEPSEEK_REASONING_EFFORT_MAX = "max"
 DEFAULT_DEEPSEEK_MODEL = DEEPSEEK_MODEL_V4_PRO
 DEFAULT_SYSTEM_PROMPT = "你是严谨的航天任务分析助手，回答应面向工程复核和项目改进。"
+SMART_LLM_EXPOSE_REASONING_ENV = "SMART_LLM_EXPOSE_REASONING"
+SMART_LLM_LOG_TOOL_ARGS_ENV = "SMART_LLM_LOG_TOOL_ARGS"
+SMART_LLM_MAX_PROGRESS_CHARS = 2_000
 
 ProgressCallback = Callable[[str], None]
 ToolExecutor = Callable[[str, dict[str, Any]], dict[str, Any]]
@@ -33,6 +37,8 @@ class LLMRequestConfig:
     thinking_enabled: bool = True
     timeout_s: float = 300.0
     max_tool_rounds: int = 6
+    expose_reasoning: bool = False
+    log_tool_arguments: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,20 +92,28 @@ def request_chat_completion(
             "content": prompt,
         },
     ]
+    expose_reasoning = bool(config.expose_reasoning) or _env_flag(SMART_LLM_EXPOSE_REASONING_ENV)
+    log_tool_arguments = bool(config.log_tool_arguments) or _env_flag(SMART_LLM_LOG_TOOL_ARGS_ENV)
     all_reasoning: list[str] = []
     tool_call_count = 0
     usage: dict[str, Any] | None = None
 
     for round_index in range(max(1, int(config.max_tool_rounds))):
         _emit(progress_callback, f"[DeepSeek] request round {round_index + 1}")
-        turn = _stream_deepseek_turn(config, messages, tools=tools, progress_callback=progress_callback)
+        turn = _stream_deepseek_turn(
+            config,
+            messages,
+            tools=tools,
+            progress_callback=progress_callback,
+            expose_reasoning=expose_reasoning,
+        )
         usage = turn.usage or usage
-        if turn.reasoning_content:
+        if expose_reasoning and turn.reasoning_content:
             all_reasoning.append(turn.reasoning_content)
         if not turn.tool_calls:
             return LLMResponse(
                 content=turn.content.strip(),
-                reasoning_content="\n".join(all_reasoning).strip(),
+                reasoning_content="\n".join(all_reasoning).strip() if expose_reasoning else "",
                 tool_call_count=tool_call_count,
                 usage=usage,
             )
@@ -111,7 +125,7 @@ def request_chat_completion(
             "content": turn.content,
             "tool_calls": turn.tool_calls,
         }
-        if turn.reasoning_content:
+        if expose_reasoning and turn.reasoning_content:
             assistant_message["reasoning_content"] = turn.reasoning_content
         messages.append(assistant_message)
 
@@ -128,7 +142,11 @@ def request_chat_completion(
                 raise LLMClientError(f"DeepSeek emitted invalid tool arguments for {name}: {arguments_text}") from exc
             if not isinstance(arguments, dict):
                 raise LLMClientError(f"DeepSeek tool arguments for {name} must be a JSON object.")
-            _emit(progress_callback, f"[工具调用] {name}({json.dumps(arguments, ensure_ascii=False)})")
+            if log_tool_arguments:
+                arguments_log = _truncate_for_progress(json.dumps(arguments, ensure_ascii=False))
+                _emit(progress_callback, f"[工具调用] {name}({arguments_log})")
+            else:
+                _emit(progress_callback, f"[工具调用] {name}(<参数已隐藏>)")
             result = tool_executor(name, arguments)
             result_text = json.dumps(result, ensure_ascii=False, indent=2)
             _emit(progress_callback, f"[工具结果] {name} 返回 {len(result_text):,} 字符")
@@ -149,6 +167,7 @@ def _stream_deepseek_turn(
     *,
     tools: list[dict[str, Any]] | None,
     progress_callback: ProgressCallback | None,
+    expose_reasoning: bool,
 ) -> _AssistantTurn:
     endpoint = _join_endpoint(config.base_url, "chat/completions", default_version="v1")
     payload: dict[str, Any] = {
@@ -168,6 +187,7 @@ def _stream_deepseek_turn(
     tool_calls: dict[int, _ToolCallAccumulator] = {}
     usage: dict[str, Any] | None = None
     content_started = False
+    reasoning_started = False
 
     for event in _stream_json_events(endpoint, payload, config=config):
         if "usage" in event and isinstance(event["usage"], dict):
@@ -184,7 +204,11 @@ def _stream_deepseek_turn(
         reasoning = delta.get("reasoning_content")
         if isinstance(reasoning, str) and reasoning:
             reasoning_parts.append(reasoning)
-            _emit(progress_callback, f"[DeepSeek 思考流] {reasoning}")
+            if expose_reasoning:
+                _emit(progress_callback, f"[DeepSeek 思考流] {reasoning}")
+            elif not reasoning_started:
+                _emit(progress_callback, "[DeepSeek] 正在进行内部推理（默认不显示思考流）")
+                reasoning_started = True
         content = delta.get("content")
         if isinstance(content, str) and content:
             if not content_started:
@@ -195,7 +219,7 @@ def _stream_deepseek_turn(
 
     return _AssistantTurn(
         content="".join(content_parts),
-        reasoning_content="".join(reasoning_parts),
+        reasoning_content="".join(reasoning_parts) if expose_reasoning else "",
         tool_calls=[_tool_call_to_payload(item) for _, item in sorted(tool_calls.items()) if item.name],
         usage=usage,
     )
@@ -286,6 +310,17 @@ def _normalize_reasoning_effort(value: str) -> str:
     if effort in {DEEPSEEK_REASONING_EFFORT_HIGH, DEEPSEEK_REASONING_EFFORT_MAX}:
         return effort
     return DEEPSEEK_REASONING_EFFORT_HIGH
+
+
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _truncate_for_progress(value: str, limit: int = SMART_LLM_MAX_PROGRESS_CHARS) -> str:
+    if len(value) <= limit:
+        return value
+    omitted = len(value) - limit
+    return f"{value[:limit]}... <truncated {omitted:,} chars>"
 
 
 def _join_endpoint(base_url: str, suffix: str, *, default_version: str = "v1") -> str:
