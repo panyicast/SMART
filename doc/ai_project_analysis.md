@@ -66,6 +66,18 @@ API key 可通过页面输入，也可通过环境变量提供：
 
 STK 帮助文档不复制进项目目录；SMART 通过本机 STK 11.6 安装目录和全局 KB 路径引用完整文档，以避免把厂商帮助文件写入项目配置或仓库。
 
+STK Help 工具配置优先级为：环境变量 > 本机 JSON 配置文件 > 默认用户目录。默认配置文件为 `~/.smart/stk_help.json`，也可通过 `SMART_STK_HELP_CONFIG` 指定其他路径。示例：
+
+```json
+{
+  "kb_path": "C:/Users/you/.codex/kb/stk11_help.sqlite3",
+  "script_path": "C:/Users/you/.codex/kb/stkhelp_cli.py",
+  "command": "stkhelp"
+}
+```
+
+环境变量仍可覆盖配置文件：`SMART_STK_HELP_KB`、`SMART_STK_HELP_SCRIPT`、`SMART_STKHELP_COMMAND`。
+
 ## 5. 报告输出
 
 点击“AI 分析当前项目”后，页面会在后台线程中调用模型。完成后：

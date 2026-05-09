@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
+import os
 from pathlib import Path
+import shlex
+import shutil
 
 
 STK_116_RUNTIME_ROOT = Path(r"D:\Program Files\AGI\STK 116")
@@ -13,9 +17,16 @@ STK_116_CONNECT_COMMAND_HELP = (
     STK_116_HELP_ROOT / "Programming" / "Subsystems" / "connectCmds" / "connectCmds.htm"
 )
 STK_116_RELEASE_NOTES = STK_116_HELP_ROOT / "releaseNotes.chm"
-STK_HELP_KB_PATH = Path(r"C:\Users\panyi\.codex\kb\stk11_help.sqlite3")
+SMART_STK_HELP_KB_ENV = "SMART_STK_HELP_KB"
+SMART_STK_HELP_SCRIPT_ENV = "SMART_STK_HELP_SCRIPT"
+SMART_STKHELP_COMMAND_ENV = "SMART_STKHELP_COMMAND"
+SMART_STK_HELP_CONFIG_ENV = "SMART_STK_HELP_CONFIG"
+_DEFAULT_STK_HELP_KB_PATH = Path.home() / ".codex" / "kb" / "stk11_help.sqlite3"
+_DEFAULT_STK_HELP_SCRIPT_PATH = Path.home() / ".codex" / "kb" / "stkhelp_cli.py"
+_DEFAULT_STK_HELP_CONFIG_PATH = Path.home() / ".smart" / "stk_help.json"
+STK_HELP_KB_PATH = _DEFAULT_STK_HELP_KB_PATH
 STK_HELP_COMMAND = 'stkhelp "<query>"'
-STK_HELP_FALLBACK_COMMAND = r'python C:\Users\panyi\.codex\kb\stkhelp_cli.py "<query>"'
+STK_HELP_FALLBACK_COMMAND = f'python "{_DEFAULT_STK_HELP_SCRIPT_PATH}" "<query>"'
 
 _AGENT_DOC_DIR = Path(__file__).resolve().parents[1] / "agents"
 _AGENT_DOC_PATH = _AGENT_DOC_DIR / "mission_agent.md"
@@ -31,6 +42,96 @@ class MissionAgentProfile:
     name: str
     document_path: Path
     skill_document_paths: tuple[Path, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class StkHelpToolStatus:
+    available: bool
+    command: tuple[str, ...]
+    script_path: Path | None
+    kb_path: Path
+    config_path: Path
+    config_loaded: bool
+    reason: str
+
+    def command_for_query(self, query: str) -> list[str] | None:
+        if self.command:
+            return [*self.command, query]
+        if self.script_path is not None:
+            return [str(self.script_path), query]
+        return None
+
+    def display_command(self, query: str = "<query>") -> str:
+        if self.command:
+            return f'{" ".join(self.command)} "{query}"'
+        if self.script_path is not None:
+            return f'python "{self.script_path}" "{query}"'
+        return f"{SMART_STK_HELP_SCRIPT_ENV}=<path> python <script> \"{query}\""
+
+
+def resolve_stk_help_tool() -> StkHelpToolStatus:
+    config_path = Path(os.environ.get(SMART_STK_HELP_CONFIG_ENV, str(_DEFAULT_STK_HELP_CONFIG_PATH))).expanduser()
+    config = _load_stk_help_config(config_path)
+    kb_value = _env_or_config(SMART_STK_HELP_KB_ENV, config, "kb_path", "stk_help_kb")
+    script_value = _env_or_config(SMART_STK_HELP_SCRIPT_ENV, config, "script_path", "stk_help_script")
+    command_text = _env_or_config(SMART_STKHELP_COMMAND_ENV, config, "command", "stkhelp_command").strip()
+
+    kb_path = Path(kb_value or str(STK_HELP_KB_PATH)).expanduser()
+    if command_text:
+        command = tuple(shlex.split(command_text))
+    else:
+        command = ()
+    if command:
+        script_path = _DEFAULT_STK_HELP_SCRIPT_PATH
+    else:
+        configured_script = bool(script_value)
+        if configured_script:
+            script_path = Path(script_value).expanduser()
+        elif shutil.which("stkhelp"):
+            command = ("stkhelp",)
+            script_path = _DEFAULT_STK_HELP_SCRIPT_PATH
+        else:
+            script_path = _DEFAULT_STK_HELP_SCRIPT_PATH
+
+    missing: list[str] = []
+    if not kb_path.exists():
+        missing.append(f"{SMART_STK_HELP_KB_ENV}={kb_path}")
+    if not command and not script_path.exists():
+        missing.append(f"{SMART_STK_HELP_SCRIPT_ENV}={script_path}")
+    available = not missing and (bool(command) or script_path.exists())
+    reason = "available" if available else "missing " + ", ".join(missing)
+    return StkHelpToolStatus(
+        available=available,
+        command=command,
+        script_path=None if command else script_path,
+        kb_path=kb_path,
+        config_path=config_path,
+        config_loaded=bool(config),
+        reason=reason,
+    )
+
+
+def _load_stk_help_config(path: Path) -> dict[str, str]:
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    return {str(key): str(value).strip() for key, value in payload.items() if value not in (None, "")}
+
+
+def _env_or_config(env_name: str, config: dict[str, str], *keys: str) -> str:
+    env_value = os.environ.get(env_name, "").strip()
+    if env_value:
+        return env_value
+    for key in keys:
+        value = config.get(key, "").strip()
+        if value:
+            return value
+    return ""
 
 
 def smart_mission_agent_profile() -> MissionAgentProfile:

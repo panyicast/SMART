@@ -14,7 +14,7 @@ from smart.services.launch_window import (
     compute_shadow_intervals_for_launch,
     config_from_payload,
 )
-from smart.services.mission_agent import STK_HELP_FALLBACK_COMMAND, STK_HELP_KB_PATH
+from smart.services.mission_agent import resolve_stk_help_tool
 from smart.services.project_ai_context import build_project_analysis_context
 
 
@@ -255,16 +255,23 @@ class MissionAgentToolExecutor:
         query = str(arguments.get("query", "")).strip()
         if not query:
             raise MissionAgentToolError("query is required.")
-        script_path = Path(r"C:\Users\panyi\.codex\kb\stkhelp_cli.py")
-        if not STK_HELP_KB_PATH.exists() or not script_path.exists():
+        status = resolve_stk_help_tool()
+        command = status.command_for_query(query)
+        if not status.available or command is None:
             return {
                 "query": query,
                 "available": False,
-                "fallback_command": STK_HELP_FALLBACK_COMMAND.replace("<query>", query),
-                "output": "STK help KB or fallback script is missing.",
+                "kb_path": str(status.kb_path),
+                "script_path": "" if status.script_path is None else str(status.script_path),
+                "config_path": str(status.config_path),
+                "config_loaded": status.config_loaded,
+                "fallback_command": status.display_command(query),
+                "output": f"STK help tool unavailable: {status.reason}.",
             }
+        if status.script_path is not None:
+            command = [sys.executable, *command]
         completed = subprocess.run(
-            [sys.executable, str(script_path), query],
+            command,
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -276,6 +283,11 @@ class MissionAgentToolExecutor:
             "query": query,
             "available": completed.returncode == 0,
             "returncode": completed.returncode,
+            "kb_path": str(status.kb_path),
+            "script_path": "" if status.script_path is None else str(status.script_path),
+            "config_path": str(status.config_path),
+            "config_loaded": status.config_loaded,
+            "command": status.display_command(query),
             "output": (completed.stdout or completed.stderr).strip(),
         }
 

@@ -25,9 +25,11 @@
 - Connect help: `D:\Program Files\AGI\STK 116\Help\Programming\Subsystems\connect\connect.htm`
 - Connect command help: `D:\Program Files\AGI\STK 116\Help\Programming\Subsystems\connectCmds\connectCmds.htm`
 - Release notes: `D:\Program Files\AGI\STK 116\Help\releaseNotes.chm`
-- Global KB: `C:\Users\panyi\.codex\kb\stk11_help.sqlite3`
-- Preferred KB command: `stkhelp "<query>"`
-- Fallback KB command: `python C:\Users\panyi\.codex\kb\stkhelp_cli.py "<query>"`
+- Local config file: set `SMART_STK_HELP_CONFIG`, or use the default `~/.smart/stk_help.json`.
+- Config JSON keys: `kb_path`, `script_path`, `command`.
+- Global KB: set `SMART_STK_HELP_KB` or config `kb_path` to the local `stk11_help.sqlite3` path.
+- Preferred KB command: `stkhelp "<query>"`, `SMART_STKHELP_COMMAND`, or config `command`.
+- Fallback KB script: set `SMART_STK_HELP_SCRIPT` or config `script_path` to the local `stkhelp_cli.py` path.
 
 ## 主要工具
 
@@ -46,4 +48,4 @@
 - 不关闭 STK 场景或退出 STK，除非用户明确要求。
 - 修改场景前先建议读取对象列表、场景目录和当前设置。
 - 命令语法不确定时必须先查 STK 11.6 本机帮助或 KB。
-- 如果 `stkhelp` 命令不可用，应提示使用 fallback KB command 或检查 PATH。
+- 如果 `stkhelp` 命令不可用，应提示设置 `SMART_STK_HELP_CONFIG`、`SMART_STK_HELP_KB`、`SMART_STK_HELP_SCRIPT` 或检查 PATH。

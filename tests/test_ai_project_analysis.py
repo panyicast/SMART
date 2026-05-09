@@ -10,10 +10,10 @@ from smart.services.llm_client import (
     _parse_sse_line,
 )
 from smart.services.mission_agent import (
-    STK_HELP_KB_PATH,
     agent_document_paths,
     render_mission_agent_manifest,
     render_mission_agent_system_prompt,
+    resolve_stk_help_tool,
     smart_mission_agent_profile,
 )
 from smart.services.mission_agent_tools import MissionAgentToolExecutor
@@ -69,8 +69,10 @@ def test_mission_agent_profile_configures_calculation_and_stk_skills() -> None:
     assert all(path.exists() for path in agent_document_paths(profile))
     assert "smart.skill.mission_analysis_calculation" in manifest
     assert "smart.skill.stk_11_6_operations" in manifest
-    assert str(STK_HELP_KB_PATH) in manifest
     assert "STK 11.6" in system_prompt
+    assert "SMART_STK_HELP_CONFIG" in manifest
+    assert "SMART_STK_HELP_KB" in manifest
+    assert "SMART_STK_HELP_SCRIPT" in manifest
 
 
 def test_ai_project_analysis_nav_key_is_last() -> None:
@@ -107,6 +109,115 @@ def test_mission_agent_tool_specs_expose_local_tools(tmp_path) -> None:
     assert "find_launch_windows" in tool_names
     assert "compute_shadow_intervals_for_launch" in tool_names
     assert "query_stk_help" in tool_names
+
+
+def test_stk_help_tool_reports_missing_configuration(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SMART_STK_HELP_CONFIG", str(tmp_path / "missing_config.json"))
+    monkeypatch.setenv("SMART_STK_HELP_KB", str(tmp_path / "missing.sqlite3"))
+    monkeypatch.setenv("SMART_STK_HELP_SCRIPT", str(tmp_path / "missing_cli.py"))
+    monkeypatch.delenv("SMART_STKHELP_COMMAND", raising=False)
+    executor = MissionAgentToolExecutor(tmp_path)
+
+    result = executor.execute("query_stk_help", {"query": "Connect Units"})
+
+    assert result["available"] is False
+    assert "SMART_STK_HELP_KB" in result["output"]
+    assert "SMART_STK_HELP_SCRIPT" in result["output"]
+    assert "missing_cli.py" in result["fallback_command"]
+    assert result["config_loaded"] is False
+
+
+def test_stk_help_tool_uses_env_script(monkeypatch, tmp_path) -> None:
+    kb_path = tmp_path / "stk11_help.sqlite3"
+    kb_path.write_text("", encoding="utf-8")
+    script_path = tmp_path / "stkhelp_cli.py"
+    script_path.write_text(
+        "import sys\nprint('RESULT:' + sys.argv[1])\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SMART_STK_HELP_KB", str(kb_path))
+    monkeypatch.setenv("SMART_STK_HELP_SCRIPT", str(script_path))
+    monkeypatch.setenv("SMART_STK_HELP_CONFIG", str(tmp_path / "missing_config.json"))
+    monkeypatch.delenv("SMART_STKHELP_COMMAND", raising=False)
+    executor = MissionAgentToolExecutor(tmp_path)
+
+    result = executor.execute("query_stk_help", {"query": "Connect Units"})
+
+    assert result["available"] is True
+    assert result["script_path"] == str(script_path)
+    assert result["output"] == "RESULT:Connect Units"
+
+
+def test_stk_help_tool_uses_config_file(monkeypatch, tmp_path) -> None:
+    kb_path = tmp_path / "stk11_help.sqlite3"
+    kb_path.write_text("", encoding="utf-8")
+    script_path = tmp_path / "stkhelp_cli.py"
+    script_path.write_text(
+        "import sys\nprint('CONFIG:' + sys.argv[1])\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "stk_help.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "kb_path": str(kb_path),
+                "script_path": str(script_path),
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SMART_STK_HELP_CONFIG", str(config_path))
+    monkeypatch.delenv("SMART_STK_HELP_KB", raising=False)
+    monkeypatch.delenv("SMART_STK_HELP_SCRIPT", raising=False)
+    monkeypatch.delenv("SMART_STKHELP_COMMAND", raising=False)
+    executor = MissionAgentToolExecutor(tmp_path)
+
+    result = executor.execute("query_stk_help", {"query": "Connect Units"})
+
+    assert result["available"] is True
+    assert result["config_path"] == str(config_path)
+    assert result["config_loaded"] is True
+    assert result["kb_path"] == str(kb_path)
+    assert result["script_path"] == str(script_path)
+    assert result["output"] == "CONFIG:Connect Units"
+
+
+def test_stk_help_env_overrides_config_file(monkeypatch, tmp_path) -> None:
+    config_kb = tmp_path / "config.sqlite3"
+    config_kb.write_text("", encoding="utf-8")
+    env_kb = tmp_path / "env.sqlite3"
+    env_kb.write_text("", encoding="utf-8")
+    config_path = tmp_path / "stk_help.json"
+    config_path.write_text(
+        json.dumps({"kb_path": str(config_kb), "command": "config-command"}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SMART_STK_HELP_CONFIG", str(config_path))
+    monkeypatch.setenv("SMART_STK_HELP_KB", str(env_kb))
+    monkeypatch.setenv("SMART_STKHELP_COMMAND", "env-command")
+    monkeypatch.delenv("SMART_STK_HELP_SCRIPT", raising=False)
+
+    status = resolve_stk_help_tool()
+
+    assert status.available is True
+    assert status.kb_path == env_kb
+    assert status.command == ("env-command",)
+
+
+def test_resolve_stk_help_tool_uses_env_command(monkeypatch, tmp_path) -> None:
+    kb_path = tmp_path / "stk11_help.sqlite3"
+    kb_path.write_text("", encoding="utf-8")
+    monkeypatch.setenv("SMART_STK_HELP_CONFIG", str(tmp_path / "missing_config.json"))
+    monkeypatch.setenv("SMART_STK_HELP_KB", str(kb_path))
+    monkeypatch.setenv("SMART_STKHELP_COMMAND", "stkhelp-custom")
+    monkeypatch.setenv("SMART_STK_HELP_SCRIPT", str(tmp_path / "missing.py"))
+
+    status = resolve_stk_help_tool()
+
+    assert status.available is True
+    assert status.command == ("stkhelp-custom",)
+    assert status.script_path is None
 
 
 def test_report_export_writes_markdown(tmp_path) -> None:

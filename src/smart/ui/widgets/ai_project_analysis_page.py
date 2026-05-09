@@ -22,6 +22,7 @@ from smart.services.mission_agent import (
     render_mission_agent_manifest,
     render_mission_agent_summary,
     render_mission_agent_system_prompt,
+    resolve_stk_help_tool,
 )
 from smart.services.mission_agent_tools import MissionAgentToolExecutor
 from smart.services.project_ai_context import build_project_analysis_context, build_project_analysis_prompt
@@ -342,6 +343,7 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
             "[待执行] request_chat_completion(...) 将以 DeepSeek V4 + thinking + tool calls 调用。"
         )
         self._append_trace("[工具] 已注册 build_project_context/find_launch_windows/compute_shadow_intervals_for_launch/query_stk_help")
+        self._append_stk_help_status()
         self._set_status("执行预检完成。工具调用轨迹已更新。")
 
     def run_analysis(self) -> None:
@@ -364,6 +366,7 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
         self._reset_trace()
         self._append_trace("[说明] 这里显示 DeepSeek API 返回的 reasoning_content，以及 SMART 本地工具调用轨迹。")
         self._append_trace("[开始] AI 分析当前项目")
+        self._append_stk_help_status()
 
         self._thread = QtCore.QThread(self)
         self._worker = _ProjectAnalysisWorker(
@@ -625,6 +628,20 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
 
     def _set_status(self, text: str) -> None:
         self._status_label.setText(text)
+
+    def _append_stk_help_status(self) -> None:
+        status = resolve_stk_help_tool()
+        state = "可用" if status.available else "不可用"
+        config_state = "已加载" if status.config_loaded else "未加载"
+        self._append_trace(
+            f"[工具] STK Help {state}；配置={status.config_path}（{config_state}）；"
+            f"KB={status.kb_path}；命令={status.display_command()}"
+        )
+        if not status.available:
+            self._append_trace(
+                "[提示] 可设置 SMART_STK_HELP_CONFIG 配置文件，或设置 SMART_STK_HELP_KB、"
+                "SMART_STK_HELP_SCRIPT、SMART_STKHELP_COMMAND 来启用 STK Help。"
+            )
 
     @QtCore.Slot(str)
     def _handle_worker_progress(self, text: str) -> None:
