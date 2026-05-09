@@ -86,6 +86,10 @@
 - 提交：`58b3305`
 - 影响文件：自动刷新记录，无额外文件。
 
-## 2026-05-09T09:30:09+08:00 | feat: 完善数据可视化轨道参数曲线
-- 提交：`待写入本次提交`
+## 2026-05-09T09:30:08+08:00 | feat: 完善数据可视化轨道参数曲线
+- 提交：`2ecedce`
 - 影响文件：`src/smart/services/data_visualization.py`、`src/smart/ui/main_window.py`、`src/smart/ui/widgets/data_visualization_page.py`、`tests/test_data_visualization.py`、`AGENTS.md`、`projects/F4/smart_project.json`、`projects/F4/charts/altitude_trend.png`、`projects/F4/charts/velocity_trend.png`。
+
+## 2026-05-09T09:30:29+08:00 | Finalize updates log for 2ecedce
+- 提交：`048c2d7`
+- 影响文件：自动刷新记录，无额外文件。
