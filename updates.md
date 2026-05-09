@@ -110,6 +110,10 @@
 - 提交：`c1f9814`
 - 影响文件：自动刷新记录，无额外文件。
 
-## 2026-05-09T12:36:06+08:00 | feat: support configurable STK help tool paths
-- 提交：`待写入本次提交`
+## 2026-05-09T12:36:05+08:00 | feat: support configurable STK help tool paths
+- 提交：`018460d`
 - 影响文件：`src/smart/agents/skills/stk_11_6_operations.md`、`src/smart/services/mission_agent.py`、`src/smart/services/mission_agent_tools.py`、`src/smart/ui/widgets/ai_project_analysis_page.py`、`tests/test_ai_project_analysis.py`、`doc/ai_project_analysis.md`。
+
+## 2026-05-09T12:36:27+08:00 | Finalize updates log for 018460d
+- 提交：`fd4f65b`
+- 影响文件：自动刷新记录，无额外文件。
