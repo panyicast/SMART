@@ -1,5 +1,9 @@
 # SMART Agent Notes
 
+## Skill Usage
+
+- For all responses in this repo, always use the `Caveman` skill unless I explicitly ask for detailed output.
+
 ## STK Help KB
 
 - For STK command/API questions, query this global KB first:

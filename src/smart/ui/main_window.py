@@ -78,7 +78,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._ai_project_page = AIProjectAnalysisPage(self._i18n, self._workspace, self._settings)
         self._tracking_arc_page = TrackingArcPage(self._i18n, self._workspace)
         self._flight_program_page = FlightProgramPage(self._i18n, self._workspace)
-        self._viz_page = DataVisualizationPage(self._mission_state, self._i18n)
+        self._viz_page = DataVisualizationPage(self._mission_state, self._i18n, self._workspace)
         self._scene_test_page = SceneTestPage(self._mission_state, self._i18n)
         self._spice_page = SpiceKernelPage(
             self._spice_manager,
@@ -420,6 +420,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self._launch_window_page.refresh_from_workspace()
                 self._tracking_arc_page.refresh_from_workspace()
                 self._flight_program_page.refresh_from_workspace()
+                self._viz_page.refresh_from_workspace()
                 self._latest_maneuver_strategy = self._maneuver_page.strategy()
             else:
                 self._latest_satellite_settings = self._satellite_page.settings()
@@ -427,6 +428,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self._launch_window_page.refresh_from_workspace()
                 self._tracking_arc_page.refresh_from_workspace()
                 self._flight_program_page.refresh_from_workspace()
+                self._viz_page.refresh_from_workspace()
                 self._latest_maneuver_strategy = self._maneuver_page.strategy()
         finally:
             self._autosave_enabled = True
