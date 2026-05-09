@@ -46,23 +46,24 @@ def test_set_playhead_updates_status_without_rebuilding_tables(monkeypatch) -> N
     ]
     page._refresh_timeline()
 
-    calls = {"event": 0, "reference": 0}
+    calls = {"event": 0, "reference": 0, "event_status": 0, "reference_status": 0}
     monkeypatch.setattr(page, "_refresh_event_table", lambda: calls.__setitem__("event", calls["event"] + 1))
     monkeypatch.setattr(page, "_refresh_reference_table", lambda: calls.__setitem__("reference", calls["reference"] + 1))
+    monkeypatch.setattr(page, "_update_event_table_statuses", lambda: calls.__setitem__("event_status", calls["event_status"] + 1))
+    monkeypatch.setattr(
+        page,
+        "_update_reference_table_statuses",
+        lambda: calls.__setitem__("reference_status", calls["reference_status"] + 1),
+    )
     monkeypatch.setattr(page, "_refresh_sample_preview", lambda: None)
 
     page._set_playhead(12.0)
 
-    assert calls == {"event": 0, "reference": 0}
-    assert page._event_table.item(0, 10).text() == "当前"
-    assert page._reference_table.item(0, 8).text() == "当前"
+    assert calls == {"event": 0, "reference": 0, "event_status": 1, "reference_status": 1}
 
     page._set_playhead(30.0)
 
-    assert page._event_table.item(0, 10).text() == "正常"
-    assert page._reference_table.item(0, 8).text() == "正常"
-    assert page._event_table.item(0, 10).foreground().style() == Qt.BrushStyle.NoBrush
-    assert page._reference_table.item(0, 8).foreground().style() == Qt.BrushStyle.NoBrush
+    assert calls == {"event": 0, "reference": 0, "event_status": 2, "reference_status": 2}
 
 
 def test_program_tables_split_attitudes_and_main_events() -> None:

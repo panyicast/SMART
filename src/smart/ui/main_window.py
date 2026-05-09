@@ -18,7 +18,6 @@ from smart.ui.widgets.flight_program_page import FlightProgramPage
 from smart.ui.widgets.launch_window_page import LaunchWindowPage
 from smart.ui.widgets.maneuver_page import ManeuverPage
 from smart.ui.widgets.satellite_status_page import SatelliteStatusPage
-from smart.ui.widgets.scene_test_page import SceneTestPage
 from smart.ui.widgets.spice_kernel_page import SpiceKernelPage
 from smart.ui.widgets.tracking_arc_page import TrackingArcPage
 
@@ -31,7 +30,6 @@ _NAV_KEYS = [
     "nav.tracking_arc",
     "nav.flight_program",
     "nav.data_visualization",
-    "nav.scene_test",
     "nav.spice_kernels",
     "nav.ai_project_analysis",
 ]
@@ -79,7 +77,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self._tracking_arc_page = TrackingArcPage(self._i18n, self._workspace)
         self._flight_program_page = FlightProgramPage(self._i18n, self._workspace)
         self._viz_page = DataVisualizationPage(self._mission_state, self._i18n, self._workspace)
-        self._scene_test_page = SceneTestPage(self._mission_state, self._i18n)
         self._spice_page = SpiceKernelPage(
             self._spice_manager,
             self._i18n,
@@ -94,7 +91,6 @@ class MainWindow(QtWidgets.QMainWindow):
             self._tracking_arc_page,
             self._flight_program_page,
             self._viz_page,
-            self._scene_test_page,
             self._spice_page,
             self._ai_project_page,
         ]
@@ -102,14 +98,11 @@ class MainWindow(QtWidgets.QMainWindow):
             self._stack.addWidget(page)
 
         self._build_menu()
-        self._build_menu_language_selector()
         self._mission_state.trajectory_changed.connect(self._on_trajectory_changed)
         self._satellite_page.settings_changed.connect(self._on_satellite_settings_changed)
         self._maneuver_page.strategy_changed.connect(self._on_maneuver_strategy_changed)
-        self._i18n.language_changed.connect(self.retranslate)
         self._latest_satellite_settings = self._satellite_page.settings()
         self._dashboard_page.set_satellite_settings(self._latest_satellite_settings)
-        self._scene_test_page.set_satellite_settings(self._latest_satellite_settings)
         self._reset_spice_workspace(self._workspace_root / "data" / "kernels")
 
         self.retranslate()
@@ -139,22 +132,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self._project_menu.addAction(self._no_recent_projects_action)
 
         self._refresh_recent_project_actions()
-
-    def _build_menu_language_selector(self) -> None:
-        language_widget = QtWidgets.QWidget(self.menuBar())
-        language_layout = QtWidgets.QHBoxLayout(language_widget)
-        language_layout.setContentsMargins(8, 0, 8, 0)
-        language_layout.setSpacing(8)
-
-        self._toolbar_language_label = QtWidgets.QLabel()
-        language_layout.addWidget(self._toolbar_language_label)
-
-        self._toolbar_language_combo = QtWidgets.QComboBox()
-        self._toolbar_language_combo.addItem("English", "en")
-        self._toolbar_language_combo.addItem("中文", "zh")
-        self._toolbar_language_combo.currentIndexChanged.connect(self._on_language_changed)
-        language_layout.addWidget(self._toolbar_language_combo)
-        self.menuBar().setCornerWidget(language_widget, QtCore.Qt.Corner.TopRightCorner)
 
     def _build_sidebar(self) -> QtWidgets.QWidget:
         sidebar = QtWidgets.QFrame()
@@ -289,11 +266,6 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             self._sidebar_toggle_button.setIcon(chevron_icon("left"))
             self._sidebar_toggle_button.setToolTip(t("sidebar.toggle_collapse"))
-
-    def _on_language_changed(self) -> None:
-        language = self._toolbar_language_combo.currentData()
-        if isinstance(language, str):
-            self._i18n.set_language(language)
 
     def _create_project(self) -> None:
         t = self._i18n.t
@@ -468,7 +440,6 @@ class MainWindow(QtWidgets.QMainWindow):
     def _on_satellite_settings_changed(self, settings: SatelliteStatusSettings) -> None:
         self._latest_satellite_settings = settings
         self._dashboard_page.set_satellite_settings(settings)
-        self._scene_test_page.set_satellite_settings(settings)
         if not self._autosave_enabled:
             return
         self._persist_satellite_config()
@@ -546,14 +517,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self._subtitle_label.setText(t("sidebar.subtitle"))
         self._footer_label.setText(t("sidebar.footer"))
         self._project_header_label.setText(t("sidebar.project_label"))
-        self._toolbar_language_label.setText(t("toolbar.language_label"))
-        self._toolbar_language_combo.setItemText(0, t("sidebar.language.en"))
-        self._toolbar_language_combo.setItemText(1, t("sidebar.language.zh"))
-
-        language_index = 0 if self._i18n.language == "en" else 1
-        self._toolbar_language_combo.blockSignals(True)
-        self._toolbar_language_combo.setCurrentIndex(language_index)
-        self._toolbar_language_combo.blockSignals(False)
 
         self._project_menu.setTitle(t("project.menu_title"))
         self._new_project_action.setText(t("project.action_new"))

@@ -1,8 +1,8 @@
 # SMART
 
-SMART 全称为 `Spacecraft Mission Analysis, Research & Toolkit`，是一个面向航天任务设计与工程分析的桌面软件。项目围绕 `STK 11.6 + SPICE + 本地 Cesium + PySide6` 构建统一工作流，用来解决传统任务分析中多工具切换、时间与坐标系转换易错、结果留痕分散的问题。
+SMART 全称为 `Spacecraft Mission Analysis, Research & Toolkit`，是一个面向航天任务设计与工程分析的桌面软件。项目围绕 `STK 11.6 + SPICE + PySide6` 构建统一工作流，用来解决传统任务分析中多工具切换、时间与坐标系转换易错、结果留痕分散的问题。
 
-当前仓库提供的是一版可运行的桌面 MVP，已经覆盖轨道初始化、变轨分析、发射窗口计算、跟踪弧段分析、三维场景验证、项目化数据落盘和 AI 辅助项目解读等核心链路。
+当前仓库提供的是一版可运行的桌面 MVP，已经覆盖轨道初始化、变轨分析、发射窗口计算、跟踪弧段分析、项目化数据落盘和 AI 辅助项目解读等核心链路。
 
 <p align="center">
   <img src="projects/F4/charts/orbit_3d.png" alt="SMART 3D orbit view" width="30%" />
@@ -21,7 +21,7 @@ SMART 的目标不是单独替代 STK 或 SPICE，而是把任务建模、约束
 
 - UI 层统一以北京时间配置任务参数，降低人工换算成本
 - 服务层优先复用 SPICE 与本地 STK 11.6 能力，减少手写公式漂移
-- 三维场景基于本地 Cesium 运行，不依赖公网 CDN
+- 图形验证基于本地桌面绘图与 OpenGL 轨道视图运行
 - 项目结果按 `config / data / charts` 结构自动沉淀，便于复算和交接
 - AI 分析页只读取摘要上下文做辅助说明，不直接修改任务配置
 
@@ -32,7 +32,7 @@ SMART 的目标不是单独替代 STK 或 SPICE，而是把任务建模、约束
 - 变轨策略分析：圆轨道霍曼转移估算、分阶段机动参数编辑、轨迹与趋势图生成
 - 发射窗口分析：约束扫描、窗口结果表、样本缓存和甘特图输出
 - 跟踪弧段分析：围绕测控可见性生成可跟踪弧段结果
-- 任务可视化：2D/3D 轨道视图、本地 Cesium 场景、科学曲线与结果图表
+- 任务可视化：2D/3D 轨道视图、科学曲线与结果图表
 - AI 辅助解读：面向项目摘要的任务分析说明页，支持报告式输出
 - 项目管理：新建/打开项目，自动保存配置、CSV、图表和中间结果
 
@@ -61,7 +61,6 @@ SMART 的目标不是单独替代 STK 或 SPICE，而是把任务建模、约束
 - 发射窗口角度定义、公式和可见性判据：`doc/launch_window_angle_reference.md`
 - AI 项目分析页面、API 配置和数据发送范围：`doc/ai_project_analysis.md`
 - SPICE 内核要求、默认加载顺序和调用示例：`doc/spice_usage.md`
-- Cesium / Qt WebEngine 排障：`doc/cesium_troubleshooting.md`
 
 ## 快速开始
 
@@ -105,24 +104,6 @@ Set-ExecutionPolicy -Scope Process Bypass
 ```powershell
 python .\scripts\update_updates_md.py
 ```
-
-## Cesium 集成注意事项
-
-- SMART 不再依赖外部 Cesium CDN，运行时已随项目本地打包在 `src/smart/assets/cesium/vendor/Build/Cesium`。
-- 若需更新本地 Cesium 版本，执行：
-
-```powershell
-.\scripts\vendor-cesium.ps1
-```
-
-- 详细排障手册见：`doc/cesium_troubleshooting.md`
-- Qt WebEngine 中加载本地 Cesium 时，页面 CSP 必须允许 `blob:` worker；否则页面可能一直停在 `Loading...`。
-- 如果日志中出现以下错误，优先检查 Qt 图形后端是否仍统一为 OpenGL：
-  - `QQuickWidget: Failed to get a QRhi from the top-level widget's window`
-  - `The top-level window is not using the expected graphics API for composition`
-- 当前项目已在 `smart.app_runtime.configure_graphics_backend()` 中强制统一 Qt Quick / QWidget 图形 API 为 OpenGL。
-- 若三维场景首次进入空白、点击“重新加载场景”后恢复，通常是页面首帧加载完成前场景数据发布过早；当前代码已在页面加载成功后自动重新发布场景。
-- 排障时优先使用左侧导航中的 `3D 场景测试` 页面，它会绕开总览页的滚动布局，先验证 Cesium 场景本身是否正常。
 
 ## 项目管理
 

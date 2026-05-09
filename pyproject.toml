@@ -31,7 +31,6 @@ diagnostics = [
 [project.scripts]
 smart = "smart.main:main"
 smart-webengine-diagnostics = "smart.webengine_diagnostics:main"
-smart-cesium-diagnostics = "smart.cesium_diagnostics_cli:main"
 
 [tool.setuptools.package-dir]
 "" = "src"
@@ -43,9 +42,6 @@ where = ["src"]
 smart = [
   "assets/icons/*.svg",
   "assets/textures/*.png",
-  "assets/cesium/*.html",
-  "assets/cesium/*.js",
-  "assets/cesium/vendor/**/*",
   "assets/diagnostics/*.html",
   "agents/*.md",
   "agents/skills/*.md",

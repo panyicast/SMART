@@ -27,18 +27,13 @@ _REPO_ROOT = Path(__file__).resolve().parents[4]
 _DYNAMICS_SCRIPT_PATH = _REPO_ROOT / "scripts" / "satellite_dynamics_equation.py"
 _EARTH_RADIUS_KM = 6378.14
 _MANEUVER_PHASES = {"settle", "orbit_control"}
-_NATURAL_EARTH_ROOT = (
+_EARTH_TEXTURE_PATH = (
     _REPO_ROOT
     / "src"
     / "smart"
     / "assets"
-    / "cesium"
-    / "vendor"
-    / "Build"
-    / "Cesium"
-    / "Assets"
-    / "Textures"
-    / "NaturalEarthII"
+    / "textures"
+    / "earth_day_2048.png"
 )
 
 
@@ -52,20 +47,10 @@ def _qimage_to_rgba_array(image: QtGui.QImage) -> np.ndarray:
 
 
 def _load_world_map_rgba() -> np.ndarray | None:
-    west_tile = QtGui.QImage(str(_NATURAL_EARTH_ROOT / "0" / "0" / "0.jpg"))
-    east_tile = QtGui.QImage(str(_NATURAL_EARTH_ROOT / "0" / "1" / "0.jpg"))
-    if west_tile.isNull() or east_tile.isNull():
+    image = QtGui.QImage(str(_EARTH_TEXTURE_PATH))
+    if image.isNull():
         return None
-
-    width = west_tile.width() + east_tile.width()
-    height = max(west_tile.height(), east_tile.height())
-    canvas = QtGui.QImage(width, height, QtGui.QImage.Format.Format_RGBA8888)
-    canvas.fill(QtGui.QColor("#d8e4df"))
-    painter = QtGui.QPainter(canvas)
-    painter.drawImage(0, 0, west_tile)
-    painter.drawImage(west_tile.width(), 0, east_tile)
-    painter.end()
-    return np.flipud(_qimage_to_rgba_array(canvas))
+    return np.flipud(_qimage_to_rgba_array(image))
 
 
 @dataclass(frozen=True, slots=True)

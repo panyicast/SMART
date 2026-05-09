@@ -39,9 +39,8 @@ def configure_graphics_backend(backend: str | None = None) -> str:
     QtCore.QCoreApplication.setAttribute(QtCore.Qt.ApplicationAttribute.AA_ShareOpenGLContexts, True)
     QtQuick.QQuickWindow.setGraphicsApi(QtQuick.QSGRendererInterface.GraphicsApi.OpenGL)
 
-    # Qt WebEngine uses Chromium. Cesium needs a usable WebGL backend; on some Windows
-    # driver stacks the hardware path stays black, so default to SwiftShader and allow
-    # explicit overrides.
+    # Qt WebEngine uses Chromium. On some Windows driver stacks the hardware WebGL
+    # path stays black, so default to SwiftShader and allow explicit overrides.
     selected_backend = (backend or os.environ.get("SMART_WEBENGINE_BACKEND", "swiftshader")).strip().lower()
     os.environ["SMART_WEBENGINE_BACKEND"] = selected_backend
 

@@ -41,7 +41,7 @@ The active plan id may also be stored in `.planning/.active_plan` for convenienc
 Create a new planning session:
 
 ```powershell
-.\scripts\init-planning-session.ps1 -TaskName "Fix Cesium first-load blank scene"
+.\scripts\init-planning-session.ps1 -TaskName "Fix launch-window cache refresh"
 ```
 
 That script creates a dated plan directory, copies the templates, and marks it active.
@@ -80,7 +80,6 @@ If you looked up:
 
 - STK help
 - SPICE kernel behavior
-- Cesium runtime details
 - launch-window formulas
 
 summarize the result in `findings.md` instead of relying on chat memory.
@@ -119,7 +118,6 @@ Use phases that make sense for engineering work in SMART:
 
 Use planning files as working memory. Promote only stable knowledge into repository docs such as:
 
-- `doc/cesium_troubleshooting.md`
 - `doc/spice_usage.md`
 - `doc/launch_window_workflow.md`
 - `doc/launch_window_angle_reference.md`

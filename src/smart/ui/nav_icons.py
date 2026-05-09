@@ -92,16 +92,6 @@ _NAV_SVG: dict[str, str] = {
         '<path d="M7 9.5 L11.5 6 L16 10 L20 5.5" stroke-dasharray="0"/>'
         '</svg>'
     ),
-    "nav.scene_test": (
-        '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" '
-        'fill="none" stroke="' + _COLOR_TOKEN + '" stroke-width="1.8" '
-        'stroke-linecap="round" stroke-linejoin="round">'
-        '<circle cx="12" cy="12" r="9"/>'
-        '<path d="M3 12 L21 12"/>'
-        '<path d="M12 3 C8.5 7 8.5 17 12 21"/>'
-        '<path d="M12 3 C15.5 7 15.5 17 12 21"/>'
-        '</svg>'
-    ),
     "nav.spice_kernels": (
         '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" '
         'fill="none" stroke="' + _COLOR_TOKEN + '" stroke-width="1.8" '

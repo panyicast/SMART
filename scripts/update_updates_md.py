@@ -19,7 +19,6 @@ EXCLUDED_PREFIXES = (
 NOISY_PREFIXES = (
     ".venv/",
     ".tmp/",
-    "src/smart/assets/cesium/vendor/",
 )
 PREFERRED_PREFIXES = (
     "src/",

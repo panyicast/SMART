@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import csv
+from dataclasses import asdict
 from pathlib import Path
 
 import pytest
 from PySide6 import QtWidgets
 
+from smart.ui.i18n import I18nManager
+from smart.services.project_workspace import ProjectWorkspace
 from smart.services.earth_orientation import parse_utc
 from smart.services.launch_window import LaunchWindowResult, TrackingAsset, config_from_payload, default_launch_window_config
 from smart.services.tracking_arc import (
@@ -17,7 +20,7 @@ from smart.services.tracking_arc import (
     compute_tracking_arcs_for_window,
     tracking_arc_launch_points,
 )
-from smart.ui.widgets.tracking_arc_page import TrackingArcGanttWidget, _GanttScrollArea
+from smart.ui.widgets.tracking_arc_page import TrackingArcGanttWidget, TrackingArcPage, _GanttScrollArea
 
 
 def _write_history(path: Path) -> None:
@@ -75,6 +78,44 @@ def _write_history(path: Path) -> None:
             )
 
 
+def _write_launch_samples(path: Path, starts: list[str]) -> None:
+    columns = [
+        "launch_utc",
+        "t0_utc",
+        "ok",
+        "failure",
+        "first_orbit_shadow_min",
+        "no_shadow_period_shadow_min",
+        "separation_shadow_min",
+        "longest_shadow_min",
+        "min_burn_sun_margin_deg",
+        "max_tracking_gap_min",
+        "inclination_deg",
+    ]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=columns)
+        writer.writeheader()
+        for raw_launch_utc in starts:
+            ok = not raw_launch_utc.startswith("!")
+            launch_utc = raw_launch_utc.removeprefix("!")
+            writer.writerow(
+                {
+                    "launch_utc": launch_utc,
+                    "t0_utc": launch_utc,
+                    "ok": "true" if ok else "false",
+                    "failure": "" if ok else "测试失败",
+                    "first_orbit_shadow_min": 0.0,
+                    "no_shadow_period_shadow_min": 0.0,
+                    "separation_shadow_min": 0.0,
+                    "longest_shadow_min": 0.0,
+                    "min_burn_sun_margin_deg": 90.0,
+                    "max_tracking_gap_min": 0.0,
+                    "inclination_deg": 0.0,
+                }
+            )
+
+
 def _window() -> LaunchWindowResult:
     return LaunchWindowResult(
         window_start_utc="2026-05-15T00:00:00Z",
@@ -88,6 +129,156 @@ def _window() -> LaunchWindowResult:
         max_tracking_gap_min=0.0,
         inclination_deg=0.0,
     )
+
+
+def _page_workspace(tmp_path: Path) -> ProjectWorkspace:
+    workspace = ProjectWorkspace()
+    workspace.create_project("tracking-page", tmp_path)
+    return workspace
+
+
+def test_tracking_arc_page_reads_rocket_flight_time_from_launch_window_config(tmp_path: Path) -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    workspace = _page_workspace(tmp_path)
+    launch_payload = default_launch_window_config()
+    launch_payload["rocket_flight_time_s"] = 1234.5
+    tracking_payload = dict(launch_payload)
+    tracking_payload["rocket_flight_time_s"] = 9999.0
+    workspace.save_launch_window_config(launch_payload)
+    workspace.save_tracking_arc_config(tracking_payload)
+
+    page = TrackingArcPage(I18nManager("zh"), workspace)
+    page._window_check_timer.stop()
+
+    assert "rocket_flight_time_s" not in page._number_fields
+    assert page._rocket_flight_time_label.text() == "1234.500"
+    assert page.config_payload()["rocket_flight_time_s"] == pytest.approx(1234.5)
+
+
+def test_tracking_arc_page_warns_and_syncs_when_launch_windows_change(tmp_path: Path) -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    workspace = _page_workspace(tmp_path)
+    _write_launch_samples(
+        workspace.data_dir() / "launch_window_samples.csv",
+        ["2026-05-15T00:00:00Z", "2026-05-15T00:10:00Z"],
+    )
+    page = TrackingArcPage(I18nManager("zh"), workspace)
+    page._window_check_timer.stop()
+
+    assert len(page._windows) == 1
+    assert page._sync_windows_button.parentWidget() is not page._calculate_button.parentWidget()
+
+    _write_launch_samples(
+        workspace.data_dir() / "launch_window_samples.csv",
+        ["2026-05-15T01:00:00Z", "2026-05-15T01:10:00Z", "2026-05-15T01:20:00Z"],
+    )
+    page._check_window_consistency()
+
+    assert page._window_consistency_ok is False
+    assert page._sync_windows_button.isEnabled()
+    assert not page._window_warning_label.isHidden()
+    assert "不一致" in page._window_warning_label.text()
+
+    page._sync_launch_windows()
+
+    assert page._window_consistency_ok is True
+    assert not page._sync_windows_button.isEnabled()
+    assert page._windows[0].window_start_utc == "2026-05-15T01:00:00Z"
+
+
+def test_tracking_arc_page_loads_archived_results_on_open(tmp_path: Path) -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    workspace = _page_workspace(tmp_path)
+    _write_launch_samples(
+        workspace.data_dir() / "launch_window_samples.csv",
+        ["2026-05-15T00:00:00Z", "2026-05-15T00:10:00Z"],
+    )
+    result = TrackingArcOrbitResult(
+        point_key="leading",
+        point_label="窗口前沿轨道",
+        launch_utc="2026-05-15T00:00:00Z",
+        t0_utc="2026-05-15T00:00:00Z",
+        timeline_start_utc="2026-05-15T00:00:00Z",
+        timeline_end_utc="2026-05-15T01:00:00Z",
+        row_labels=["变轨点火时段"],
+        segments=[TrackingArcSegment("变轨点火时段", "2026-05-15T00:10:00Z", "2026-05-15T00:20:00Z", "burn", "")],
+        asset_summaries=[],
+        shadow_total_min=10.0,
+        maneuver_count=1,
+    )
+    workspace.save_tracking_arc_results(
+        {
+            "version": 1,
+            "window": asdict(_window()),
+            "results": [asdict(result)],
+        }
+    )
+
+    page = TrackingArcPage(I18nManager("zh"), workspace)
+    page._window_check_timer.stop()
+
+    assert "leading" in page._orbit_results
+    assert page._gantt_chart._result is not None
+    assert page._summary_values["orbit"].text() == "窗口前沿轨道"
+    assert "已加载跟踪弧段存档" in page._status_label.text()
+
+
+def test_tracking_arc_page_archives_results_per_launch_window(tmp_path: Path) -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    workspace = _page_workspace(tmp_path)
+    _write_launch_samples(
+        workspace.data_dir() / "launch_window_samples.csv",
+        [
+            "2026-05-15T00:00:00Z",
+            "2026-05-15T00:10:00Z",
+            "!2026-05-15T00:20:00Z",
+            "2026-05-15T01:00:00Z",
+            "2026-05-15T01:10:00Z",
+        ],
+    )
+    page = TrackingArcPage(I18nManager("zh"), workspace)
+    page._window_check_timer.stop()
+    first_window = page._windows[0]
+    second_window = page._windows[1]
+    first_result = TrackingArcOrbitResult(
+        point_key="leading",
+        point_label="第一窗口结果",
+        launch_utc=first_window.window_start_utc,
+        t0_utc=first_window.window_start_utc,
+        timeline_start_utc=first_window.window_start_utc,
+        timeline_end_utc=first_window.window_end_utc,
+        row_labels=["变轨点火时段"],
+        segments=[],
+        asset_summaries=[],
+        shadow_total_min=1.0,
+        maneuver_count=1,
+    )
+    second_result = TrackingArcOrbitResult(
+        point_key="leading",
+        point_label="第二窗口结果",
+        launch_utc=second_window.window_start_utc,
+        t0_utc=second_window.window_start_utc,
+        timeline_start_utc=second_window.window_start_utc,
+        timeline_end_utc=second_window.window_end_utc,
+        row_labels=["变轨点火时段"],
+        segments=[],
+        asset_summaries=[],
+        shadow_total_min=2.0,
+        maneuver_count=2,
+    )
+
+    page._archive_results([first_result], first_window, config_from_payload(page.config_payload()))
+    page._archive_results([second_result], second_window, config_from_payload(page.config_payload()))
+    archive_payload = workspace.load_tracking_arc_results()
+
+    assert isinstance(archive_payload, dict)
+    assert len(archive_payload["entries"]) == 2
+
+    page._window_combo.setCurrentIndex(1)
+    assert page._summary_values["orbit"].text() == "第二窗口结果"
+
+    page._window_combo.setCurrentIndex(0)
+    assert page._summary_values["orbit"].text() == "第一窗口结果"
 
 
 def test_tracking_arc_launch_points_use_window_edges_and_midpoint() -> None:

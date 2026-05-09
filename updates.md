@@ -4,7 +4,7 @@
 
 ## 2026-05-01T00:39:03+08:00 | Initial commit
 - 提交：`ff7eefc`
-- 影响文件：`src/smart/__init__.py`、`src/smart/agents/mission_agent.md`、`src/smart/agents/skills/mission_analysis_calculation.md`、`src/smart/agents/skills/stk_11_6_operations.md`、`src/smart/app_runtime.py`、`src/smart/assets/cesium/mission_view.html`、`src/smart/assets/cesium/mission_view.js`、`src/smart/assets/diagnostics/cesium_probe.html` 等 551 个文件。
+- 影响文件：`src/smart/__init__.py`、`src/smart/agents/mission_agent.md`、`src/smart/agents/skills/mission_analysis_calculation.md`、`src/smart/agents/skills/stk_11_6_operations.md`、`src/smart/app_runtime.py`、`src/smart/assets/cesium/mission_view.html`、`src/smart/assets/cesium/mission_view.js`、`src/smart/assets/cesium/vendor/Build/Cesium/Assets/IAU2006_XYS/IAU2006_XYS_0.json` 等 551 个文件。
 
 ## 2026-05-01T00:40:21+08:00 | Update changelog after repository republish
 - 提交：`68e3099`
@@ -114,6 +114,14 @@
 - 提交：`018460d`
 - 影响文件：`src/smart/agents/skills/stk_11_6_operations.md`、`src/smart/services/mission_agent.py`、`src/smart/services/mission_agent_tools.py`、`src/smart/ui/widgets/ai_project_analysis_page.py`、`tests/test_ai_project_analysis.py`、`doc/ai_project_analysis.md`。
 
-## 2026-05-09T12:36:27+08:00 | Finalize updates log for 018460d
+## 2026-05-09T12:36:26+08:00 | Finalize updates log for 018460d
 - 提交：`fd4f65b`
 - 影响文件：自动刷新记录，无额外文件。
+
+## 2026-05-09T12:37:03+08:00 | Finalize updates log for fd4f65b
+- 提交：`cf9c706`
+- 影响文件：自动刷新记录，无额外文件。
+
+## 2026-05-09T20:31:25+08:00 | 改进跟踪弧段窗口同步与存档
+- 提交：`待写入本次提交`
+- 影响文件：`src/smart/app_runtime.py`、`src/smart/assets/cesium/mission_view.html`、`src/smart/assets/cesium/mission_view.js`、`src/smart/assets/cesium/vendor/Build/Cesium/Assets/IAU2006_XYS/IAU2006_XYS_0.json`、`src/smart/assets/cesium/vendor/Build/Cesium/Assets/IAU2006_XYS/IAU2006_XYS_1.json`、`src/smart/assets/cesium/vendor/Build/Cesium/Assets/IAU2006_XYS/IAU2006_XYS_10.json`、`src/smart/assets/cesium/vendor/Build/Cesium/Assets/IAU2006_XYS/IAU2006_XYS_11.json`、`src/smart/assets/cesium/vendor/Build/Cesium/Assets/IAU2006_XYS/IAU2006_XYS_12.json` 等 423 个文件。

@@ -27,17 +27,7 @@
 - Do not assume `C:\Program Files\AGI\STK 11` is the active STK 11.6 runtime path.
 - When checking command syntax or API behavior, prefer STK 11.6 help content first and avoid mixing in 12.2-only behavior by default.
 
-## Cesium / Qt WebEngine Pitfalls
-
-- Do not depend on the public Cesium CDN inside SMART.
-  - On this machine family, Qt WebEngine may fail TLS handshake with `net_error -101`.
-  - The runtime is vendored locally under `src/smart/assets/cesium/vendor/Build/Cesium`.
-  - To refresh or upgrade the local runtime, run `.\scripts\vendor-cesium.ps1`.
-
-- Do not tighten the mission-view CSP without keeping Cesium workers working.
-  - Local Cesium uses `blob:` workers.
-  - `mission_view.html` and `cesium_probe.html` must allow `worker-src blob:` and `script-src blob:`.
-  - If workers are blocked, the page can remain stuck on `Loading...` even though the runtime loaded.
+## Qt WebEngine Pitfalls
 
 - Keep Qt Quick and the QWidget shell on the same graphics API.
   - SMART mixes `pyqtgraph.opengl.GLViewWidget` with Qt WebEngine / Qt Quick composition.
@@ -49,26 +39,8 @@
     - `QQuickWidget: Failed to get a QRhi from the top-level widget's window`
     - `The top-level window is not using the expected graphics API for composition`
 
-- If the standalone scene opens blank on the first load but works after clicking reload, suspect scene-publish ordering.
-  - The first `requestScene()` from the page can arrive before `_page_loaded` becomes `True`.
-  - `CesiumMissionView._on_load_finished()` must republish the scene after successful load.
-
-- Prefer using the standalone `3D 场景测试` page first when debugging.
-  - It removes dashboard scroll/card layout variables.
-  - If the test page works and the dashboard does not, investigate embedding/layout differences next.
-
-## Recommended Cesium Debug Order
-
-1. Run `smart-webengine-diagnostics` and confirm:
-   - `WebGL Probe` renders.
-   - `Cesium Probe` renders.
-2. Open SMART `3D 场景测试`.
-3. Only after that, debug the dashboard-embedded Cesium card.
-
 ## Documentation
 
-- Detailed Cesium troubleshooting notes live in:
-  - `doc/cesium_troubleshooting.md`
 - Detailed SPICE usage requirements and examples live in:
   - `doc/spice_usage.md`
 - Detailed AI project analysis page usage and API configuration notes live in:

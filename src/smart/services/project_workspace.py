@@ -24,6 +24,7 @@ DATA_DIR_NAME = "data"
 KERNELS_DIR_NAME = "kernels"
 CHARTS_DIR_NAME = "charts"
 CONFIG_DIR_NAME = "config"
+
 ORBIT_ELEMENTS_FILE = "orbit_elements.json"
 MANEUVER_SNAPSHOT_FILE = "maneuver_snapshot.json"
 SATELLITE_SETTINGS_FILE = "satellite_status.json"
@@ -31,6 +32,7 @@ ORBIT_INITIALIZATION_FILE = "orbit_initialization.json"
 MANEUVER_STRATEGY_FILE = "maneuver_strategy.json"
 LAUNCH_WINDOW_FILE = "launch_window.json"
 TRACKING_ARC_FILE = "tracking_arc.json"
+TRACKING_ARC_RESULTS_FILE = "tracking_arc_results.json"
 FLIGHT_PROGRAM_FILE = "flight_program.json"
 
 
@@ -144,6 +146,9 @@ class ProjectWorkspace:
     def tracking_arc_path(self) -> Path:
         return self.config_dir() / TRACKING_ARC_FILE
 
+    def tracking_arc_results_path(self) -> Path:
+        return self.data_dir() / TRACKING_ARC_RESULTS_FILE
+
     def flight_program_path(self) -> Path:
         return self.config_dir() / FLIGHT_PROGRAM_FILE
 
@@ -247,6 +252,18 @@ class ProjectWorkspace:
             return None
         payload = _read_json(file_path)
         return normalize_launch_window_config(payload)
+
+    def save_tracking_arc_results(self, payload: dict[str, Any]) -> Path:
+        file_path = self.tracking_arc_results_path()
+        _write_json(file_path, payload)
+        self._touch_updated_time()
+        return file_path
+
+    def load_tracking_arc_results(self) -> dict[str, Any] | None:
+        file_path = self.tracking_arc_results_path()
+        if not file_path.exists():
+            return None
+        return _read_json(file_path)
 
     def save_flight_program_config(self, config: dict[str, Any]) -> Path:
         payload = normalize_flight_program_payload(config)

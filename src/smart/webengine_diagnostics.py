@@ -18,7 +18,6 @@ except Exception:  # pragma: no cover - depends on local Qt runtime
 
 _ASSET_ROOT = Path(__file__).resolve().parent / "assets" / "diagnostics"
 _WEBGL_PROBE_PATH = _ASSET_ROOT / "webgl_probe.html"
-_CESIUM_PROBE_PATH = _ASSET_ROOT / "cesium_probe.html"
 
 
 class _DiagnosticWebPage(QtWebEngineCore.QWebEnginePage):  # type: ignore[misc]
@@ -114,7 +113,7 @@ class DiagnosticsWindow(QtWidgets.QMainWindow):
     def __init__(self, backend: str) -> None:
         super().__init__()
         self.resize(1500, 960)
-        self.setWindowTitle("SMART WebEngine / Cesium Diagnostics")
+        self.setWindowTitle("SMART WebEngine Diagnostics")
         icon = load_app_icon()
         if not icon.isNull():
             self.setWindowIcon(icon)
@@ -126,8 +125,8 @@ class DiagnosticsWindow(QtWidgets.QMainWindow):
         root.setSpacing(12)
 
         intro = QtWidgets.QLabel(
-            "Purpose: isolate whether the black Cesium view comes from QWebEngine itself, "
-            "from WebGL context creation, or from the SMART Cesium integration. "
+            "Purpose: isolate whether rendering issues come from QWebEngine itself "
+            "or from WebGL context creation. "
             f"Current backend: {backend}"
         )
         intro.setWordWrap(True)
@@ -135,8 +134,7 @@ class DiagnosticsWindow(QtWidgets.QMainWindow):
 
         notes = QtWidgets.QLabel(
             "Expected interpretation: `chrome://gpu` should show GPU feature status; "
-            "`WebGL Probe` should display a teal-blue canvas and renderer details; "
-            "`Cesium Probe` should display a light background, blue-gray Earth, and one orange point."
+            "`WebGL Probe` should display a teal-blue canvas and renderer details."
         )
         notes.setWordWrap(True)
         root.addWidget(notes)
@@ -170,7 +168,6 @@ class DiagnosticsWindow(QtWidgets.QMainWindow):
         for title, url in (
             ("Chrome GPU", QtCore.QUrl("chrome://gpu")),
             ("WebGL Probe", QtCore.QUrl.fromLocalFile(str(_WEBGL_PROBE_PATH.resolve()))),
-            ("Cesium Probe", QtCore.QUrl.fromLocalFile(str(_CESIUM_PROBE_PATH.resolve()))),
         ):
             pane = ProbePane(title, url)
             pane.log_emitted.connect(self._append_log)
@@ -193,7 +190,7 @@ class DiagnosticsWindow(QtWidgets.QMainWindow):
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="SMART WebEngine / Cesium diagnostics")
+    parser = argparse.ArgumentParser(description="SMART WebEngine diagnostics")
     parser.add_argument(
         "--backend",
         default=None,

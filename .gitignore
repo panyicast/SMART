@@ -21,7 +21,7 @@ tmp_*.png
 tmp_*.e
 *_Mnvr_*.e
 
-# Playwright / Cesium diagnostics output
+# Playwright diagnostics output
 output/
 data/smoke_ai_report.pdf
 

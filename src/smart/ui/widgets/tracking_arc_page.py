@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import csv
+import json
+from dataclasses import asdict
 from datetime import timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -8,6 +11,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from smart.services.earth_orientation import parse_utc
 from smart.services.launch_window import (
+    LaunchWindowResult,
     config_from_payload,
     default_ground_station_presets,
     default_launch_window_config,
@@ -18,6 +22,7 @@ from smart.services.launch_window import (
 from smart.services.project_workspace import ProjectWorkspace
 from smart.services.tracking_arc import (
     TRACKING_ARC_POINT_LEADING,
+    TrackingArcAssetSummary,
     TrackingArcOrbitResult,
     TrackingArcSegment,
     compute_tracking_arcs_for_window,
@@ -330,6 +335,15 @@ class TrackingArcGanttWidget(QtWidgets.QWidget):
         self._view_end_utc = candidate_end
         self.update()
 
+    @staticmethod
+    def _segment_tooltip(segment: TrackingArcSegment) -> str:
+        start_utc = parse_utc(segment.start_utc)
+        end_utc = parse_utc(segment.end_utc)
+        start_text = start_utc.astimezone(BEIJING_TZ).strftime("%Y-%m-%d %H:%M")
+        end_text = end_utc.astimezone(BEIJING_TZ).strftime("%Y-%m-%d %H:%M")
+        minutes = max(0.0, (end_utc - start_utc).total_seconds() / 60.0)
+        return f"{segment.row_label}\n{start_text} - {end_text}\n{minutes:.1f} min"
+
 
 class _GanttScrollArea(QtWidgets.QScrollArea):
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
@@ -394,16 +408,6 @@ class _GanttScrollArea(QtWidgets.QScrollArea):
         chart.update()
         return True
 
-    @staticmethod
-    def _segment_tooltip(segment: TrackingArcSegment) -> str:
-        start_utc = parse_utc(segment.start_utc)
-        end_utc = parse_utc(segment.end_utc)
-        start_text = start_utc.astimezone(BEIJING_TZ).strftime("%Y-%m-%d %H:%M")
-        end_text = end_utc.astimezone(BEIJING_TZ).strftime("%Y-%m-%d %H:%M")
-        minutes = max(0.0, (end_utc - start_utc).total_seconds() / 60.0)
-        return f"{segment.row_label}\n{start_text} - {end_text}\n{minutes:.1f} min"
-
-
 class TrackingArcPage(QtWidgets.QWidget):
     def __init__(
         self,
@@ -417,6 +421,7 @@ class TrackingArcPage(QtWidgets.QWidget):
         self._windows: list[Any] = []
         self._orbit_results: dict[str, TrackingArcOrbitResult] = {}
         self._status_role = "statusDisconnected"
+        self._window_consistency_ok = True
         self._number_fields: dict[str, NoWheelDoubleSpinBox] = {}
         self._ground_station_table: QtWidgets.QTableWidget | None = None
         self._relay_satellite_table: QtWidgets.QTableWidget | None = None
@@ -452,6 +457,10 @@ class TrackingArcPage(QtWidgets.QWidget):
         self._i18n.language_changed.connect(self.retranslate)
         self.retranslate()
         self.refresh_from_workspace()
+        self._window_check_timer = QtCore.QTimer(self)
+        self._window_check_timer.setInterval(3000)
+        self._window_check_timer.timeout.connect(self._check_window_consistency)
+        self._window_check_timer.start()
 
     def refresh_from_workspace(self) -> None:
         if self._workspace.current_project is None:
@@ -471,7 +480,10 @@ class TrackingArcPage(QtWidgets.QWidget):
         self._set_controls_enabled(True)
         self._refresh_source_labels()
         self._reload_windows(show_status=False)
-        if self._windows:
+        archived_loaded = self._load_archived_results_for_selected_window()
+        if archived_loaded:
+            self._set_status("statusReady", f"已加载跟踪弧段存档：{self._workspace.tracking_arc_results_path()}")
+        elif self._windows:
             self._set_status("statusReady", f"已加载发射窗口：{len(self._windows)} 个。")
         else:
             self._set_status("statusReady", "已加载跟踪弧段参数，暂无可选发射窗口。")
@@ -529,14 +541,29 @@ class TrackingArcPage(QtWidgets.QWidget):
         self._window_combo = NoWheelComboBox()
         self._window_combo.currentIndexChanged.connect(self._on_window_selection_changed)
         form.addRow("发射窗口", self._window_combo)
-        self._number_fields["rocket_flight_time_s"] = self._double_spin(2134.4121, 0.0, 20000.0, 0.1, 3)
-        form.addRow("火箭飞行时间 (s)", self._number_fields["rocket_flight_time_s"])
+        self._rocket_flight_time_label = QtWidgets.QLabel("--")
+        self._rocket_flight_time_label.setProperty("role", "pageBody")
+        self._rocket_flight_time_label.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextSelectableByMouse)
+        form.addRow("火箭飞行时间 (s)", self._rocket_flight_time_label)
         layout.addLayout(form)
 
         self._window_detail_label = QtWidgets.QLabel()
         self._window_detail_label.setProperty("role", "cardCaption")
         self._window_detail_label.setWordWrap(True)
         layout.addWidget(self._window_detail_label)
+        self._window_warning_label = QtWidgets.QLabel()
+        self._window_warning_label.setProperty("role", "statusDisconnected")
+        self._window_warning_label.setWordWrap(True)
+        self._window_warning_label.hide()
+        layout.addWidget(self._window_warning_label)
+
+        button_row = QtWidgets.QHBoxLayout()
+        button_row.addStretch(1)
+        self._sync_windows_button = QtWidgets.QPushButton("同步发射窗口")
+        self._sync_windows_button.clicked.connect(self._sync_launch_windows)
+        self._sync_windows_button.setEnabled(False)
+        button_row.addWidget(self._sync_windows_button)
+        layout.addLayout(button_row)
         return card
 
     def _build_tracking_asset_card(self) -> QtWidgets.QWidget:
@@ -639,7 +666,12 @@ class TrackingArcPage(QtWidgets.QWidget):
         self._calculate_button.clicked.connect(self.calculate_tracking_arcs)
         self._reload_windows_button = QtWidgets.QPushButton("刷新窗口")
         self._reload_windows_button.clicked.connect(lambda: self._reload_windows(show_status=True))
-        for button in (self._reload_button, self._save_button, self._reload_windows_button, self._calculate_button):
+        for button in (
+            self._reload_button,
+            self._save_button,
+            self._reload_windows_button,
+            self._calculate_button,
+        ):
             row.addWidget(button)
         row.addStretch(1)
         layout.addLayout(row)
@@ -759,7 +791,11 @@ class TrackingArcPage(QtWidgets.QWidget):
         self._orbit_results = {result.point_key: result for result in results}
         self._set_orbit_point_options(results)
         self._show_orbit_result(self._orbit_results.get(TRACKING_ARC_POINT_LEADING, results[0]))
-        self._set_status("statusReady", f"跟踪弧段计算完成：{len(results)} 条轨道。")
+        archive_path = self._archive_results(results, selected_window, config)
+        if archive_path is not None:
+            self._set_status("statusReady", f"跟踪弧段计算完成并已存档：{archive_path}")
+        else:
+            self._set_status("statusReady", f"跟踪弧段计算完成：{len(results)} 条轨道。")
 
     def config_payload(self) -> dict[str, Any]:
         try:
@@ -767,6 +803,8 @@ class TrackingArcPage(QtWidgets.QWidget):
         except Exception:
             payload = None
         result = dict(payload or default_launch_window_config())
+        launch_payload = self._load_launch_window_payload()
+        result["rocket_flight_time_s"] = float(launch_payload.get("rocket_flight_time_s", result.get("rocket_flight_time_s", 0.0)))
         for key, field in self._number_fields.items():
             result[key] = float(field.value())
         ground_rows = self._asset_rows_payload(self._ground_station_table, asset_type="ground")
@@ -786,13 +824,20 @@ class TrackingArcPage(QtWidgets.QWidget):
         return result
 
     def _load_config_payload(self) -> dict[str, Any]:
+        launch_payload = self._load_launch_window_payload()
         payload = self._workspace.load_tracking_arc_config()
         if payload is not None:
-            return payload
+            result = dict(payload)
+            result["rocket_flight_time_s"] = float(launch_payload.get("rocket_flight_time_s", result.get("rocket_flight_time_s", 0.0)))
+            return result
+        return launch_payload
+
+    def _load_launch_window_payload(self) -> dict[str, Any]:
         return self._workspace.load_launch_window_config() or default_launch_window_config()
 
     def _set_config(self, payload: dict[str, Any]) -> None:
         config = config_from_payload(payload)
+        self._rocket_flight_time_label.setText(f"{config.rocket_flight_time_s:.3f}")
         for key, field in self._number_fields.items():
             field.blockSignals(True)
             field.setValue(float(getattr(config, key)))
@@ -810,23 +855,216 @@ class TrackingArcPage(QtWidgets.QWidget):
         if self._workspace.current_project is None:
             self._set_windows([])
             return
-        path = self._sample_csv_path()
-        if not path.exists():
+        try:
+            windows = self._load_launch_windows_from_samples()
+        except FileNotFoundError:
+            had_windows = bool(self._windows)
             self._set_windows([])
+            self._update_window_consistency(not had_windows, "未找到发射窗口样本，无法校验窗口列表。")
             if show_status:
                 self._set_status("statusDisconnected", "未找到发射窗口样本，请先计算发射窗口。")
             return
-        try:
-            samples = self._read_sample_csv(path)
-            launch_payload = self._workspace.load_launch_window_config() or default_launch_window_config()
-            windows = merge_launch_window_samples(samples, config_from_payload(launch_payload))
         except Exception as exc:
             self._set_windows([])
             self._set_status("statusDisconnected", f"加载发射窗口失败：{exc}")
             return
         self._set_windows(windows)
+        self._update_window_consistency(True, "")
         if show_status:
             self._set_status("statusReady", f"已刷新发射窗口：{len(windows)} 个。")
+
+    def _load_launch_windows_from_samples(self) -> list[LaunchWindowResult]:
+        path = self._sample_csv_path()
+        if not path.exists():
+            raise FileNotFoundError(path)
+        samples = self._read_sample_csv(path)
+        launch_payload = self._workspace.load_launch_window_config() or default_launch_window_config()
+        return merge_launch_window_samples(samples, config_from_payload(launch_payload))
+
+    def _sync_launch_windows(self) -> None:
+        if self._workspace.current_project is None:
+            self._set_status("statusDisconnected", "没有活动项目。")
+            return
+        try:
+            self._set_config(self._load_config_payload())
+            self._reload_windows(show_status=False)
+            self._clear_results()
+            self._load_archived_results_for_selected_window()
+            self._check_window_consistency()
+        except Exception as exc:
+            self._set_status("statusDisconnected", f"同步发射窗口失败：{exc}")
+            return
+        self._set_status("statusReady", f"已同步发射窗口：{len(self._windows)} 个。")
+
+    def _check_window_consistency(self) -> None:
+        if self._workspace.current_project is None:
+            self._update_window_consistency(True, "")
+            return
+        try:
+            current_windows = self._load_launch_windows_from_samples()
+        except FileNotFoundError:
+            message = "未找到发射窗口样本，无法校验窗口列表。"
+            self._update_window_consistency(not self._windows, message)
+            return
+        except Exception as exc:
+            self._update_window_consistency(False, f"发射窗口一致性检查失败：{exc}")
+            return
+        if self._windows_signature(self._windows) == self._windows_signature(current_windows):
+            self._update_window_consistency(True, "")
+            return
+        self._update_window_consistency(False, "当前页面的发射窗口列表与发射窗口计算结果不一致，请点击“同步发射窗口”。")
+
+    def _update_window_consistency(self, ok: bool, message: str) -> None:
+        self._window_consistency_ok = bool(ok)
+        if hasattr(self, "_sync_windows_button"):
+            self._sync_windows_button.setEnabled(self._workspace.current_project is not None and not ok)
+        if not hasattr(self, "_window_warning_label"):
+            return
+        if ok:
+            self._window_warning_label.hide()
+            self._window_warning_label.setText("")
+            return
+        self._window_warning_label.setText(message)
+        self._window_warning_label.show()
+
+    def _archive_results(
+        self,
+        results: list[TrackingArcOrbitResult],
+        window: LaunchWindowResult,
+        config: Any,
+    ) -> Path | None:
+        archive_payload = self._normalized_archive_payload(self._workspace.load_tracking_arc_results())
+        key = self._window_archive_key(window)
+        entry = {
+            "version": 1,
+            "config": asdict(config),
+            "window": asdict(window),
+            "window_signature": self._window_signature(window),
+            "results": [asdict(result) for result in results],
+        }
+        archive_payload["entries"][key] = entry
+        archive_payload["latest_window_key"] = key
+        archive_payload["windows_signature"] = self._windows_signature(self._windows)
+        try:
+            return self._workspace.save_tracking_arc_results(archive_payload)
+        except Exception:
+            return None
+
+    def _load_archived_results_for_selected_window(self) -> bool:
+        if self._workspace.current_project is None:
+            return False
+        window = self._selected_window()
+        if window is None:
+            return False
+        payload = self._tracking_archive_entry(window)
+        if payload is None:
+            return False
+        return self._apply_archived_result_entry(payload)
+
+    def _apply_archived_result_entry(self, payload: dict[str, Any]) -> bool:
+        raw_results = payload.get("results")
+        if not isinstance(raw_results, list):
+            return False
+        results = [self._tracking_result_from_payload(item) for item in raw_results if isinstance(item, dict)]
+        if not results:
+            return False
+        raw_window = payload.get("window")
+        if isinstance(raw_window, dict):
+            window = self._launch_window_from_payload(raw_window)
+            self._select_window(window)
+            self._summary_values["window"].setText(
+                f"{self._format_beijing(window.window_start_utc)} - {self._format_beijing(window.window_end_utc)}"
+            )
+        self._orbit_results = {result.point_key: result for result in results}
+        self._set_orbit_point_options(results)
+        self._show_orbit_result(self._orbit_results.get(TRACKING_ARC_POINT_LEADING, results[0]))
+        return True
+
+    def _tracking_archive_entry(self, window: LaunchWindowResult) -> dict[str, Any] | None:
+        payload = self._normalized_archive_payload(self._workspace.load_tracking_arc_results())
+        entries = payload.get("entries", {})
+        if not isinstance(entries, dict):
+            return None
+        entry = entries.get(self._window_archive_key(window))
+        return entry if isinstance(entry, dict) else None
+
+    def _normalized_archive_payload(self, payload: Any) -> dict[str, Any]:
+        if not isinstance(payload, dict):
+            return {"version": 2, "entries": {}, "latest_window_key": ""}
+        if isinstance(payload.get("entries"), dict):
+            result = dict(payload)
+            result.setdefault("version", 2)
+            result.setdefault("latest_window_key", "")
+            return result
+        raw_window = payload.get("window")
+        raw_results = payload.get("results")
+        if isinstance(raw_window, dict) and isinstance(raw_results, list):
+            window = self._launch_window_from_payload(raw_window)
+            key = self._window_archive_key(window)
+            return {
+                "version": 2,
+                "entries": {key: dict(payload)},
+                "latest_window_key": key,
+                "windows_signature": payload.get("windows_signature", []),
+            }
+        return {"version": 2, "entries": {}, "latest_window_key": ""}
+
+    @staticmethod
+    def _launch_window_from_payload(payload: dict[str, Any]) -> LaunchWindowResult:
+        return LaunchWindowResult(
+            window_start_utc=str(payload.get("window_start_utc", "")),
+            window_end_utc=str(payload.get("window_end_utc", "")),
+            duration_min=float(payload.get("duration_min", 0.0)),
+            first_failure=str(payload.get("first_failure", "")),
+            first_orbit_shadow_min=float(payload.get("first_orbit_shadow_min", 0.0)),
+            no_shadow_period_shadow_min=float(payload.get("no_shadow_period_shadow_min", 0.0)),
+            separation_shadow_min=float(payload.get("separation_shadow_min", 0.0)),
+            min_burn_sun_margin_deg=float(payload.get("min_burn_sun_margin_deg", 0.0)),
+            max_tracking_gap_min=float(payload.get("max_tracking_gap_min", 0.0)),
+            inclination_deg=float(payload.get("inclination_deg", 0.0)),
+            window_start_longest_shadow_min=float(payload.get("window_start_longest_shadow_min", 0.0)),
+            window_end_longest_shadow_min=float(payload.get("window_end_longest_shadow_min", 0.0)),
+            window_start_constraint=str(payload.get("window_start_constraint", "")),
+            window_end_constraint=str(payload.get("window_end_constraint", "")),
+        )
+
+    @staticmethod
+    def _tracking_result_from_payload(payload: dict[str, Any]) -> TrackingArcOrbitResult:
+        segments = [
+            TrackingArcSegment(
+                row_label=str(item.get("row_label", "")),
+                start_utc=str(item.get("start_utc", "")),
+                end_utc=str(item.get("end_utc", "")),
+                kind=str(item.get("kind", "")),
+                tooltip=str(item.get("tooltip", "")),
+            )
+            for item in payload.get("segments", [])
+            if isinstance(item, dict)
+        ]
+        summaries = [
+            TrackingArcAssetSummary(
+                name=str(item.get("name", "")),
+                asset_type=str(item.get("asset_type", "")),
+                interval_count=int(item.get("interval_count", 0)),
+                total_duration_min=float(item.get("total_duration_min", 0.0)),
+                longest_duration_min=float(item.get("longest_duration_min", 0.0)),
+            )
+            for item in payload.get("asset_summaries", [])
+            if isinstance(item, dict)
+        ]
+        return TrackingArcOrbitResult(
+            point_key=str(payload.get("point_key", "")),
+            point_label=str(payload.get("point_label", "")),
+            launch_utc=str(payload.get("launch_utc", "")),
+            t0_utc=str(payload.get("t0_utc", "")),
+            timeline_start_utc=str(payload.get("timeline_start_utc", "")),
+            timeline_end_utc=str(payload.get("timeline_end_utc", "")),
+            row_labels=[str(item) for item in payload.get("row_labels", [])],
+            segments=segments,
+            asset_summaries=summaries,
+            shadow_total_min=float(payload.get("shadow_total_min", 0.0)),
+            maneuver_count=int(payload.get("maneuver_count", 0)),
+        )
 
     def _set_windows(self, windows: list[Any]) -> None:
         current_index = self._window_combo.currentData() if hasattr(self, "_window_combo") else None
@@ -845,6 +1083,33 @@ class TrackingArcPage(QtWidgets.QWidget):
         self._window_combo.blockSignals(False)
         self._refresh_window_detail()
 
+    def _select_window(self, target_window: LaunchWindowResult) -> None:
+        target_signature = self._window_signature(target_window)
+        for index, window in enumerate(self._windows):
+            if self._window_signature(window) == target_signature:
+                self._window_combo.blockSignals(True)
+                self._window_combo.setCurrentIndex(index)
+                self._window_combo.blockSignals(False)
+                self._refresh_window_detail()
+                return
+
+    @staticmethod
+    def _windows_signature(windows: list[Any]) -> list[tuple[str, str, float]]:
+        return [TrackingArcPage._window_signature(window) for window in windows]
+
+    @staticmethod
+    def _window_signature(window: Any) -> tuple[str, str, float]:
+        return (
+            str(window.window_start_utc),
+            str(window.window_end_utc),
+            round(float(window.duration_min), 6),
+        )
+
+    @staticmethod
+    def _window_archive_key(window: Any) -> str:
+        start, end, duration = TrackingArcPage._window_signature(window)
+        return f"{start}|{end}|{duration:.6f}"
+
     def _selected_window(self) -> Any | None:
         if not self._windows:
             return None
@@ -860,6 +1125,7 @@ class TrackingArcPage(QtWidgets.QWidget):
     def _on_window_selection_changed(self, _index: int) -> None:
         self._clear_results()
         self._refresh_window_detail()
+        self._load_archived_results_for_selected_window()
 
     def _refresh_window_detail(self) -> None:
         window = self._selected_window()
@@ -936,9 +1202,6 @@ class TrackingArcPage(QtWidgets.QWidget):
         return self._workspace.data_dir() / "launch_window_samples.csv"
 
     def _read_sample_csv(self, path: Path) -> list[dict[str, Any]]:
-        import csv
-        import json
-
         samples: list[dict[str, Any]] = []
         numeric_columns = {
             "first_orbit_shadow_min",
@@ -991,6 +1254,7 @@ class TrackingArcPage(QtWidgets.QWidget):
             self._reload_button,
             self._save_button,
             self._reload_windows_button,
+            self._sync_windows_button,
             self._calculate_button,
         ):
             if widget is not None:

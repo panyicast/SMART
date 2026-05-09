@@ -90,14 +90,13 @@ def test_commit_message_file_adds_pending_entry(tmp_path: Path) -> None:
     assert "`scripts/task.ps1`" in updates_text
 
 
-def test_summarize_files_filters_updates_md_and_vendor_noise() -> None:
+def test_summarize_files_filters_updates_md_and_temp_noise() -> None:
     module = _load_module()
 
     summary = module.summarize_files(
         [
             "updates.md",
-            ".tmp/Cesium-1.140/Specs/demo.js",
-            "src/smart/assets/cesium/vendor/Build/Cesium/index.js",
+            ".tmp/cache/Specs/demo.js",
             "src/smart/services/project_workspace.py",
             "README.md",
         ]
