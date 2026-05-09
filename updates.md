@@ -90,6 +90,26 @@
 - 提交：`2ecedce`
 - 影响文件：`src/smart/services/data_visualization.py`、`src/smart/ui/main_window.py`、`src/smart/ui/widgets/data_visualization_page.py`、`tests/test_data_visualization.py`、`AGENTS.md`、`projects/F4/smart_project.json`、`projects/F4/charts/altitude_trend.png`、`projects/F4/charts/velocity_trend.png`。
 
-## 2026-05-09T09:30:29+08:00 | Finalize updates log for 2ecedce
+## 2026-05-09T09:30:28+08:00 | Finalize updates log for 2ecedce
 - 提交：`048c2d7`
 - 影响文件：自动刷新记录，无额外文件。
+
+## 2026-05-09T09:31:21+08:00 | Finalize updates log for 048c2d7
+- 提交：`926a1b2`
+- 影响文件：自动刷新记录，无额外文件。
+
+## 2026-05-09T10:53:20+08:00 | Harden LLM progress privacy defaults
+- 提交：`3b2460e`
+- 影响文件：`src/smart/services/llm_client.py`。
+
+## 2026-05-09T12:08:49+08:00 | Add LLM privacy boundary tests
+- 提交：`0668915`
+- 影响文件：`tests/test_llm_client.py`。
+
+## 2026-05-09T12:19:46+08:00 | Merge pull request #1 from panyicast/harden-security-ai-boundaries
+- 提交：`c1f9814`
+- 影响文件：自动刷新记录，无额外文件。
+
+## 2026-05-09T12:36:06+08:00 | feat: support configurable STK help tool paths
+- 提交：`待写入本次提交`
+- 影响文件：`src/smart/agents/skills/stk_11_6_operations.md`、`src/smart/services/mission_agent.py`、`src/smart/services/mission_agent_tools.py`、`src/smart/ui/widgets/ai_project_analysis_page.py`、`tests/test_ai_project_analysis.py`、`doc/ai_project_analysis.md`。
