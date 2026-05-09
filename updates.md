@@ -81,3 +81,11 @@
 ## 2026-05-08T19:49:41+08:00 | refactor + visual: 拆分大型页面文件并升级视觉主题
 - 提交：`2328243`
 - 影响文件：`src/smart/ui/theme.py`、`src/smart/ui/widgets/flight_program_overview.py`、`src/smart/ui/widgets/flight_program_page.py`、`src/smart/ui/widgets/launch_window_gantt.py`、`src/smart/ui/widgets/launch_window_page.py`、`src/smart/ui/widgets/maneuver_page.py`、`src/smart/ui/widgets/satellite_status_page.py`、`projects/F4/smart_project.json`。
+
+## 2026-05-08T19:49:59+08:00 | Finalize updates log for 2328243
+- 提交：`58b3305`
+- 影响文件：自动刷新记录，无额外文件。
+
+## 2026-05-09T09:30:09+08:00 | feat: 完善数据可视化轨道参数曲线
+- 提交：`待写入本次提交`
+- 影响文件：`src/smart/services/data_visualization.py`、`src/smart/ui/main_window.py`、`src/smart/ui/widgets/data_visualization_page.py`、`tests/test_data_visualization.py`、`AGENTS.md`、`projects/F4/smart_project.json`、`projects/F4/charts/altitude_trend.png`、`projects/F4/charts/velocity_trend.png`。
