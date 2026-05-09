@@ -240,6 +240,27 @@ QPushButton[variant="secondary"]:hover {
     background: #173343;
     border: 1px solid #347084;
 }
+QPushButton[variant="primaryAction"] {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ff8a2a, stop:1 #f04f24);
+    color: #ffffff;
+    border: 1px solid #ffb05f;
+    border-radius: 13px;
+    padding: 12px 20px;
+    font-size: 12pt;
+    font-weight: 800;
+}
+QPushButton[variant="primaryAction"]:hover {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ffa34d, stop:1 #ff6233);
+    border: 1px solid #ffd09a;
+}
+QPushButton[variant="primaryAction"]:pressed {
+    background: #d9411f;
+}
+QPushButton[variant="primaryAction"]:disabled {
+    background: #2b2220;
+    color: #8e7469;
+    border: 1px solid #46302a;
+}
 QLabel[role="kpiChip"] {
     background: rgba(63, 168, 188, 0.12);
     color: #7ff1ff;

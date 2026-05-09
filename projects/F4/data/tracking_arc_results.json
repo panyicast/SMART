@@ -1,0 +1,3243 @@
+{
+  "version": 2,
+  "entries": {
+    "2026-05-16T07:20:00Z|2026-05-16T08:48:00Z|88.000000": {
+      "version": 1,
+      "config": {
+        "start_utc": "2026-05-15T07:00:00Z",
+        "end_utc": "2026-05-18T23:59:59Z",
+        "rocket_flight_time_s": 2134.412,
+        "sample_step_min": 2.0,
+        "min_window_duration_min": 60.0,
+        "ground_station_min_elevation_deg": 5.0,
+        "ground_station_max_theta_st_deg": 70.0,
+        "relay_alpha_abs_max_deg": 20.0,
+        "relay_beta_abs_max_deg": 40.0,
+        "relay_max_theta_st_deg": 80.0,
+        "first_orbit_end_min": 500.0,
+        "first_orbit_max_shadow_min": 45.0,
+        "no_shadow_start_min": 45.0,
+        "no_shadow_end_min": 500.0,
+        "tracking_min_duration_min": 150.0,
+        "tracking_off_nadir_max_deg": 80.0,
+        "remote_track_pre_min": 180.0,
+        "remote_track_post_min": 60.0,
+        "separation_shadow_max_min": 15.0,
+        "burn_sun_angle_max_deg": 90.0,
+        "burn_sun_axis": "plus_z",
+        "inclination_max_deg": 6.0,
+        "require_first_orbit_shadow": true,
+        "require_no_shadow_period": true,
+        "require_tracking_arc": true,
+        "require_remote_tracking": true,
+        "require_separation_shadow": true,
+        "require_burn_sun_angle": true,
+        "require_inclination_limit": false,
+        "constraint_rows": [
+          {
+            "enabled": true,
+            "name": "转移轨道",
+            "start_min": 15.0,
+            "end_min": 500.0,
+            "condition_type": "no_shadow",
+            "operator": "",
+            "threshold": null,
+            "asset_scope": "all"
+          },
+          {
+            "enabled": true,
+            "name": "一远点测控",
+            "start_min": 0.0,
+            "end_min": 150.0,
+            "condition_type": "relay_visible",
+            "operator": "",
+            "threshold": null,
+            "asset_scope": "relay"
+          },
+          {
+            "enabled": true,
+            "name": "第一次点火测控",
+            "start_min": 1074.0,
+            "end_min": 1387.0,
+            "condition_type": "ground_visible",
+            "operator": "",
+            "threshold": null,
+            "asset_scope": "ground"
+          },
+          {
+            "enabled": true,
+            "name": "第一次点火太阳角",
+            "start_min": "T1_start",
+            "end_min": "T1_end",
+            "condition_type": "theta_s",
+            "operator": "",
+            "threshold": null,
+            "asset_scope": "all"
+          },
+          {
+            "enabled": true,
+            "name": "第二次点火测控",
+            "start_min": 3758.0,
+            "end_min": 4053.0,
+            "condition_type": "ground_visible",
+            "operator": "",
+            "threshold": null,
+            "asset_scope": "ground"
+          },
+          {
+            "enabled": true,
+            "name": "第二次点火太阳角",
+            "start_min": "T2_start",
+            "end_min": "T2_end",
+            "condition_type": "theta_s",
+            "operator": "",
+            "threshold": null,
+            "asset_scope": "all"
+          },
+          {
+            "enabled": true,
+            "name": "第三次点火测控",
+            "start_min": 6830.0,
+            "end_min": 7142.0,
+            "condition_type": "ground_visible",
+            "operator": "",
+            "threshold": null,
+            "asset_scope": "ground"
+          },
+          {
+            "enabled": true,
+            "name": "第三次点火太阳角",
+            "start_min": "T3_start",
+            "end_min": "T3_end",
+            "condition_type": "theta_s",
+            "operator": "",
+            "threshold": null,
+            "asset_scope": "all"
+          },
+          {
+            "enabled": true,
+            "name": "第四次点火测控",
+            "start_min": 9336.0,
+            "end_min": 9641.0,
+            "condition_type": "ground_visible",
+            "operator": "",
+            "threshold": null,
+            "asset_scope": "ground"
+          },
+          {
+            "enabled": true,
+            "name": "第四次点火太阳角",
+            "start_min": "T4_start",
+            "end_min": "T4_end",
+            "condition_type": "theta_s",
+            "operator": "",
+            "threshold": null,
+            "asset_scope": "all"
+          },
+          {
+            "enabled": true,
+            "name": "第五次点火太阳角",
+            "start_min": "T5_start",
+            "end_min": "T5_end",
+            "condition_type": "theta_s",
+            "operator": "",
+            "threshold": null,
+            "asset_scope": "all"
+          }
+        ],
+        "ground_station_presets": [
+          {
+            "enabled": true,
+            "name": "厦门站",
+            "longitude_deg": 117.97,
+            "latitude_deg": 24.64,
+            "altitude_m": 0.0,
+            "asset_type": "ground"
+          },
+          {
+            "enabled": true,
+            "name": "渭南站",
+            "longitude_deg": 109.5,
+            "latitude_deg": 34.47,
+            "altitude_m": 0.0,
+            "asset_type": "ground"
+          },
+          {
+            "enabled": false,
+            "name": "佳木斯站",
+            "longitude_deg": 130.3,
+            "latitude_deg": 46.8,
+            "altitude_m": 0.0,
+            "asset_type": "ground"
+          },
+          {
+            "enabled": true,
+            "name": "喀什站",
+            "longitude_deg": 75.99,
+            "latitude_deg": 39.47,
+            "altitude_m": 0.0,
+            "asset_type": "ground"
+          }
+        ],
+        "relay_satellite_presets": [
+          {
+            "enabled": false,
+            "name": "TL2-1",
+            "longitude_deg": 77.0,
+            "latitude_deg": 0.0,
+            "altitude_m": 35786000.0,
+            "asset_type": "relay"
+          },
+          {
+            "enabled": true,
+            "name": "TL2-2",
+            "longitude_deg": 171.0,
+            "latitude_deg": 0.0,
+            "altitude_m": 35786000.0,
+            "asset_type": "relay"
+          },
+          {
+            "enabled": true,
+            "name": "TL2-3",
+            "longitude_deg": 10.6,
+            "latitude_deg": 0.0,
+            "altitude_m": 35786000.0,
+            "asset_type": "relay"
+          },
+          {
+            "enabled": false,
+            "name": "TL2-4",
+            "longitude_deg": 80.0,
+            "latitude_deg": 0.0,
+            "altitude_m": 35786000.0,
+            "asset_type": "relay"
+          },
+          {
+            "enabled": false,
+            "name": "TL2-5",
+            "longitude_deg": 20.4,
+            "latitude_deg": 0.0,
+            "altitude_m": 35786000.0,
+            "asset_type": "relay"
+          }
+        ],
+        "custom_ground_stations": [],
+        "custom_relay_satellites": [
+          {
+            "enabled": false,
+            "name": "TL2-6",
+            "longitude_deg": 0.0,
+            "latitude_deg": 0.0,
+            "altitude_m": 35786000.0,
+            "asset_type": "relay"
+          }
+        ]
+      },
+      "window": {
+        "window_start_utc": "2026-05-16T07:20:00Z",
+        "window_end_utc": "2026-05-16T08:48:00Z",
+        "duration_min": 88.0,
+        "first_failure": "一远点测控",
+        "first_orbit_shadow_min": 14.0,
+        "no_shadow_period_shadow_min": 0.0,
+        "separation_shadow_min": 14.0,
+        "min_burn_sun_margin_deg": 0.11027780327698622,
+        "max_tracking_gap_min": 727.0,
+        "inclination_deg": 16.506138440417434,
+        "window_start_longest_shadow_min": 31.0,
+        "window_end_longest_shadow_min": 29.0,
+        "window_start_constraint": "一远点测控",
+        "window_end_constraint": "第一次点火太阳角"
+      },
+      "windows_signature": [
+        [
+          "2026-05-15T07:18:00Z",
+          "2026-05-15T08:48:00Z",
+          90.0
+        ],
+        [
+          "2026-05-16T07:20:00Z",
+          "2026-05-16T08:48:00Z",
+          88.0
+        ],
+        [
+          "2026-05-17T07:20:00Z",
+          "2026-05-17T08:48:00Z",
+          88.0
+        ],
+        [
+          "2026-05-18T07:20:00Z",
+          "2026-05-18T08:46:00Z",
+          86.0
+        ]
+      ],
+      "results": [
+        {
+          "point_key": "leading",
+          "point_label": "窗口前沿轨道",
+          "launch_utc": "2026-05-16T07:20:00Z",
+          "t0_utc": "2026-05-16T07:55:34Z",
+          "timeline_start_utc": "2026-05-16T07:55:34Z",
+          "timeline_end_utc": "2026-05-24T13:26:13Z",
+          "row_labels": [
+            "变轨点火时段",
+            "地面站 厦门站",
+            "地面站 渭南站",
+            "地面站 喀什站",
+            "中继星 TL2-2",
+            "中继星 TL2-3",
+            "卫星地影时段"
+          ],
+          "segments": [
+            {
+              "row_label": "变轨点火时段",
+              "start_utc": "2026-05-17T04:50:14Z",
+              "end_utc": "2026-05-17T06:02:26Z",
+              "kind": "burn",
+              "tooltip": "第 1 次变轨点火\n2026-05-17T04:50:14Z - 2026-05-17T06:02:26Z\n72.2 min"
+            },
+            {
+              "row_label": "变轨点火时段",
+              "start_utc": "2026-05-19T01:34:14Z",
+              "end_utc": "2026-05-19T02:28:33Z",
+              "kind": "burn",
+              "tooltip": "第 2 次变轨点火\n2026-05-19T01:34:14Z - 2026-05-19T02:28:33Z\n54.3 min"
+            },
+            {
+              "row_label": "变轨点火时段",
+              "start_utc": "2026-05-21T04:46:24Z",
+              "end_utc": "2026-05-21T05:57:11Z",
+              "kind": "burn",
+              "tooltip": "第 3 次变轨点火\n2026-05-21T04:46:24Z - 2026-05-21T05:57:11Z\n70.8 min"
+            },
+            {
+              "row_label": "变轨点火时段",
+              "start_utc": "2026-05-22T22:31:14Z",
+              "end_utc": "2026-05-22T23:36:32Z",
+              "kind": "burn",
+              "tooltip": "第 4 次变轨点火\n2026-05-22T22:31:14Z - 2026-05-22T23:36:32Z\n65.3 min"
+            },
+            {
+              "row_label": "变轨点火时段",
+              "start_utc": "2026-05-23T12:59:24Z",
+              "end_utc": "2026-05-23T13:25:13Z",
+              "kind": "burn",
+              "tooltip": "第 5 次变轨点火\n2026-05-23T12:59:24Z - 2026-05-23T13:25:13Z\n25.8 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-17T00:00:34Z",
+              "end_utc": "2026-05-17T09:57:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-17T00:00:34Z - 2026-05-17T09:57:34Z\n597.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-17T10:20:34Z",
+              "end_utc": "2026-05-17T11:48:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-17T10:20:34Z - 2026-05-17T11:48:34Z\n88.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-17T20:45:34Z",
+              "end_utc": "2026-05-18T02:30:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-17T20:45:34Z - 2026-05-18T02:30:34Z\n345.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-18T21:58:34Z",
+              "end_utc": "2026-05-19T10:04:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-18T21:58:34Z - 2026-05-19T10:04:34Z\n726.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-19T21:09:34Z",
+              "end_utc": "2026-05-20T02:21:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-19T21:09:34Z - 2026-05-20T02:21:34Z\n312.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-21T02:01:34Z",
+              "end_utc": "2026-05-21T09:12:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-21T02:01:34Z - 2026-05-21T09:12:34Z\n431.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-21T22:48:34Z",
+              "end_utc": "2026-05-22T10:40:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-21T22:48:34Z - 2026-05-22T10:40:34Z\n712.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-22T19:16:34Z",
+              "end_utc": "2026-05-23T08:21:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-22T19:16:34Z - 2026-05-23T08:21:34Z\n785.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-23T23:19:34Z",
+              "end_utc": "2026-05-24T08:20:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-23T23:19:34Z - 2026-05-24T08:20:34Z\n541.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-16T23:56:34Z",
+              "end_utc": "2026-05-17T11:44:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-16T23:56:34Z - 2026-05-17T11:44:34Z\n708.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-17T21:41:34Z",
+              "end_utc": "2026-05-18T02:17:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-17T21:41:34Z - 2026-05-18T02:17:34Z\n276.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-18T21:58:34Z",
+              "end_utc": "2026-05-19T09:59:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-18T21:58:34Z - 2026-05-19T09:59:34Z\n721.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-19T22:21:34Z",
+              "end_utc": "2026-05-20T01:52:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-19T22:21:34Z - 2026-05-20T01:52:34Z\n211.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-21T01:56:34Z",
+              "end_utc": "2026-05-21T11:36:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-21T01:56:34Z - 2026-05-21T11:36:34Z\n580.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-21T12:43:34Z",
+              "end_utc": "2026-05-21T13:55:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-21T12:43:34Z - 2026-05-21T13:55:34Z\n72.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-21T22:46:34Z",
+              "end_utc": "2026-05-22T10:34:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-21T22:46:34Z - 2026-05-22T10:34:34Z\n708.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-22T19:20:34Z",
+              "end_utc": "2026-05-23T08:14:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-22T19:20:34Z - 2026-05-23T08:14:34Z\n774.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-23T23:17:34Z",
+              "end_utc": "2026-05-24T08:13:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-23T23:17:34Z - 2026-05-24T08:13:34Z\n536.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-16T23:36:34Z",
+              "end_utc": "2026-05-17T11:35:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-16T23:36:34Z - 2026-05-17T11:35:34Z\n719.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-18T07:35:34Z",
+              "end_utc": "2026-05-18T08:07:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-18T07:35:34Z - 2026-05-18T08:07:34Z\n32.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-18T21:45:34Z",
+              "end_utc": "2026-05-19T09:48:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-18T21:45:34Z - 2026-05-19T09:48:34Z\n723.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-21T01:32:34Z",
+              "end_utc": "2026-05-21T13:45:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-21T01:32:34Z - 2026-05-21T13:45:34Z\n733.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-21T22:31:34Z",
+              "end_utc": "2026-05-22T10:20:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-21T22:31:34Z - 2026-05-22T10:20:34Z\n709.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-22T22:50:34Z",
+              "end_utc": "2026-05-23T07:59:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-22T22:50:34Z - 2026-05-23T07:59:34Z\n549.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-23T23:04:34Z",
+              "end_utc": "2026-05-24T07:59:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-23T23:04:34Z - 2026-05-24T07:59:34Z\n535.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-16T07:55:34Z",
+              "end_utc": "2026-05-16T15:18:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-16T07:55:34Z - 2026-05-16T15:18:34Z\n443.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-16T19:54:34Z",
+              "end_utc": "2026-05-16T20:19:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-16T19:54:34Z - 2026-05-16T20:19:34Z\n25.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-17T05:58:34Z",
+              "end_utc": "2026-05-17T14:08:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-17T05:58:34Z - 2026-05-17T14:08:34Z\n490.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-18T06:41:34Z",
+              "end_utc": "2026-05-18T18:11:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-18T06:41:34Z - 2026-05-18T18:11:34Z\n690.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-19T07:23:34Z",
+              "end_utc": "2026-05-19T13:04:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-19T07:23:34Z - 2026-05-19T13:04:34Z\n341.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-20T07:24:34Z",
+              "end_utc": "2026-05-20T19:17:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-20T07:24:34Z - 2026-05-20T19:17:34Z\n713.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-21T05:10:34Z",
+              "end_utc": "2026-05-21T15:44:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-21T05:10:34Z - 2026-05-21T15:44:34Z\n634.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-22T09:28:34Z",
+              "end_utc": "2026-05-22T16:07:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-22T09:28:34Z - 2026-05-22T16:07:34Z\n399.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-16T16:49:34Z",
+              "end_utc": "2026-05-17T01:00:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-16T16:49:34Z - 2026-05-17T01:00:34Z\n491.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-17T16:27:34Z",
+              "end_utc": "2026-05-18T03:35:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-17T16:27:34Z - 2026-05-18T03:35:34Z\n668.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-18T16:53:34Z",
+              "end_utc": "2026-05-19T01:00:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-18T16:53:34Z - 2026-05-19T01:00:34Z\n487.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-19T16:24:34Z",
+              "end_utc": "2026-05-20T03:40:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-19T16:24:34Z - 2026-05-20T03:40:34Z\n676.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-20T18:12:34Z",
+              "end_utc": "2026-05-20T23:21:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-20T18:12:34Z - 2026-05-20T23:21:34Z\n309.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-21T19:44:34Z",
+              "end_utc": "2026-05-22T00:24:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-21T19:44:34Z - 2026-05-22T00:24:34Z\n280.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-22T18:19:34Z",
+              "end_utc": "2026-05-23T06:56:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-22T18:19:34Z - 2026-05-23T06:56:34Z\n757.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-23T20:17:34Z",
+              "end_utc": "2026-05-24T06:53:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-23T20:17:34Z - 2026-05-24T06:53:34Z\n636.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-16T07:55:34Z",
+              "end_utc": "2026-05-16T08:09:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-16T07:55:34Z - 2026-05-16T08:09:34Z\n14.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-16T21:40:34Z",
+              "end_utc": "2026-05-16T22:04:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-16T21:40:34Z - 2026-05-16T22:04:34Z\n24.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-17T12:14:34Z",
+              "end_utc": "2026-05-17T12:43:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-17T12:14:34Z - 2026-05-17T12:43:34Z\n29.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-18T03:32:34Z",
+              "end_utc": "2026-05-18T04:01:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-18T03:32:34Z - 2026-05-18T04:01:34Z\n29.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-18T18:50:34Z",
+              "end_utc": "2026-05-18T19:18:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-18T18:50:34Z - 2026-05-18T19:18:34Z\n28.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-19T11:11:34Z",
+              "end_utc": "2026-05-19T11:42:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-19T11:11:34Z - 2026-05-19T11:42:34Z\n31.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-20T04:08:34Z",
+              "end_utc": "2026-05-20T04:40:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-20T04:08:34Z - 2026-05-20T04:40:34Z\n32.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-20T21:06:34Z",
+              "end_utc": "2026-05-20T21:37:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-20T21:06:34Z - 2026-05-20T21:37:34Z\n31.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-21T16:42:34Z",
+              "end_utc": "2026-05-21T16:55:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-21T16:42:34Z - 2026-05-21T16:55:34Z\n13.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-22T13:35:34Z",
+              "end_utc": "2026-05-22T13:45:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-22T13:35:34Z - 2026-05-22T13:45:34Z\n10.0 min"
+            }
+          ],
+          "asset_summaries": [
+            {
+              "name": "厦门站",
+              "asset_type": "ground",
+              "interval_count": 9,
+              "total_duration_min": 4537.0,
+              "longest_duration_min": 785.0
+            },
+            {
+              "name": "渭南站",
+              "asset_type": "ground",
+              "interval_count": 9,
+              "total_duration_min": 4586.0,
+              "longest_duration_min": 774.0
+            },
+            {
+              "name": "喀什站",
+              "asset_type": "ground",
+              "interval_count": 7,
+              "total_duration_min": 4000.0,
+              "longest_duration_min": 733.0
+            },
+            {
+              "name": "TL2-2",
+              "asset_type": "relay",
+              "interval_count": 8,
+              "total_duration_min": 3735.0,
+              "longest_duration_min": 713.0
+            },
+            {
+              "name": "TL2-3",
+              "asset_type": "relay",
+              "interval_count": 8,
+              "total_duration_min": 4304.0,
+              "longest_duration_min": 757.0
+            }
+          ],
+          "shadow_total_min": 241.0,
+          "maneuver_count": 5
+        },
+        {
+          "point_key": "midpoint",
+          "point_label": "窗口中点轨道",
+          "launch_utc": "2026-05-16T08:04:00Z",
+          "t0_utc": "2026-05-16T08:39:34Z",
+          "timeline_start_utc": "2026-05-16T08:39:34Z",
+          "timeline_end_utc": "2026-05-24T14:10:13Z",
+          "row_labels": [
+            "变轨点火时段",
+            "地面站 厦门站",
+            "地面站 渭南站",
+            "地面站 喀什站",
+            "中继星 TL2-2",
+            "中继星 TL2-3",
+            "卫星地影时段"
+          ],
+          "segments": [
+            {
+              "row_label": "变轨点火时段",
+              "start_utc": "2026-05-17T05:34:14Z",
+              "end_utc": "2026-05-17T06:46:26Z",
+              "kind": "burn",
+              "tooltip": "第 1 次变轨点火\n2026-05-17T05:34:14Z - 2026-05-17T06:46:26Z\n72.2 min"
+            },
+            {
+              "row_label": "变轨点火时段",
+              "start_utc": "2026-05-19T02:18:14Z",
+              "end_utc": "2026-05-19T03:12:33Z",
+              "kind": "burn",
+              "tooltip": "第 2 次变轨点火\n2026-05-19T02:18:14Z - 2026-05-19T03:12:33Z\n54.3 min"
+            },
+            {
+              "row_label": "变轨点火时段",
+              "start_utc": "2026-05-21T05:30:24Z",
+              "end_utc": "2026-05-21T06:41:11Z",
+              "kind": "burn",
+              "tooltip": "第 3 次变轨点火\n2026-05-21T05:30:24Z - 2026-05-21T06:41:11Z\n70.8 min"
+            },
+            {
+              "row_label": "变轨点火时段",
+              "start_utc": "2026-05-22T23:15:14Z",
+              "end_utc": "2026-05-23T00:20:32Z",
+              "kind": "burn",
+              "tooltip": "第 4 次变轨点火\n2026-05-22T23:15:14Z - 2026-05-23T00:20:32Z\n65.3 min"
+            },
+            {
+              "row_label": "变轨点火时段",
+              "start_utc": "2026-05-23T13:43:24Z",
+              "end_utc": "2026-05-23T14:09:13Z",
+              "kind": "burn",
+              "tooltip": "第 5 次变轨点火\n2026-05-23T13:43:24Z - 2026-05-23T14:09:13Z\n25.8 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-17T00:07:34Z",
+              "end_utc": "2026-05-17T10:41:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-17T00:07:34Z - 2026-05-17T10:41:34Z\n634.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-17T11:04:34Z",
+              "end_utc": "2026-05-17T12:27:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-17T11:04:34Z - 2026-05-17T12:27:34Z\n83.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-17T21:29:34Z",
+              "end_utc": "2026-05-18T03:11:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-17T21:29:34Z - 2026-05-18T03:11:34Z\n342.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-18T21:55:34Z",
+              "end_utc": "2026-05-19T10:37:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-18T21:55:34Z - 2026-05-19T10:37:34Z\n762.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-19T21:53:34Z",
+              "end_utc": "2026-05-20T03:04:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-19T21:53:34Z - 2026-05-20T03:04:34Z\n311.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-21T01:45:34Z",
+              "end_utc": "2026-05-21T09:56:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-21T01:45:34Z - 2026-05-21T09:56:34Z\n491.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-21T22:31:34Z",
+              "end_utc": "2026-05-22T11:01:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-21T22:31:34Z - 2026-05-22T11:01:34Z\n750.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-22T19:01:34Z",
+              "end_utc": "2026-05-23T08:17:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-22T19:01:34Z - 2026-05-23T08:17:34Z\n796.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-23T23:20:34Z",
+              "end_utc": "2026-05-24T08:22:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-23T23:20:34Z - 2026-05-24T08:22:34Z\n542.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-17T00:05:34Z",
+              "end_utc": "2026-05-17T12:22:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-17T00:05:34Z - 2026-05-17T12:22:34Z\n737.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-17T22:25:34Z",
+              "end_utc": "2026-05-18T03:01:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-17T22:25:34Z - 2026-05-18T03:01:34Z\n276.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-18T21:54:34Z",
+              "end_utc": "2026-05-19T10:32:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-18T21:54:34Z - 2026-05-19T10:32:34Z\n758.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-19T23:05:34Z",
+              "end_utc": "2026-05-20T02:36:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-19T23:05:34Z - 2026-05-20T02:36:34Z\n211.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-21T01:40:34Z",
+              "end_utc": "2026-05-21T12:20:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-21T01:40:34Z - 2026-05-21T12:20:34Z\n640.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-21T13:27:34Z",
+              "end_utc": "2026-05-21T14:14:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-21T13:27:34Z - 2026-05-21T14:14:34Z\n47.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-21T22:29:34Z",
+              "end_utc": "2026-05-22T10:54:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-21T22:29:34Z - 2026-05-22T10:54:34Z\n745.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-22T19:05:34Z",
+              "end_utc": "2026-05-23T08:10:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-22T19:05:34Z - 2026-05-23T08:10:34Z\n785.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-23T23:18:34Z",
+              "end_utc": "2026-05-24T08:15:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-23T23:18:34Z - 2026-05-24T08:15:34Z\n537.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-16T23:49:34Z",
+              "end_utc": "2026-05-17T12:12:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-16T23:49:34Z - 2026-05-17T12:12:34Z\n743.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-18T07:24:34Z",
+              "end_utc": "2026-05-18T08:51:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-18T07:24:34Z - 2026-05-18T08:51:34Z\n87.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-18T21:44:34Z",
+              "end_utc": "2026-05-19T10:20:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-18T21:44:34Z - 2026-05-19T10:20:34Z\n756.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-21T01:20:34Z",
+              "end_utc": "2026-05-21T14:05:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-21T01:20:34Z - 2026-05-21T14:05:34Z\n765.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-21T22:16:34Z",
+              "end_utc": "2026-05-22T10:39:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-21T22:16:34Z - 2026-05-22T10:39:34Z\n743.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-22T23:34:34Z",
+              "end_utc": "2026-05-23T07:55:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-22T23:34:34Z - 2026-05-23T07:55:34Z\n501.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-23T23:05:34Z",
+              "end_utc": "2026-05-24T08:01:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-23T23:05:34Z - 2026-05-24T08:01:34Z\n536.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-16T08:39:34Z",
+              "end_utc": "2026-05-16T16:02:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-16T08:39:34Z - 2026-05-16T16:02:34Z\n443.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-16T20:38:34Z",
+              "end_utc": "2026-05-16T20:40:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-16T20:38:34Z - 2026-05-16T20:40:34Z\n2.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-17T06:42:34Z",
+              "end_utc": "2026-05-17T14:52:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-17T06:42:34Z - 2026-05-17T14:52:34Z\n490.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-18T06:42:34Z",
+              "end_utc": "2026-05-18T18:35:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-18T06:42:34Z - 2026-05-18T18:35:34Z\n713.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-19T08:07:34Z",
+              "end_utc": "2026-05-19T13:48:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-19T08:07:34Z - 2026-05-19T13:48:34Z\n341.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-20T07:25:34Z",
+              "end_utc": "2026-05-20T19:34:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-20T07:25:34Z - 2026-05-20T19:34:34Z\n729.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-21T05:54:34Z",
+              "end_utc": "2026-05-21T15:57:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-21T05:54:34Z - 2026-05-21T15:57:34Z\n603.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-22T10:12:34Z",
+              "end_utc": "2026-05-22T16:51:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-22T10:12:34Z - 2026-05-22T16:51:34Z\n399.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-16T17:33:34Z",
+              "end_utc": "2026-05-17T01:44:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-16T17:33:34Z - 2026-05-17T01:44:34Z\n491.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-17T16:24:34Z",
+              "end_utc": "2026-05-18T03:58:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-17T16:24:34Z - 2026-05-18T03:58:34Z\n694.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-18T17:37:34Z",
+              "end_utc": "2026-05-19T01:44:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-18T17:37:34Z - 2026-05-19T01:44:34Z\n487.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-19T16:19:34Z",
+              "end_utc": "2026-05-20T04:01:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-19T16:19:34Z - 2026-05-20T04:01:34Z\n702.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-20T18:56:34Z",
+              "end_utc": "2026-05-21T00:05:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-20T18:56:34Z - 2026-05-21T00:05:34Z\n309.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-21T19:43:34Z",
+              "end_utc": "2026-05-22T01:08:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-21T19:43:34Z - 2026-05-22T01:08:34Z\n325.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-22T18:16:34Z",
+              "end_utc": "2026-05-23T06:54:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-22T18:16:34Z - 2026-05-23T06:54:34Z\n758.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-23T20:18:34Z",
+              "end_utc": "2026-05-24T06:54:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-23T20:18:34Z - 2026-05-24T06:54:34Z\n636.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-16T08:39:34Z",
+              "end_utc": "2026-05-16T08:51:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-16T08:39:34Z - 2026-05-16T08:51:34Z\n12.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-16T22:23:34Z",
+              "end_utc": "2026-05-16T22:46:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-16T22:23:34Z - 2026-05-16T22:46:34Z\n23.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-17T12:54:34Z",
+              "end_utc": "2026-05-17T13:22:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-17T12:54:34Z - 2026-05-17T13:22:34Z\n28.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-18T04:12:34Z",
+              "end_utc": "2026-05-18T04:40:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-18T04:12:34Z - 2026-05-18T04:40:34Z\n28.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-18T19:30:34Z",
+              "end_utc": "2026-05-18T19:57:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-18T19:30:34Z - 2026-05-18T19:57:34Z\n27.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-19T11:48:34Z",
+              "end_utc": "2026-05-19T12:18:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-19T11:48:34Z - 2026-05-19T12:18:34Z\n30.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-20T04:45:34Z",
+              "end_utc": "2026-05-20T05:16:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-20T04:45:34Z - 2026-05-20T05:16:34Z\n31.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-20T21:43:34Z",
+              "end_utc": "2026-05-20T22:13:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-20T21:43:34Z - 2026-05-20T22:13:34Z\n30.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-21T17:07:34Z",
+              "end_utc": "2026-05-21T17:24:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-21T17:07:34Z - 2026-05-21T17:24:34Z\n17.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-22T13:59:34Z",
+              "end_utc": "2026-05-22T14:15:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-22T13:59:34Z - 2026-05-22T14:15:34Z\n16.0 min"
+            }
+          ],
+          "asset_summaries": [
+            {
+              "name": "厦门站",
+              "asset_type": "ground",
+              "interval_count": 9,
+              "total_duration_min": 4711.0,
+              "longest_duration_min": 796.0
+            },
+            {
+              "name": "渭南站",
+              "asset_type": "ground",
+              "interval_count": 9,
+              "total_duration_min": 4736.0,
+              "longest_duration_min": 785.0
+            },
+            {
+              "name": "喀什站",
+              "asset_type": "ground",
+              "interval_count": 7,
+              "total_duration_min": 4131.0,
+              "longest_duration_min": 765.0
+            },
+            {
+              "name": "TL2-2",
+              "asset_type": "relay",
+              "interval_count": 8,
+              "total_duration_min": 3720.0,
+              "longest_duration_min": 729.0
+            },
+            {
+              "name": "TL2-3",
+              "asset_type": "relay",
+              "interval_count": 8,
+              "total_duration_min": 4402.0,
+              "longest_duration_min": 758.0
+            }
+          ],
+          "shadow_total_min": 242.0,
+          "maneuver_count": 5
+        },
+        {
+          "point_key": "trailing",
+          "point_label": "窗口后沿轨道",
+          "launch_utc": "2026-05-16T08:48:00Z",
+          "t0_utc": "2026-05-16T09:23:34Z",
+          "timeline_start_utc": "2026-05-16T09:23:34Z",
+          "timeline_end_utc": "2026-05-24T14:54:13Z",
+          "row_labels": [
+            "变轨点火时段",
+            "地面站 厦门站",
+            "地面站 渭南站",
+            "地面站 喀什站",
+            "中继星 TL2-2",
+            "中继星 TL2-3",
+            "卫星地影时段"
+          ],
+          "segments": [
+            {
+              "row_label": "变轨点火时段",
+              "start_utc": "2026-05-17T06:18:14Z",
+              "end_utc": "2026-05-17T07:30:26Z",
+              "kind": "burn",
+              "tooltip": "第 1 次变轨点火\n2026-05-17T06:18:14Z - 2026-05-17T07:30:26Z\n72.2 min"
+            },
+            {
+              "row_label": "变轨点火时段",
+              "start_utc": "2026-05-19T03:02:14Z",
+              "end_utc": "2026-05-19T03:56:33Z",
+              "kind": "burn",
+              "tooltip": "第 2 次变轨点火\n2026-05-19T03:02:14Z - 2026-05-19T03:56:33Z\n54.3 min"
+            },
+            {
+              "row_label": "变轨点火时段",
+              "start_utc": "2026-05-21T06:14:24Z",
+              "end_utc": "2026-05-21T07:25:11Z",
+              "kind": "burn",
+              "tooltip": "第 3 次变轨点火\n2026-05-21T06:14:24Z - 2026-05-21T07:25:11Z\n70.8 min"
+            },
+            {
+              "row_label": "变轨点火时段",
+              "start_utc": "2026-05-22T23:59:14Z",
+              "end_utc": "2026-05-23T01:04:32Z",
+              "kind": "burn",
+              "tooltip": "第 4 次变轨点火\n2026-05-22T23:59:14Z - 2026-05-23T01:04:32Z\n65.3 min"
+            },
+            {
+              "row_label": "变轨点火时段",
+              "start_utc": "2026-05-23T14:27:24Z",
+              "end_utc": "2026-05-23T14:53:13Z",
+              "kind": "burn",
+              "tooltip": "第 5 次变轨点火\n2026-05-23T14:27:24Z - 2026-05-23T14:53:13Z\n25.8 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-17T00:29:34Z",
+              "end_utc": "2026-05-17T11:25:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-17T00:29:34Z - 2026-05-17T11:25:34Z\n656.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-17T11:48:34Z",
+              "end_utc": "2026-05-17T13:03:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-17T11:48:34Z - 2026-05-17T13:03:34Z\n75.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-17T22:13:34Z",
+              "end_utc": "2026-05-18T03:41:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-17T22:13:34Z - 2026-05-18T03:41:34Z\n328.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-18T22:06:34Z",
+              "end_utc": "2026-05-19T11:08:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-18T22:06:34Z - 2026-05-19T11:08:34Z\n782.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-19T22:37:34Z",
+              "end_utc": "2026-05-20T03:28:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-19T22:37:34Z - 2026-05-20T03:28:34Z\n291.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-21T01:42:34Z",
+              "end_utc": "2026-05-21T10:40:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-21T01:42:34Z - 2026-05-21T10:40:34Z\n538.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-21T22:21:34Z",
+              "end_utc": "2026-05-22T11:18:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-21T22:21:34Z - 2026-05-22T11:18:34Z\n777.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-22T18:54:34Z",
+              "end_utc": "2026-05-23T08:11:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-22T18:54:34Z - 2026-05-23T08:11:34Z\n797.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-23T23:22:34Z",
+              "end_utc": "2026-05-24T08:24:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-23T23:22:34Z - 2026-05-24T08:24:34Z\n542.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-17T00:27:34Z",
+              "end_utc": "2026-05-17T12:58:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-17T00:27:34Z - 2026-05-17T12:58:34Z\n751.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-17T23:09:34Z",
+              "end_utc": "2026-05-18T03:42:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-17T23:09:34Z - 2026-05-18T03:42:34Z\n273.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-18T22:06:34Z",
+              "end_utc": "2026-05-19T11:02:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-18T22:06:34Z - 2026-05-19T11:02:34Z\n776.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-19T23:49:34Z",
+              "end_utc": "2026-05-20T03:20:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-19T23:49:34Z - 2026-05-20T03:20:34Z\n211.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-21T01:38:34Z",
+              "end_utc": "2026-05-21T13:04:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-21T01:38:34Z - 2026-05-21T13:04:34Z\n686.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-21T14:11:34Z",
+              "end_utc": "2026-05-21T14:30:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-21T14:11:34Z - 2026-05-21T14:30:34Z\n19.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-21T22:20:34Z",
+              "end_utc": "2026-05-22T11:11:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-21T22:20:34Z - 2026-05-22T11:11:34Z\n771.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-22T18:58:34Z",
+              "end_utc": "2026-05-23T08:04:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-22T18:58:34Z - 2026-05-23T08:04:34Z\n786.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-23T23:20:34Z",
+              "end_utc": "2026-05-24T08:17:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-23T23:20:34Z - 2026-05-24T08:17:34Z\n537.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-17T00:14:34Z",
+              "end_utc": "2026-05-17T12:48:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-17T00:14:34Z - 2026-05-17T12:48:34Z\n754.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-18T07:28:34Z",
+              "end_utc": "2026-05-18T09:35:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-18T07:28:34Z - 2026-05-18T09:35:34Z\n127.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-18T22:13:34Z",
+              "end_utc": "2026-05-19T10:48:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-18T22:13:34Z - 2026-05-19T10:48:34Z\n755.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-21T01:20:34Z",
+              "end_utc": "2026-05-21T14:21:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-21T01:20:34Z - 2026-05-21T14:21:34Z\n781.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-21T22:09:34Z",
+              "end_utc": "2026-05-22T10:54:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-21T22:09:34Z - 2026-05-22T10:54:34Z\n765.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-23T00:18:34Z",
+              "end_utc": "2026-05-23T07:49:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-23T00:18:34Z - 2026-05-23T07:49:34Z\n451.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-23T23:07:34Z",
+              "end_utc": "2026-05-24T08:02:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-23T23:07:34Z - 2026-05-24T08:02:34Z\n535.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-16T09:23:34Z",
+              "end_utc": "2026-05-16T16:46:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-16T09:23:34Z - 2026-05-16T16:46:34Z\n443.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-17T07:26:34Z",
+              "end_utc": "2026-05-17T15:36:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-17T07:26:34Z - 2026-05-17T15:36:34Z\n490.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-18T06:49:34Z",
+              "end_utc": "2026-05-18T18:55:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-18T06:49:34Z - 2026-05-18T18:55:34Z\n726.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-19T08:51:34Z",
+              "end_utc": "2026-05-19T14:32:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-19T08:51:34Z - 2026-05-19T14:32:34Z\n341.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-20T07:31:34Z",
+              "end_utc": "2026-05-20T19:48:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-20T07:31:34Z - 2026-05-20T19:48:34Z\n737.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-21T06:38:34Z",
+              "end_utc": "2026-05-21T16:09:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-21T06:38:34Z - 2026-05-21T16:09:34Z\n571.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-22T10:56:34Z",
+              "end_utc": "2026-05-22T17:35:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-22T10:56:34Z - 2026-05-22T17:35:34Z\n399.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-16T18:17:34Z",
+              "end_utc": "2026-05-17T02:28:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-16T18:17:34Z - 2026-05-17T02:28:34Z\n491.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-17T16:27:34Z",
+              "end_utc": "2026-05-18T04:22:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-17T16:27:34Z - 2026-05-18T04:22:34Z\n715.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-18T18:21:34Z",
+              "end_utc": "2026-05-19T02:28:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-18T18:21:34Z - 2026-05-19T02:28:34Z\n487.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-19T16:19:34Z",
+              "end_utc": "2026-05-20T04:20:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-19T16:19:34Z - 2026-05-20T04:20:34Z\n721.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-20T19:40:34Z",
+              "end_utc": "2026-05-21T00:49:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-20T19:40:34Z - 2026-05-21T00:49:34Z\n309.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-21T19:46:34Z",
+              "end_utc": "2026-05-22T01:52:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-21T19:46:34Z - 2026-05-22T01:52:34Z\n366.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-22T18:15:34Z",
+              "end_utc": "2026-05-23T06:51:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-22T18:15:34Z - 2026-05-23T06:51:34Z\n756.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-23T20:19:34Z",
+              "end_utc": "2026-05-24T06:55:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-23T20:19:34Z - 2026-05-24T06:55:34Z\n636.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-16T09:23:34Z",
+              "end_utc": "2026-05-16T09:33:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-16T09:23:34Z - 2026-05-16T09:33:34Z\n10.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-16T23:05:34Z",
+              "end_utc": "2026-05-16T23:28:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-16T23:05:34Z - 2026-05-16T23:28:34Z\n23.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-17T13:35:34Z",
+              "end_utc": "2026-05-17T14:01:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-17T13:35:34Z - 2026-05-17T14:01:34Z\n26.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-18T04:53:34Z",
+              "end_utc": "2026-05-18T05:19:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-18T04:53:34Z - 2026-05-18T05:19:34Z\n26.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-18T20:10:34Z",
+              "end_utc": "2026-05-18T20:37:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-18T20:10:34Z - 2026-05-18T20:37:34Z\n27.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-19T12:25:34Z",
+              "end_utc": "2026-05-19T12:54:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-19T12:25:34Z - 2026-05-19T12:54:34Z\n29.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-20T05:23:34Z",
+              "end_utc": "2026-05-20T05:52:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-20T05:23:34Z - 2026-05-20T05:52:34Z\n29.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-20T22:20:34Z",
+              "end_utc": "2026-05-20T22:50:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-20T22:20:34Z - 2026-05-20T22:50:34Z\n30.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-21T17:34:34Z",
+              "end_utc": "2026-05-21T17:51:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-21T17:34:34Z - 2026-05-21T17:51:34Z\n17.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-22T14:26:34Z",
+              "end_utc": "2026-05-22T14:43:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-22T14:26:34Z - 2026-05-22T14:43:34Z\n17.0 min"
+            }
+          ],
+          "asset_summaries": [
+            {
+              "name": "厦门站",
+              "asset_type": "ground",
+              "interval_count": 9,
+              "total_duration_min": 4786.0,
+              "longest_duration_min": 797.0
+            },
+            {
+              "name": "渭南站",
+              "asset_type": "ground",
+              "interval_count": 9,
+              "total_duration_min": 4810.0,
+              "longest_duration_min": 786.0
+            },
+            {
+              "name": "喀什站",
+              "asset_type": "ground",
+              "interval_count": 7,
+              "total_duration_min": 4168.0,
+              "longest_duration_min": 781.0
+            },
+            {
+              "name": "TL2-2",
+              "asset_type": "relay",
+              "interval_count": 7,
+              "total_duration_min": 3707.0,
+              "longest_duration_min": 737.0
+            },
+            {
+              "name": "TL2-3",
+              "asset_type": "relay",
+              "interval_count": 8,
+              "total_duration_min": 4481.0,
+              "longest_duration_min": 756.0
+            }
+          ],
+          "shadow_total_min": 234.0,
+          "maneuver_count": 5
+        }
+      ]
+    },
+    "2026-05-15T07:18:00Z|2026-05-15T08:48:00Z|90.000000": {
+      "version": 1,
+      "config": {
+        "start_utc": "2026-05-15T07:00:00Z",
+        "end_utc": "2026-05-18T23:59:59Z",
+        "rocket_flight_time_s": 2134.412,
+        "sample_step_min": 2.0,
+        "min_window_duration_min": 60.0,
+        "ground_station_min_elevation_deg": 5.0,
+        "ground_station_max_theta_st_deg": 70.0,
+        "relay_alpha_abs_max_deg": 20.0,
+        "relay_beta_abs_max_deg": 40.0,
+        "relay_max_theta_st_deg": 80.0,
+        "first_orbit_end_min": 500.0,
+        "first_orbit_max_shadow_min": 45.0,
+        "no_shadow_start_min": 45.0,
+        "no_shadow_end_min": 500.0,
+        "tracking_min_duration_min": 150.0,
+        "tracking_off_nadir_max_deg": 80.0,
+        "remote_track_pre_min": 180.0,
+        "remote_track_post_min": 60.0,
+        "separation_shadow_max_min": 15.0,
+        "burn_sun_angle_max_deg": 90.0,
+        "burn_sun_axis": "plus_z",
+        "inclination_max_deg": 6.0,
+        "require_first_orbit_shadow": true,
+        "require_no_shadow_period": true,
+        "require_tracking_arc": true,
+        "require_remote_tracking": true,
+        "require_separation_shadow": true,
+        "require_burn_sun_angle": true,
+        "require_inclination_limit": false,
+        "constraint_rows": [
+          {
+            "enabled": true,
+            "name": "转移轨道",
+            "start_min": 15.0,
+            "end_min": 500.0,
+            "condition_type": "no_shadow",
+            "operator": "",
+            "threshold": null,
+            "asset_scope": "all"
+          },
+          {
+            "enabled": true,
+            "name": "一远点测控",
+            "start_min": 0.0,
+            "end_min": 150.0,
+            "condition_type": "relay_visible",
+            "operator": "",
+            "threshold": null,
+            "asset_scope": "relay"
+          },
+          {
+            "enabled": true,
+            "name": "第一次点火测控",
+            "start_min": 1074.0,
+            "end_min": 1387.0,
+            "condition_type": "ground_visible",
+            "operator": "",
+            "threshold": null,
+            "asset_scope": "ground"
+          },
+          {
+            "enabled": true,
+            "name": "第一次点火太阳角",
+            "start_min": "T1_start",
+            "end_min": "T1_end",
+            "condition_type": "theta_s",
+            "operator": "",
+            "threshold": null,
+            "asset_scope": "all"
+          },
+          {
+            "enabled": true,
+            "name": "第二次点火测控",
+            "start_min": 3758.0,
+            "end_min": 4053.0,
+            "condition_type": "ground_visible",
+            "operator": "",
+            "threshold": null,
+            "asset_scope": "ground"
+          },
+          {
+            "enabled": true,
+            "name": "第二次点火太阳角",
+            "start_min": "T2_start",
+            "end_min": "T2_end",
+            "condition_type": "theta_s",
+            "operator": "",
+            "threshold": null,
+            "asset_scope": "all"
+          },
+          {
+            "enabled": true,
+            "name": "第三次点火测控",
+            "start_min": 6830.0,
+            "end_min": 7142.0,
+            "condition_type": "ground_visible",
+            "operator": "",
+            "threshold": null,
+            "asset_scope": "ground"
+          },
+          {
+            "enabled": true,
+            "name": "第三次点火太阳角",
+            "start_min": "T3_start",
+            "end_min": "T3_end",
+            "condition_type": "theta_s",
+            "operator": "",
+            "threshold": null,
+            "asset_scope": "all"
+          },
+          {
+            "enabled": true,
+            "name": "第四次点火测控",
+            "start_min": 9336.0,
+            "end_min": 9641.0,
+            "condition_type": "ground_visible",
+            "operator": "",
+            "threshold": null,
+            "asset_scope": "ground"
+          },
+          {
+            "enabled": true,
+            "name": "第四次点火太阳角",
+            "start_min": "T4_start",
+            "end_min": "T4_end",
+            "condition_type": "theta_s",
+            "operator": "",
+            "threshold": null,
+            "asset_scope": "all"
+          },
+          {
+            "enabled": true,
+            "name": "第五次点火太阳角",
+            "start_min": "T5_start",
+            "end_min": "T5_end",
+            "condition_type": "theta_s",
+            "operator": "",
+            "threshold": null,
+            "asset_scope": "all"
+          }
+        ],
+        "ground_station_presets": [
+          {
+            "enabled": true,
+            "name": "厦门站",
+            "longitude_deg": 117.97,
+            "latitude_deg": 24.64,
+            "altitude_m": 0.0,
+            "asset_type": "ground"
+          },
+          {
+            "enabled": true,
+            "name": "渭南站",
+            "longitude_deg": 109.5,
+            "latitude_deg": 34.47,
+            "altitude_m": 0.0,
+            "asset_type": "ground"
+          },
+          {
+            "enabled": false,
+            "name": "佳木斯站",
+            "longitude_deg": 130.3,
+            "latitude_deg": 46.8,
+            "altitude_m": 0.0,
+            "asset_type": "ground"
+          },
+          {
+            "enabled": true,
+            "name": "喀什站",
+            "longitude_deg": 75.99,
+            "latitude_deg": 39.47,
+            "altitude_m": 0.0,
+            "asset_type": "ground"
+          }
+        ],
+        "relay_satellite_presets": [
+          {
+            "enabled": false,
+            "name": "TL2-1",
+            "longitude_deg": 77.0,
+            "latitude_deg": 0.0,
+            "altitude_m": 35786000.0,
+            "asset_type": "relay"
+          },
+          {
+            "enabled": true,
+            "name": "TL2-2",
+            "longitude_deg": 171.0,
+            "latitude_deg": 0.0,
+            "altitude_m": 35786000.0,
+            "asset_type": "relay"
+          },
+          {
+            "enabled": true,
+            "name": "TL2-3",
+            "longitude_deg": 10.6,
+            "latitude_deg": 0.0,
+            "altitude_m": 35786000.0,
+            "asset_type": "relay"
+          },
+          {
+            "enabled": false,
+            "name": "TL2-4",
+            "longitude_deg": 80.0,
+            "latitude_deg": 0.0,
+            "altitude_m": 35786000.0,
+            "asset_type": "relay"
+          },
+          {
+            "enabled": false,
+            "name": "TL2-5",
+            "longitude_deg": 20.4,
+            "latitude_deg": 0.0,
+            "altitude_m": 35786000.0,
+            "asset_type": "relay"
+          }
+        ],
+        "custom_ground_stations": [],
+        "custom_relay_satellites": [
+          {
+            "enabled": false,
+            "name": "TL2-6",
+            "longitude_deg": 0.0,
+            "latitude_deg": 0.0,
+            "altitude_m": 35786000.0,
+            "asset_type": "relay"
+          }
+        ]
+      },
+      "window": {
+        "window_start_utc": "2026-05-15T07:18:00Z",
+        "window_end_utc": "2026-05-15T08:48:00Z",
+        "duration_min": 90.0,
+        "first_failure": "一远点测控",
+        "first_orbit_shadow_min": 15.0,
+        "no_shadow_period_shadow_min": 0.0,
+        "separation_shadow_min": 15.0,
+        "min_burn_sun_margin_deg": 0.17854384184320793,
+        "max_tracking_gap_min": 726.0,
+        "inclination_deg": 16.506138440417434,
+        "window_start_longest_shadow_min": 31.0,
+        "window_end_longest_shadow_min": 29.0,
+        "window_start_constraint": "一远点测控",
+        "window_end_constraint": "第一次点火太阳角"
+      },
+      "window_signature": [
+        "2026-05-15T07:18:00Z",
+        "2026-05-15T08:48:00Z",
+        90.0
+      ],
+      "results": [
+        {
+          "point_key": "leading",
+          "point_label": "窗口前沿轨道",
+          "launch_utc": "2026-05-15T07:18:00Z",
+          "t0_utc": "2026-05-15T07:53:34Z",
+          "timeline_start_utc": "2026-05-15T07:53:34Z",
+          "timeline_end_utc": "2026-05-23T13:24:13Z",
+          "row_labels": [
+            "变轨点火时段",
+            "地面站 厦门站",
+            "地面站 渭南站",
+            "地面站 喀什站",
+            "中继星 TL2-2",
+            "中继星 TL2-3",
+            "卫星地影时段"
+          ],
+          "segments": [
+            {
+              "row_label": "变轨点火时段",
+              "start_utc": "2026-05-16T04:48:14Z",
+              "end_utc": "2026-05-16T06:00:26Z",
+              "kind": "burn",
+              "tooltip": "第 1 次变轨点火\n2026-05-16T04:48:14Z - 2026-05-16T06:00:26Z\n72.2 min"
+            },
+            {
+              "row_label": "变轨点火时段",
+              "start_utc": "2026-05-18T01:32:14Z",
+              "end_utc": "2026-05-18T02:26:33Z",
+              "kind": "burn",
+              "tooltip": "第 2 次变轨点火\n2026-05-18T01:32:14Z - 2026-05-18T02:26:33Z\n54.3 min"
+            },
+            {
+              "row_label": "变轨点火时段",
+              "start_utc": "2026-05-20T04:44:24Z",
+              "end_utc": "2026-05-20T05:55:11Z",
+              "kind": "burn",
+              "tooltip": "第 3 次变轨点火\n2026-05-20T04:44:24Z - 2026-05-20T05:55:11Z\n70.8 min"
+            },
+            {
+              "row_label": "变轨点火时段",
+              "start_utc": "2026-05-21T22:29:14Z",
+              "end_utc": "2026-05-21T23:34:32Z",
+              "kind": "burn",
+              "tooltip": "第 4 次变轨点火\n2026-05-21T22:29:14Z - 2026-05-21T23:34:32Z\n65.3 min"
+            },
+            {
+              "row_label": "变轨点火时段",
+              "start_utc": "2026-05-22T12:57:24Z",
+              "end_utc": "2026-05-22T13:23:13Z",
+              "kind": "burn",
+              "tooltip": "第 5 次变轨点火\n2026-05-22T12:57:24Z - 2026-05-22T13:23:13Z\n25.8 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-15T23:59:34Z",
+              "end_utc": "2026-05-16T09:55:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-15T23:59:34Z - 2026-05-16T09:55:34Z\n596.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-16T10:18:34Z",
+              "end_utc": "2026-05-16T11:46:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-16T10:18:34Z - 2026-05-16T11:46:34Z\n88.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-16T20:43:34Z",
+              "end_utc": "2026-05-17T02:28:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-16T20:43:34Z - 2026-05-17T02:28:34Z\n345.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-17T21:59:34Z",
+              "end_utc": "2026-05-18T10:03:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-17T21:59:34Z - 2026-05-18T10:03:34Z\n724.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-18T21:07:34Z",
+              "end_utc": "2026-05-19T02:19:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-18T21:07:34Z - 2026-05-19T02:19:34Z\n312.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-20T02:02:34Z",
+              "end_utc": "2026-05-20T09:10:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-20T02:02:34Z - 2026-05-20T09:10:34Z\n428.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-20T22:49:34Z",
+              "end_utc": "2026-05-21T10:39:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-20T22:49:34Z - 2026-05-21T10:39:34Z\n710.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-21T19:16:34Z",
+              "end_utc": "2026-05-22T08:21:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-21T19:16:34Z - 2026-05-22T08:21:34Z\n785.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-22T23:19:34Z",
+              "end_utc": "2026-05-23T08:20:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-22T23:19:34Z - 2026-05-23T08:20:34Z\n541.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-15T23:56:34Z",
+              "end_utc": "2026-05-16T11:42:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-15T23:56:34Z - 2026-05-16T11:42:34Z\n706.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-16T21:39:34Z",
+              "end_utc": "2026-05-17T02:15:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-16T21:39:34Z - 2026-05-17T02:15:34Z\n276.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-17T21:58:34Z",
+              "end_utc": "2026-05-18T09:58:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-17T21:58:34Z - 2026-05-18T09:58:34Z\n720.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-18T22:19:34Z",
+              "end_utc": "2026-05-19T01:50:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-18T22:19:34Z - 2026-05-19T01:50:34Z\n211.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-20T01:57:34Z",
+              "end_utc": "2026-05-20T11:34:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-20T01:57:34Z - 2026-05-20T11:34:34Z\n577.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-20T12:41:34Z",
+              "end_utc": "2026-05-20T13:54:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-20T12:41:34Z - 2026-05-20T13:54:34Z\n73.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-20T22:47:34Z",
+              "end_utc": "2026-05-21T10:33:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-20T22:47:34Z - 2026-05-21T10:33:34Z\n706.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-21T19:20:34Z",
+              "end_utc": "2026-05-22T08:14:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-21T19:20:34Z - 2026-05-22T08:14:34Z\n774.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-22T23:16:34Z",
+              "end_utc": "2026-05-23T08:13:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-22T23:16:34Z - 2026-05-23T08:13:34Z\n537.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-15T23:36:34Z",
+              "end_utc": "2026-05-16T11:33:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-15T23:36:34Z - 2026-05-16T11:33:34Z\n717.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-17T07:36:34Z",
+              "end_utc": "2026-05-17T08:05:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-17T07:36:34Z - 2026-05-17T08:05:34Z\n29.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-17T21:46:34Z",
+              "end_utc": "2026-05-18T09:47:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-17T21:46:34Z - 2026-05-18T09:47:34Z\n721.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-20T01:33:34Z",
+              "end_utc": "2026-05-20T13:44:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-20T01:33:34Z - 2026-05-20T13:44:34Z\n731.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-20T22:32:34Z",
+              "end_utc": "2026-05-21T10:19:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-20T22:32:34Z - 2026-05-21T10:19:34Z\n707.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-21T22:48:34Z",
+              "end_utc": "2026-05-22T08:00:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-21T22:48:34Z - 2026-05-22T08:00:34Z\n552.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-22T23:03:34Z",
+              "end_utc": "2026-05-23T07:59:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-22T23:03:34Z - 2026-05-23T07:59:34Z\n536.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-15T07:53:34Z",
+              "end_utc": "2026-05-15T15:16:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-15T07:53:34Z - 2026-05-15T15:16:34Z\n443.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-15T19:52:34Z",
+              "end_utc": "2026-05-15T20:18:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-15T19:52:34Z - 2026-05-15T20:18:34Z\n26.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-16T05:56:34Z",
+              "end_utc": "2026-05-16T14:06:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-16T05:56:34Z - 2026-05-16T14:06:34Z\n490.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-17T06:41:34Z",
+              "end_utc": "2026-05-17T18:10:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-17T06:41:34Z - 2026-05-17T18:10:34Z\n689.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-18T07:21:34Z",
+              "end_utc": "2026-05-18T13:02:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-18T07:21:34Z - 2026-05-18T13:02:34Z\n341.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-19T07:24:34Z",
+              "end_utc": "2026-05-19T19:16:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-19T07:24:34Z - 2026-05-19T19:16:34Z\n712.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-20T05:08:34Z",
+              "end_utc": "2026-05-20T15:44:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-20T05:08:34Z - 2026-05-20T15:44:34Z\n636.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-21T09:26:34Z",
+              "end_utc": "2026-05-21T16:05:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-21T09:26:34Z - 2026-05-21T16:05:34Z\n399.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-15T16:47:34Z",
+              "end_utc": "2026-05-16T00:58:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-15T16:47:34Z - 2026-05-16T00:58:34Z\n491.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-16T16:27:34Z",
+              "end_utc": "2026-05-17T03:34:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-16T16:27:34Z - 2026-05-17T03:34:34Z\n667.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-17T16:51:34Z",
+              "end_utc": "2026-05-18T00:58:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-17T16:51:34Z - 2026-05-18T00:58:34Z\n487.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-18T16:25:34Z",
+              "end_utc": "2026-05-19T03:39:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-18T16:25:34Z - 2026-05-19T03:39:34Z\n674.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-19T18:10:34Z",
+              "end_utc": "2026-05-19T23:19:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-19T18:10:34Z - 2026-05-19T23:19:34Z\n309.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-20T19:43:34Z",
+              "end_utc": "2026-05-21T00:22:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-20T19:43:34Z - 2026-05-21T00:22:34Z\n279.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-21T18:20:34Z",
+              "end_utc": "2026-05-22T06:56:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-21T18:20:34Z - 2026-05-22T06:56:34Z\n756.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-22T20:17:34Z",
+              "end_utc": "2026-05-23T06:53:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-22T20:17:34Z - 2026-05-23T06:53:34Z\n636.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-15T07:53:34Z",
+              "end_utc": "2026-05-15T08:08:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-15T07:53:34Z - 2026-05-15T08:08:34Z\n15.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-15T21:38:34Z",
+              "end_utc": "2026-05-15T22:03:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-15T21:38:34Z - 2026-05-15T22:03:34Z\n25.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-16T12:12:34Z",
+              "end_utc": "2026-05-16T12:41:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-16T12:12:34Z - 2026-05-16T12:41:34Z\n29.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-17T03:30:34Z",
+              "end_utc": "2026-05-17T03:59:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-17T03:30:34Z - 2026-05-17T03:59:34Z\n29.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-17T18:48:34Z",
+              "end_utc": "2026-05-17T19:17:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-17T18:48:34Z - 2026-05-17T19:17:34Z\n29.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-18T11:09:34Z",
+              "end_utc": "2026-05-18T11:41:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-18T11:09:34Z - 2026-05-18T11:41:34Z\n32.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-19T04:07:34Z",
+              "end_utc": "2026-05-19T04:38:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-19T04:07:34Z - 2026-05-19T04:38:34Z\n31.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-19T21:04:34Z",
+              "end_utc": "2026-05-19T21:36:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-19T21:04:34Z - 2026-05-19T21:36:34Z\n32.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-20T16:40:34Z",
+              "end_utc": "2026-05-20T16:55:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-20T16:40:34Z - 2026-05-20T16:55:34Z\n15.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-21T13:33:34Z",
+              "end_utc": "2026-05-21T13:45:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-21T13:33:34Z - 2026-05-21T13:45:34Z\n12.0 min"
+            }
+          ],
+          "asset_summaries": [
+            {
+              "name": "厦门站",
+              "asset_type": "ground",
+              "interval_count": 9,
+              "total_duration_min": 4529.0,
+              "longest_duration_min": 785.0
+            },
+            {
+              "name": "渭南站",
+              "asset_type": "ground",
+              "interval_count": 9,
+              "total_duration_min": 4580.0,
+              "longest_duration_min": 774.0
+            },
+            {
+              "name": "喀什站",
+              "asset_type": "ground",
+              "interval_count": 7,
+              "total_duration_min": 3993.0,
+              "longest_duration_min": 731.0
+            },
+            {
+              "name": "TL2-2",
+              "asset_type": "relay",
+              "interval_count": 8,
+              "total_duration_min": 3736.0,
+              "longest_duration_min": 712.0
+            },
+            {
+              "name": "TL2-3",
+              "asset_type": "relay",
+              "interval_count": 8,
+              "total_duration_min": 4299.0,
+              "longest_duration_min": 756.0
+            }
+          ],
+          "shadow_total_min": 249.0,
+          "maneuver_count": 5
+        },
+        {
+          "point_key": "midpoint",
+          "point_label": "窗口中点轨道",
+          "launch_utc": "2026-05-15T08:03:00Z",
+          "t0_utc": "2026-05-15T08:38:34Z",
+          "timeline_start_utc": "2026-05-15T08:38:34Z",
+          "timeline_end_utc": "2026-05-23T14:09:13Z",
+          "row_labels": [
+            "变轨点火时段",
+            "地面站 厦门站",
+            "地面站 渭南站",
+            "地面站 喀什站",
+            "中继星 TL2-2",
+            "中继星 TL2-3",
+            "卫星地影时段"
+          ],
+          "segments": [
+            {
+              "row_label": "变轨点火时段",
+              "start_utc": "2026-05-16T05:33:14Z",
+              "end_utc": "2026-05-16T06:45:26Z",
+              "kind": "burn",
+              "tooltip": "第 1 次变轨点火\n2026-05-16T05:33:14Z - 2026-05-16T06:45:26Z\n72.2 min"
+            },
+            {
+              "row_label": "变轨点火时段",
+              "start_utc": "2026-05-18T02:17:14Z",
+              "end_utc": "2026-05-18T03:11:33Z",
+              "kind": "burn",
+              "tooltip": "第 2 次变轨点火\n2026-05-18T02:17:14Z - 2026-05-18T03:11:33Z\n54.3 min"
+            },
+            {
+              "row_label": "变轨点火时段",
+              "start_utc": "2026-05-20T05:29:24Z",
+              "end_utc": "2026-05-20T06:40:11Z",
+              "kind": "burn",
+              "tooltip": "第 3 次变轨点火\n2026-05-20T05:29:24Z - 2026-05-20T06:40:11Z\n70.8 min"
+            },
+            {
+              "row_label": "变轨点火时段",
+              "start_utc": "2026-05-21T23:14:14Z",
+              "end_utc": "2026-05-22T00:19:32Z",
+              "kind": "burn",
+              "tooltip": "第 4 次变轨点火\n2026-05-21T23:14:14Z - 2026-05-22T00:19:32Z\n65.3 min"
+            },
+            {
+              "row_label": "变轨点火时段",
+              "start_utc": "2026-05-22T13:42:24Z",
+              "end_utc": "2026-05-22T14:08:13Z",
+              "kind": "burn",
+              "tooltip": "第 5 次变轨点火\n2026-05-22T13:42:24Z - 2026-05-22T14:08:13Z\n25.8 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-16T00:07:34Z",
+              "end_utc": "2026-05-16T10:40:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-16T00:07:34Z - 2026-05-16T10:40:34Z\n633.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-16T11:03:34Z",
+              "end_utc": "2026-05-16T12:26:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-16T11:03:34Z - 2026-05-16T12:26:34Z\n83.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-16T21:28:34Z",
+              "end_utc": "2026-05-17T03:10:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-16T21:28:34Z - 2026-05-17T03:10:34Z\n342.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-17T21:54:34Z",
+              "end_utc": "2026-05-18T10:37:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-17T21:54:34Z - 2026-05-18T10:37:34Z\n763.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-18T21:52:34Z",
+              "end_utc": "2026-05-19T03:03:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-18T21:52:34Z - 2026-05-19T03:03:34Z\n311.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-20T01:45:34Z",
+              "end_utc": "2026-05-20T09:55:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-20T01:45:34Z - 2026-05-20T09:55:34Z\n490.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-20T22:31:34Z",
+              "end_utc": "2026-05-21T11:01:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-20T22:31:34Z - 2026-05-21T11:01:34Z\n750.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-21T19:01:34Z",
+              "end_utc": "2026-05-22T08:17:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-21T19:01:34Z - 2026-05-22T08:17:34Z\n796.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-22T23:20:34Z",
+              "end_utc": "2026-05-23T08:22:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-22T23:20:34Z - 2026-05-23T08:22:34Z\n542.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-16T00:04:34Z",
+              "end_utc": "2026-05-16T12:21:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-16T00:04:34Z - 2026-05-16T12:21:34Z\n737.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-16T22:24:34Z",
+              "end_utc": "2026-05-17T03:00:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-16T22:24:34Z - 2026-05-17T03:00:34Z\n276.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-17T21:54:34Z",
+              "end_utc": "2026-05-18T10:31:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-17T21:54:34Z - 2026-05-18T10:31:34Z\n757.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-18T23:04:34Z",
+              "end_utc": "2026-05-19T02:35:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-18T23:04:34Z - 2026-05-19T02:35:34Z\n211.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-20T01:40:34Z",
+              "end_utc": "2026-05-20T12:19:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-20T01:40:34Z - 2026-05-20T12:19:34Z\n639.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-20T13:26:34Z",
+              "end_utc": "2026-05-20T14:14:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-20T13:26:34Z - 2026-05-20T14:14:34Z\n48.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-20T22:29:34Z",
+              "end_utc": "2026-05-21T10:54:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-20T22:29:34Z - 2026-05-21T10:54:34Z\n745.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-21T19:05:34Z",
+              "end_utc": "2026-05-22T08:10:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-21T19:05:34Z - 2026-05-22T08:10:34Z\n785.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-22T23:18:34Z",
+              "end_utc": "2026-05-23T08:15:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-22T23:18:34Z - 2026-05-23T08:15:34Z\n537.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-15T23:48:34Z",
+              "end_utc": "2026-05-16T12:12:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-15T23:48:34Z - 2026-05-16T12:12:34Z\n744.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-17T07:24:34Z",
+              "end_utc": "2026-05-17T08:50:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-17T07:24:34Z - 2026-05-17T08:50:34Z\n86.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-17T21:44:34Z",
+              "end_utc": "2026-05-18T10:19:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-17T21:44:34Z - 2026-05-18T10:19:34Z\n755.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-20T01:19:34Z",
+              "end_utc": "2026-05-20T14:04:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-20T01:19:34Z - 2026-05-20T14:04:34Z\n765.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-20T22:16:34Z",
+              "end_utc": "2026-05-21T10:39:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-20T22:16:34Z - 2026-05-21T10:39:34Z\n743.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-21T23:33:34Z",
+              "end_utc": "2026-05-22T07:56:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-21T23:33:34Z - 2026-05-22T07:56:34Z\n503.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-22T23:05:34Z",
+              "end_utc": "2026-05-23T08:01:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-22T23:05:34Z - 2026-05-23T08:01:34Z\n536.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-15T08:38:34Z",
+              "end_utc": "2026-05-15T16:01:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-15T08:38:34Z - 2026-05-15T16:01:34Z\n443.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-15T20:37:34Z",
+              "end_utc": "2026-05-15T20:40:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-15T20:37:34Z - 2026-05-15T20:40:34Z\n3.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-16T06:41:34Z",
+              "end_utc": "2026-05-16T14:51:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-16T06:41:34Z - 2026-05-16T14:51:34Z\n490.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-17T06:42:34Z",
+              "end_utc": "2026-05-17T18:34:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-17T06:42:34Z - 2026-05-17T18:34:34Z\n712.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-18T08:06:34Z",
+              "end_utc": "2026-05-18T13:47:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-18T08:06:34Z - 2026-05-18T13:47:34Z\n341.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-19T07:24:34Z",
+              "end_utc": "2026-05-19T19:33:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-19T07:24:34Z - 2026-05-19T19:33:34Z\n729.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-20T05:53:34Z",
+              "end_utc": "2026-05-20T15:57:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-20T05:53:34Z - 2026-05-20T15:57:34Z\n604.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-21T10:11:34Z",
+              "end_utc": "2026-05-21T16:50:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-21T10:11:34Z - 2026-05-21T16:50:34Z\n399.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-15T17:32:34Z",
+              "end_utc": "2026-05-16T01:43:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-15T17:32:34Z - 2026-05-16T01:43:34Z\n491.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-16T16:24:34Z",
+              "end_utc": "2026-05-17T03:58:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-16T16:24:34Z - 2026-05-17T03:58:34Z\n694.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-17T17:36:34Z",
+              "end_utc": "2026-05-18T01:43:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-17T17:36:34Z - 2026-05-18T01:43:34Z\n487.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-18T16:19:34Z",
+              "end_utc": "2026-05-19T04:01:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-18T16:19:34Z - 2026-05-19T04:01:34Z\n702.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-19T18:55:34Z",
+              "end_utc": "2026-05-20T00:04:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-19T18:55:34Z - 2026-05-20T00:04:34Z\n309.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-20T19:43:34Z",
+              "end_utc": "2026-05-21T01:07:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-20T19:43:34Z - 2026-05-21T01:07:34Z\n324.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-21T18:16:34Z",
+              "end_utc": "2026-05-22T06:54:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-21T18:16:34Z - 2026-05-22T06:54:34Z\n758.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-22T20:18:34Z",
+              "end_utc": "2026-05-23T06:54:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-22T20:18:34Z - 2026-05-23T06:54:34Z\n636.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-15T08:38:34Z",
+              "end_utc": "2026-05-15T08:50:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-15T08:38:34Z - 2026-05-15T08:50:34Z\n12.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-15T22:22:34Z",
+              "end_utc": "2026-05-15T22:45:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-15T22:22:34Z - 2026-05-15T22:45:34Z\n23.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-16T12:54:34Z",
+              "end_utc": "2026-05-16T13:21:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-16T12:54:34Z - 2026-05-16T13:21:34Z\n27.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-17T04:11:34Z",
+              "end_utc": "2026-05-17T04:39:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-17T04:11:34Z - 2026-05-17T04:39:34Z\n28.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-17T19:29:34Z",
+              "end_utc": "2026-05-17T19:57:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-17T19:29:34Z - 2026-05-17T19:57:34Z\n28.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-18T11:47:34Z",
+              "end_utc": "2026-05-18T12:17:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-18T11:47:34Z - 2026-05-18T12:17:34Z\n30.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-19T04:44:34Z",
+              "end_utc": "2026-05-19T05:15:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-19T04:44:34Z - 2026-05-19T05:15:34Z\n31.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-19T21:42:34Z",
+              "end_utc": "2026-05-19T22:12:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-19T21:42:34Z - 2026-05-19T22:12:34Z\n30.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-20T17:05:34Z",
+              "end_utc": "2026-05-20T17:24:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-20T17:05:34Z - 2026-05-20T17:24:34Z\n19.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-21T13:58:34Z",
+              "end_utc": "2026-05-21T14:15:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-21T13:58:34Z - 2026-05-21T14:15:34Z\n17.0 min"
+            }
+          ],
+          "asset_summaries": [
+            {
+              "name": "厦门站",
+              "asset_type": "ground",
+              "interval_count": 9,
+              "total_duration_min": 4710.0,
+              "longest_duration_min": 796.0
+            },
+            {
+              "name": "渭南站",
+              "asset_type": "ground",
+              "interval_count": 9,
+              "total_duration_min": 4735.0,
+              "longest_duration_min": 785.0
+            },
+            {
+              "name": "喀什站",
+              "asset_type": "ground",
+              "interval_count": 7,
+              "total_duration_min": 4132.0,
+              "longest_duration_min": 765.0
+            },
+            {
+              "name": "TL2-2",
+              "asset_type": "relay",
+              "interval_count": 8,
+              "total_duration_min": 3721.0,
+              "longest_duration_min": 729.0
+            },
+            {
+              "name": "TL2-3",
+              "asset_type": "relay",
+              "interval_count": 8,
+              "total_duration_min": 4401.0,
+              "longest_duration_min": 758.0
+            }
+          ],
+          "shadow_total_min": 245.0,
+          "maneuver_count": 5
+        },
+        {
+          "point_key": "trailing",
+          "point_label": "窗口后沿轨道",
+          "launch_utc": "2026-05-15T08:48:00Z",
+          "t0_utc": "2026-05-15T09:23:34Z",
+          "timeline_start_utc": "2026-05-15T09:23:34Z",
+          "timeline_end_utc": "2026-05-23T14:54:13Z",
+          "row_labels": [
+            "变轨点火时段",
+            "地面站 厦门站",
+            "地面站 渭南站",
+            "地面站 喀什站",
+            "中继星 TL2-2",
+            "中继星 TL2-3",
+            "卫星地影时段"
+          ],
+          "segments": [
+            {
+              "row_label": "变轨点火时段",
+              "start_utc": "2026-05-16T06:18:14Z",
+              "end_utc": "2026-05-16T07:30:26Z",
+              "kind": "burn",
+              "tooltip": "第 1 次变轨点火\n2026-05-16T06:18:14Z - 2026-05-16T07:30:26Z\n72.2 min"
+            },
+            {
+              "row_label": "变轨点火时段",
+              "start_utc": "2026-05-18T03:02:14Z",
+              "end_utc": "2026-05-18T03:56:33Z",
+              "kind": "burn",
+              "tooltip": "第 2 次变轨点火\n2026-05-18T03:02:14Z - 2026-05-18T03:56:33Z\n54.3 min"
+            },
+            {
+              "row_label": "变轨点火时段",
+              "start_utc": "2026-05-20T06:14:24Z",
+              "end_utc": "2026-05-20T07:25:11Z",
+              "kind": "burn",
+              "tooltip": "第 3 次变轨点火\n2026-05-20T06:14:24Z - 2026-05-20T07:25:11Z\n70.8 min"
+            },
+            {
+              "row_label": "变轨点火时段",
+              "start_utc": "2026-05-21T23:59:14Z",
+              "end_utc": "2026-05-22T01:04:32Z",
+              "kind": "burn",
+              "tooltip": "第 4 次变轨点火\n2026-05-21T23:59:14Z - 2026-05-22T01:04:32Z\n65.3 min"
+            },
+            {
+              "row_label": "变轨点火时段",
+              "start_utc": "2026-05-22T14:27:24Z",
+              "end_utc": "2026-05-22T14:53:13Z",
+              "kind": "burn",
+              "tooltip": "第 5 次变轨点火\n2026-05-22T14:27:24Z - 2026-05-22T14:53:13Z\n25.8 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-16T00:29:34Z",
+              "end_utc": "2026-05-16T11:25:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-16T00:29:34Z - 2026-05-16T11:25:34Z\n656.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-16T11:48:34Z",
+              "end_utc": "2026-05-16T13:03:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-16T11:48:34Z - 2026-05-16T13:03:34Z\n75.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-16T22:13:34Z",
+              "end_utc": "2026-05-17T03:41:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-16T22:13:34Z - 2026-05-17T03:41:34Z\n328.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-17T22:06:34Z",
+              "end_utc": "2026-05-18T11:08:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-17T22:06:34Z - 2026-05-18T11:08:34Z\n782.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-18T22:37:34Z",
+              "end_utc": "2026-05-19T03:28:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-18T22:37:34Z - 2026-05-19T03:28:34Z\n291.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-20T01:42:34Z",
+              "end_utc": "2026-05-20T10:40:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-20T01:42:34Z - 2026-05-20T10:40:34Z\n538.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-20T22:21:34Z",
+              "end_utc": "2026-05-21T11:18:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-20T22:21:34Z - 2026-05-21T11:18:34Z\n777.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-21T18:53:34Z",
+              "end_utc": "2026-05-22T08:11:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-21T18:53:34Z - 2026-05-22T08:11:34Z\n798.0 min"
+            },
+            {
+              "row_label": "地面站 厦门站",
+              "start_utc": "2026-05-22T23:22:34Z",
+              "end_utc": "2026-05-23T08:24:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 厦门站\n2026-05-22T23:22:34Z - 2026-05-23T08:24:34Z\n542.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-16T00:27:34Z",
+              "end_utc": "2026-05-16T12:58:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-16T00:27:34Z - 2026-05-16T12:58:34Z\n751.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-16T23:09:34Z",
+              "end_utc": "2026-05-17T03:42:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-16T23:09:34Z - 2026-05-17T03:42:34Z\n273.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-17T22:06:34Z",
+              "end_utc": "2026-05-18T11:02:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-17T22:06:34Z - 2026-05-18T11:02:34Z\n776.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-18T23:49:34Z",
+              "end_utc": "2026-05-19T03:20:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-18T23:49:34Z - 2026-05-19T03:20:34Z\n211.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-20T01:38:34Z",
+              "end_utc": "2026-05-20T13:04:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-20T01:38:34Z - 2026-05-20T13:04:34Z\n686.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-20T14:11:34Z",
+              "end_utc": "2026-05-20T14:31:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-20T14:11:34Z - 2026-05-20T14:31:34Z\n20.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-20T22:20:34Z",
+              "end_utc": "2026-05-21T11:11:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-20T22:20:34Z - 2026-05-21T11:11:34Z\n771.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-21T18:58:34Z",
+              "end_utc": "2026-05-22T08:04:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-21T18:58:34Z - 2026-05-22T08:04:34Z\n786.0 min"
+            },
+            {
+              "row_label": "地面站 渭南站",
+              "start_utc": "2026-05-22T23:20:34Z",
+              "end_utc": "2026-05-23T08:17:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 渭南站\n2026-05-22T23:20:34Z - 2026-05-23T08:17:34Z\n537.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-16T00:14:34Z",
+              "end_utc": "2026-05-16T12:48:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-16T00:14:34Z - 2026-05-16T12:48:34Z\n754.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-17T07:27:34Z",
+              "end_utc": "2026-05-17T09:35:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-17T07:27:34Z - 2026-05-17T09:35:34Z\n128.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-17T22:13:34Z",
+              "end_utc": "2026-05-18T10:48:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-17T22:13:34Z - 2026-05-18T10:48:34Z\n755.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-20T01:20:34Z",
+              "end_utc": "2026-05-20T14:21:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-20T01:20:34Z - 2026-05-20T14:21:34Z\n781.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-20T22:09:34Z",
+              "end_utc": "2026-05-21T10:54:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-20T22:09:34Z - 2026-05-21T10:54:34Z\n765.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-22T00:18:34Z",
+              "end_utc": "2026-05-22T07:50:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-22T00:18:34Z - 2026-05-22T07:50:34Z\n452.0 min"
+            },
+            {
+              "row_label": "地面站 喀什站",
+              "start_utc": "2026-05-22T23:07:34Z",
+              "end_utc": "2026-05-23T08:02:34Z",
+              "kind": "ground",
+              "tooltip": "地面站 喀什站\n2026-05-22T23:07:34Z - 2026-05-23T08:02:34Z\n535.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-15T09:23:34Z",
+              "end_utc": "2026-05-15T16:46:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-15T09:23:34Z - 2026-05-15T16:46:34Z\n443.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-16T07:26:34Z",
+              "end_utc": "2026-05-16T15:36:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-16T07:26:34Z - 2026-05-16T15:36:34Z\n490.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-17T06:49:34Z",
+              "end_utc": "2026-05-17T18:55:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-17T06:49:34Z - 2026-05-17T18:55:34Z\n726.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-18T08:51:34Z",
+              "end_utc": "2026-05-18T14:32:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-18T08:51:34Z - 2026-05-18T14:32:34Z\n341.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-19T07:30:34Z",
+              "end_utc": "2026-05-19T19:48:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-19T07:30:34Z - 2026-05-19T19:48:34Z\n738.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-20T06:38:34Z",
+              "end_utc": "2026-05-20T16:09:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-20T06:38:34Z - 2026-05-20T16:09:34Z\n571.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-2",
+              "start_utc": "2026-05-21T10:56:34Z",
+              "end_utc": "2026-05-21T17:35:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-2\n2026-05-21T10:56:34Z - 2026-05-21T17:35:34Z\n399.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-15T18:17:34Z",
+              "end_utc": "2026-05-16T02:28:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-15T18:17:34Z - 2026-05-16T02:28:34Z\n491.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-16T16:27:34Z",
+              "end_utc": "2026-05-17T04:22:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-16T16:27:34Z - 2026-05-17T04:22:34Z\n715.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-17T18:21:34Z",
+              "end_utc": "2026-05-18T02:28:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-17T18:21:34Z - 2026-05-18T02:28:34Z\n487.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-18T16:19:34Z",
+              "end_utc": "2026-05-19T04:20:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-18T16:19:34Z - 2026-05-19T04:20:34Z\n721.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-19T19:40:34Z",
+              "end_utc": "2026-05-20T00:49:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-19T19:40:34Z - 2026-05-20T00:49:34Z\n309.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-20T19:45:34Z",
+              "end_utc": "2026-05-21T01:52:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-20T19:45:34Z - 2026-05-21T01:52:34Z\n367.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-21T18:15:34Z",
+              "end_utc": "2026-05-22T06:51:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-21T18:15:34Z - 2026-05-22T06:51:34Z\n756.0 min"
+            },
+            {
+              "row_label": "中继星 TL2-3",
+              "start_utc": "2026-05-22T20:19:34Z",
+              "end_utc": "2026-05-23T06:55:34Z",
+              "kind": "relay",
+              "tooltip": "中继星 TL2-3\n2026-05-22T20:19:34Z - 2026-05-23T06:55:34Z\n636.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-15T09:23:34Z",
+              "end_utc": "2026-05-15T09:33:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-15T09:23:34Z - 2026-05-15T09:33:34Z\n10.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-15T23:05:34Z",
+              "end_utc": "2026-05-15T23:28:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-15T23:05:34Z - 2026-05-15T23:28:34Z\n23.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-16T13:35:34Z",
+              "end_utc": "2026-05-16T14:01:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-16T13:35:34Z - 2026-05-16T14:01:34Z\n26.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-17T04:53:34Z",
+              "end_utc": "2026-05-17T05:19:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-17T04:53:34Z - 2026-05-17T05:19:34Z\n26.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-17T20:10:34Z",
+              "end_utc": "2026-05-17T20:37:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-17T20:10:34Z - 2026-05-17T20:37:34Z\n27.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-18T12:25:34Z",
+              "end_utc": "2026-05-18T12:54:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-18T12:25:34Z - 2026-05-18T12:54:34Z\n29.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-19T05:23:34Z",
+              "end_utc": "2026-05-19T05:52:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-19T05:23:34Z - 2026-05-19T05:52:34Z\n29.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-19T22:20:34Z",
+              "end_utc": "2026-05-19T22:50:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-19T22:20:34Z - 2026-05-19T22:50:34Z\n30.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-20T17:33:34Z",
+              "end_utc": "2026-05-20T17:52:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-20T17:33:34Z - 2026-05-20T17:52:34Z\n19.0 min"
+            },
+            {
+              "row_label": "卫星地影时段",
+              "start_utc": "2026-05-21T14:25:34Z",
+              "end_utc": "2026-05-21T14:43:34Z",
+              "kind": "shadow",
+              "tooltip": "卫星地影时段\n2026-05-21T14:25:34Z - 2026-05-21T14:43:34Z\n18.0 min"
+            }
+          ],
+          "asset_summaries": [
+            {
+              "name": "厦门站",
+              "asset_type": "ground",
+              "interval_count": 9,
+              "total_duration_min": 4787.0,
+              "longest_duration_min": 798.0
+            },
+            {
+              "name": "渭南站",
+              "asset_type": "ground",
+              "interval_count": 9,
+              "total_duration_min": 4811.0,
+              "longest_duration_min": 786.0
+            },
+            {
+              "name": "喀什站",
+              "asset_type": "ground",
+              "interval_count": 7,
+              "total_duration_min": 4170.0,
+              "longest_duration_min": 781.0
+            },
+            {
+              "name": "TL2-2",
+              "asset_type": "relay",
+              "interval_count": 7,
+              "total_duration_min": 3708.0,
+              "longest_duration_min": 738.0
+            },
+            {
+              "name": "TL2-3",
+              "asset_type": "relay",
+              "interval_count": 8,
+              "total_duration_min": 4482.0,
+              "longest_duration_min": 756.0
+            }
+          ],
+          "shadow_total_min": 237.0,
+          "maneuver_count": 5
+        }
+      ]
+    }
+  },
+  "latest_window_key": "2026-05-15T07:18:00Z|2026-05-15T08:48:00Z|90.000000",
+  "windows_signature": [
+    [
+      "2026-05-15T07:18:00Z",
+      "2026-05-15T08:48:00Z",
+      90.0
+    ],
+    [
+      "2026-05-16T07:20:00Z",
+      "2026-05-16T08:48:00Z",
+      88.0
+    ],
+    [
+      "2026-05-17T07:20:00Z",
+      "2026-05-17T08:48:00Z",
+      88.0
+    ],
+    [
+      "2026-05-18T07:20:00Z",
+      "2026-05-18T08:46:00Z",
+      86.0
+    ]
+  ]
+}

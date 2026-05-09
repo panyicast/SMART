@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 from dataclasses import dataclass
+from datetime import timedelta, timezone
 import importlib.util
 import math
 from pathlib import Path
@@ -14,19 +15,23 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from smart.domain.models import OrbitTrajectory
 from smart.services.earth_orientation import (
+    format_utc,
     inertial_raan_deg_from_ascending_node_longitude_deg,
+    parse_utc,
     subsatellite_point_from_eci,
     utc_now_iso_z,
 )
 from smart.services.project_workspace import ProjectWorkspace, default_maneuver_strategy_payload
 from smart.ui.i18n import I18nManager
 from smart.ui.widgets.orbit_views import OrbitPlot3D
-from smart.ui.widgets.spinboxes import NoWheelComboBox, NoWheelDoubleSpinBox, NoWheelSpinBox
+from smart.ui.widgets.spinboxes import NoWheelComboBox, NoWheelDateTimeEdit, NoWheelDoubleSpinBox, NoWheelSpinBox
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _DYNAMICS_SCRIPT_PATH = _REPO_ROOT / "scripts" / "satellite_dynamics_equation.py"
 _EARTH_RADIUS_KM = 6378.14
 _MANEUVER_PHASES = {"settle", "orbit_control"}
+BEIJING_TZ = timezone(timedelta(hours=8))
+BEIJING_QT_TIMEZONE_ID = b"Asia/Shanghai"
 _EARTH_TEXTURE_PATH = (
     _REPO_ROOT
     / "src"
@@ -35,6 +40,10 @@ _EARTH_TEXTURE_PATH = (
     / "textures"
     / "earth_day_2048.png"
 )
+
+
+def _beijing_qtimezone() -> QtCore.QTimeZone:
+    return QtCore.QTimeZone(BEIJING_QT_TIMEZONE_ID)
 
 
 def _qimage_to_rgba_array(image: QtGui.QImage) -> np.ndarray:
@@ -58,6 +67,267 @@ class _StrategyColumn:
     key: str
     label_key: str
     decimals: int
+
+
+class _GroundTrackViewBox(pg.ViewBox):
+    def __init__(self) -> None:
+        super().__init__(enableMenu=False)
+        self.setMouseEnabled(x=True, y=False)
+        self.setLimits(yMin=-90.0, yMax=90.0, minYRange=180.0, maxYRange=180.0)
+
+    def mouseDragEvent(self, ev: object, axis: int | None = None) -> None:
+        super().mouseDragEvent(ev, axis=0)
+        self.setYRange(-90.0, 90.0, padding=0.0)
+
+
+class _ManeuverConfigDialog(QtWidgets.QDialog):
+    def __init__(
+        self,
+        i18n: I18nManager,
+        strategy: dict[str, Any],
+        columns: tuple[_StrategyColumn, ...],
+        parent: QtWidgets.QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._i18n = i18n
+        self._columns = columns
+        self.setWindowTitle(i18n.t("maneuver.config_dialog.title"))
+        self.resize(1180, 620)
+
+        root = QtWidgets.QVBoxLayout(self)
+        root.setSpacing(12)
+
+        initial_group = QtWidgets.QGroupBox(i18n.t("maneuver.initial_state_header"))
+        initial_layout = QtWidgets.QGridLayout(initial_group)
+        initial_layout.setHorizontalSpacing(14)
+        initial_layout.setVerticalSpacing(10)
+        self._launch_mass_field = self._spinbox(100.0, 30000.0, 10.0, 3)
+        self._t0_epoch_field = self._date_edit()
+        initial_layout.addWidget(QtWidgets.QLabel(i18n.t("maneuver.field.launch_mass_kg")), 0, 0)
+        initial_layout.addWidget(self._launch_mass_field, 0, 1)
+        initial_layout.addWidget(QtWidgets.QLabel(i18n.t("maneuver.field.t0_epoch")), 0, 2)
+        initial_layout.addWidget(self._t0_epoch_field, 0, 3)
+        self._orbit_fields: dict[str, NoWheelDoubleSpinBox] = {}
+        for index, (key, (minimum, maximum, step, decimals)) in enumerate(self._orbit_ranges().items(), start=2):
+            field = self._spinbox(minimum, maximum, step, decimals)
+            self._orbit_fields[key] = field
+            row = index // 2
+            col = 0 if index % 2 == 0 else 2
+            initial_layout.addWidget(QtWidgets.QLabel(i18n.t(f"maneuver.field.{key}")), row, col)
+            initial_layout.addWidget(field, row, col + 1)
+        initial_layout.setColumnStretch(1, 1)
+        initial_layout.setColumnStretch(3, 1)
+        root.addWidget(initial_group)
+
+        maneuver_group = QtWidgets.QGroupBox(i18n.t("maneuver.strategy_header"))
+        maneuver_layout = QtWidgets.QVBoxLayout(maneuver_group)
+        self._table = QtWidgets.QTableWidget(0, len(columns))
+        self._table.setAlternatingRowColors(True)
+        self._table.verticalHeader().setVisible(False)
+        row_height = self._table.fontMetrics().height() + 14
+        self._table.verticalHeader().setDefaultSectionSize(row_height)
+        self._table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
+        self._table.setHorizontalScrollMode(QtWidgets.QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self._table.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self._table.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Expanding)
+        self._table.setHorizontalHeaderLabels([i18n.t(column.label_key) for column in columns])
+        maneuver_layout.addWidget(self._table)
+        button_row = QtWidgets.QHBoxLayout()
+        add_button = QtWidgets.QPushButton(i18n.t("maneuver.add_button"))
+        remove_button = QtWidgets.QPushButton(i18n.t("maneuver.remove_button"))
+        add_button.clicked.connect(self._append_default_row)
+        remove_button.clicked.connect(self._remove_current_row)
+        button_row.addWidget(add_button)
+        button_row.addWidget(remove_button)
+        button_row.addStretch(1)
+        maneuver_layout.addLayout(button_row)
+        root.addWidget(maneuver_group)
+
+        buttons = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.StandardButton.Save | QtWidgets.QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Save).setText(i18n.t("dialog.save"))
+        buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Cancel).setText(i18n.t("dialog.cancel"))
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        root.addWidget(buttons)
+        self._set_strategy(strategy)
+        QtCore.QTimer.singleShot(0, self._adjust_table_height_to_rows)
+
+    def showEvent(self, event: QtGui.QShowEvent) -> None:
+        super().showEvent(event)
+        self._adjust_table_height_to_rows()
+
+    def strategy(self) -> dict[str, Any]:
+        maneuvers: list[dict[str, Any]] = []
+        for row in range(self._table.rowCount()):
+            step: dict[str, Any] = {}
+            for column_index, column in enumerate(self._columns):
+                widget = self._table.cellWidget(row, column_index)
+                if column.key in {"maneuver_index", "dv_direction"}:
+                    step[column.key] = self._field_int(widget, row + 1)
+                else:
+                    step[column.key] = self._field_float(widget)
+            maneuvers.append(step)
+        return {
+            "launch_mass_kg": self._launch_mass_field.value(),
+            "t0_epoch": self._datetime_edit_to_utc(self._t0_epoch_field),
+            "t0_orbit": {key: field.value() for key, field in self._orbit_fields.items()},
+            "maneuver_count": len(maneuvers),
+            "maneuvers": maneuvers,
+        }
+
+    def _set_strategy(self, strategy: dict[str, Any]) -> None:
+        defaults = default_maneuver_strategy_payload(0)
+        orbit = strategy.get("t0_orbit", {})
+        if not isinstance(orbit, dict):
+            orbit = {}
+        self._launch_mass_field.setValue(float(strategy.get("launch_mass_kg", defaults["launch_mass_kg"])))
+        self._t0_epoch_field.setDateTime(self._utc_to_qdatetime(str(strategy.get("t0_epoch", defaults["t0_epoch"]))))
+        for key, field in self._orbit_fields.items():
+            field.setValue(float(orbit.get(key, defaults["t0_orbit"][key])))
+        self._table.setRowCount(0)
+        rows = strategy.get("maneuvers", [])
+        if isinstance(rows, list):
+            for row in rows:
+                if isinstance(row, dict):
+                    self._append_row(row)
+        self._adjust_table_height_to_rows()
+
+    def _append_default_row(self) -> None:
+        row = self._table.rowCount()
+        step = default_maneuver_strategy_payload(1)["maneuvers"][0]
+        step["maneuver_index"] = row + 1
+        self._append_row(step)
+
+    def _append_row(self, payload: dict[str, Any]) -> None:
+        row = self._table.rowCount()
+        self._table.insertRow(row)
+        for column_index, column in enumerate(self._columns):
+            value = payload.get(column.key, row + 1 if column.key == "maneuver_index" else 1 if column.key == "dv_direction" else 0.0)
+            self._table.setCellWidget(row, column_index, self._make_field(column, value))
+        self._adjust_table_height_to_rows()
+
+    def _remove_current_row(self) -> None:
+        row = self._table.currentRow()
+        if row < 0:
+            row = self._table.rowCount() - 1
+        if row >= 0:
+            self._table.removeRow(row)
+            self._adjust_table_height_to_rows()
+
+    def _adjust_table_height_to_rows(self) -> None:
+        font_height = self._table.fontMetrics().height()
+        row_height = max(font_height + 22, 36)
+        for row in range(self._table.rowCount()):
+            for column in range(self._table.columnCount()):
+                widget = self._table.cellWidget(row, column)
+                if widget is not None:
+                    row_height = max(row_height, widget.sizeHint().height() + 8)
+        for row in range(self._table.rowCount()):
+            self._table.setRowHeight(row, row_height)
+        header_height = self._table.horizontalHeader().height()
+        frame_height = self._table.frameWidth() * 2
+        rows = max(self._table.rowCount(), 1)
+        visible_rows = min(rows, 8)
+        scrollbar_height = self._table.horizontalScrollBar().sizeHint().height()
+        height = header_height + row_height * visible_rows + scrollbar_height + frame_height + 8
+        self._table.verticalHeader().setDefaultSectionSize(row_height)
+        self._table.setMinimumHeight(height)
+        self._table.setMaximumHeight(height)
+
+    def _make_field(self, column: _StrategyColumn, value: object) -> QtWidgets.QWidget:
+        if column.key == "maneuver_index":
+            field = NoWheelSpinBox()
+            field.setRange(1, 999)
+            field.setValue(self._to_int(value, 1))
+            field.setButtonSymbols(QtWidgets.QAbstractSpinBox.ButtonSymbols.NoButtons)
+            return field
+        if column.key == "dv_direction":
+            field = NoWheelComboBox()
+            field.addItem("1", 1)
+            field.addItem("-1", -1)
+            field.setCurrentIndex(1 if self._to_int(value, 1) == -1 else 0)
+            return field
+        minimum, maximum, step = ManeuverPage._maneuver_field_range(column.key)
+        field = self._spinbox(minimum, maximum, step, column.decimals)
+        field.setValue(self._to_float(value))
+        return field
+
+    @staticmethod
+    def _orbit_ranges() -> dict[str, tuple[float, float, float, int]]:
+        return {
+            "semi_major_axis_m": (1.0, 1.0e9, 1000.0, 3),
+            "eccentricity": (0.0, 0.9999999999, 0.0001, 10),
+            "inclination_deg": (0.0, 180.0, 0.1, 6),
+            "argument_of_perigee_deg": (0.0, 360.0, 0.1, 6),
+            "raan_deg": (0.0, 360.0, 0.1, 6),
+            "mean_anomaly_deg": (0.0, 360.0, 0.1, 6),
+        }
+
+    @staticmethod
+    def _spinbox(minimum: float, maximum: float, step: float, decimals: int) -> NoWheelDoubleSpinBox:
+        field = NoWheelDoubleSpinBox()
+        field.setRange(minimum, maximum)
+        field.setSingleStep(step)
+        field.setDecimals(decimals)
+        field.setButtonSymbols(QtWidgets.QAbstractSpinBox.ButtonSymbols.NoButtons)
+        return field
+
+    @staticmethod
+    def _date_edit() -> NoWheelDateTimeEdit:
+        field = NoWheelDateTimeEdit()
+        field.setCalendarPopup(True)
+        field.setDisplayFormat("yyyy-MM-dd HH:mm:ss 'BJT'")
+        field.setTimeZone(_beijing_qtimezone())
+        return field
+
+    @staticmethod
+    def _utc_to_qdatetime(value: str) -> QtCore.QDateTime:
+        epoch = parse_utc(value)
+        milliseconds = int(round(epoch.timestamp() * 1000.0))
+        return QtCore.QDateTime.fromMSecsSinceEpoch(milliseconds, _beijing_qtimezone())
+
+    @staticmethod
+    def _datetime_edit_to_utc(field: NoWheelDateTimeEdit) -> str:
+        py_dt = field.dateTime().toUTC().toPython()
+        if py_dt.tzinfo is None:
+            py_dt = py_dt.replace(tzinfo=timezone.utc)
+        return format_utc(py_dt)
+
+    @staticmethod
+    def _to_float(value: object) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return 0.0
+
+    @staticmethod
+    def _to_int(value: object, default: int) -> int:
+        try:
+            return int(float(value))
+        except (TypeError, ValueError):
+            return int(default)
+
+    @classmethod
+    def _field_float(cls, field: QtWidgets.QWidget | None) -> float:
+        if isinstance(field, QtWidgets.QDoubleSpinBox):
+            return float(field.value())
+        if isinstance(field, QtWidgets.QSpinBox):
+            return float(field.value())
+        if isinstance(field, QtWidgets.QComboBox):
+            return float(field.currentData())
+        return 0.0
+
+    @classmethod
+    def _field_int(cls, field: QtWidgets.QWidget | None, default: int) -> int:
+        if isinstance(field, QtWidgets.QSpinBox):
+            return int(field.value())
+        if isinstance(field, QtWidgets.QComboBox):
+            return cls._to_int(field.currentData(), default)
+        if isinstance(field, QtWidgets.QDoubleSpinBox):
+            return int(field.value())
+        return int(default)
 
 
 def _mean_anomaly_to_true_anomaly_deg(mean_anomaly_deg: float, eccentricity: float) -> float:
@@ -139,6 +409,7 @@ class ManeuverPage(QtWidgets.QWidget):
         self._suppress_emit = False
         self._status_role = "statusDisconnected"
         self._last_result_path: Path | None = None
+        self._initial_value_labels: dict[str, QtWidgets.QLabel] = {}
         self._top_level_labels: dict[str, QtWidgets.QLabel] = {}
         self._top_level_fields: dict[str, QtWidgets.QDoubleSpinBox] = {}
         self._top_level_text_labels: dict[str, QtWidgets.QLabel] = {}
@@ -152,11 +423,15 @@ class ManeuverPage(QtWidgets.QWidget):
         self._result_value_labels: dict[str, QtWidgets.QLabel] = {}
         self._orbit_3d_view: OrbitPlot3D | None = None
         self._ground_track_plot: pg.PlotWidget | None = None
-        self._ground_track_curve: pg.PlotDataItem | None = None
-        self._ground_track_markers: pg.PlotDataItem | None = None
+        self._ground_track_curves: list[pg.PlotDataItem] = []
+        self._ground_track_markers: list[pg.PlotDataItem] = []
         self._ground_track_start_marker: pg.PlotDataItem | None = None
         self._ground_track_start_label: pg.TextItem | None = None
+        self._ground_track_start_row: dict[str, Any] | None = None
         self._maneuver_number_labels: list[pg.TextItem] = []
+        self._ground_track_maneuver_summaries: list[dict[str, Any]] = []
+        self._ground_track_map_items: list[pg.ImageItem] = []
+        self._strategy_table: QtWidgets.QTableWidget | None = None
 
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(24, 24, 24, 24)
@@ -176,11 +451,6 @@ class ManeuverPage(QtWidgets.QWidget):
         accent_rule.setMaximumWidth(220)
         root.addWidget(accent_rule)
 
-        self._subtitle_label = QtWidgets.QLabel()
-        self._subtitle_label.setProperty("role", "pageBody")
-        self._subtitle_label.setWordWrap(True)
-        root.addWidget(self._subtitle_label)
-
         splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
         splitter.setChildrenCollapsible(False)
         root.addWidget(splitter, 1)
@@ -195,10 +465,6 @@ class ManeuverPage(QtWidgets.QWidget):
         self._status_label.setWordWrap(True)
         root.addWidget(self._status_label)
 
-        for field in (*self._top_level_fields.values(), *self._t0_orbit_fields.values()):
-            field.valueChanged.connect(lambda _value: self._on_entry_parameter_changed())
-        for field in self._top_level_text_fields.values():
-            field.textChanged.connect(lambda _text: self._on_entry_parameter_changed())
         self._i18n.language_changed.connect(self.retranslate)
         self.retranslate()
         self.refresh_from_workspace()
@@ -223,11 +489,18 @@ class ManeuverPage(QtWidgets.QWidget):
         self._strategy_count_label.setProperty("role", "pageBody")
         layout.addWidget(self._strategy_count_label)
 
+        self._strategy_table = QtWidgets.QTableWidget(0, len(self._COLUMNS))
+        self._strategy_table.setAlternatingRowColors(True)
+        self._strategy_table.verticalHeader().setVisible(False)
+        self._strategy_table.horizontalHeader().setStretchLastSection(False)
+        self._strategy_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
+        self._strategy_table.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
+        self._strategy_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
+        self._strategy_table.setMinimumHeight(180)
+        layout.addWidget(self._strategy_table)
+
         self._strategy_tabs = QtWidgets.QTabWidget()
-        self._strategy_tabs.setDocumentMode(True)
-        self._strategy_tabs.setUsesScrollButtons(False)
-        self._strategy_tabs.setMinimumHeight(300)
-        layout.addWidget(self._strategy_tabs)
+        self._strategy_tabs.setVisible(False)
 
         button_row = QtWidgets.QHBoxLayout()
         button_row.setSpacing(10)
@@ -235,17 +508,9 @@ class ManeuverPage(QtWidgets.QWidget):
         self._reload_button.clicked.connect(self.refresh_from_workspace)
         button_row.addWidget(self._reload_button)
 
-        self._save_button = QtWidgets.QPushButton()
-        self._save_button.clicked.connect(self.save_strategy)
-        button_row.addWidget(self._save_button)
-
-        self._add_button = QtWidgets.QPushButton()
-        self._add_button.clicked.connect(self._append_maneuver)
-        button_row.addWidget(self._add_button)
-
-        self._remove_button = QtWidgets.QPushButton()
-        self._remove_button.clicked.connect(self._remove_selected_maneuver)
-        button_row.addWidget(self._remove_button)
+        self._edit_config_button = QtWidgets.QPushButton()
+        self._edit_config_button.clicked.connect(self._open_config_dialog)
+        button_row.addWidget(self._edit_config_button)
         button_row.addStretch(1)
         layout.addLayout(button_row)
         return card
@@ -262,7 +527,6 @@ class ManeuverPage(QtWidgets.QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(14)
         layout.addWidget(self._build_initial_state_card())
-        layout.addWidget(self._build_strategy_card())
         layout.addWidget(self._build_calculation_card())
         layout.addStretch(1)
         return scroll
@@ -287,28 +551,47 @@ class ManeuverPage(QtWidgets.QWidget):
         self._ground_track_title_label.setProperty("role", "cardTitle")
         layout.addWidget(self._ground_track_title_label)
 
-        self._ground_track_plot = pg.PlotWidget()
-        self._ground_track_plot.setBackground("#dfe9e4")
-        self._ground_track_plot.showGrid(x=True, y=True, alpha=0.24)
+        view_box = _GroundTrackViewBox()
+        self._ground_track_plot = pg.PlotWidget(viewBox=view_box)
+        self._ground_track_plot.setBackground("#0a1b22")
+        self._ground_track_plot.showGrid(x=True, y=True, alpha=0.36)
         self._ground_track_plot.setMenuEnabled(False)
         self._ground_track_plot.plotItem.hideButtons()
+        self._ground_track_plot.plotItem.setMouseEnabled(x=True, y=False)
+        self._ground_track_plot.plotItem.setClipToView(True)
+        self._ground_track_plot.plotItem.setLabel("bottom", "")
+        self._ground_track_plot.plotItem.setLabel("left", "")
+        self._ground_track_plot.plotItem.getAxis("bottom").setPen(pg.mkPen("#8ea0a8"))
+        self._ground_track_plot.plotItem.getAxis("left").setPen(pg.mkPen("#8ea0a8"))
+        self._ground_track_plot.plotItem.getAxis("bottom").setTextPen(pg.mkPen("#dbe9ef"))
+        self._ground_track_plot.plotItem.getAxis("left").setTextPen(pg.mkPen("#dbe9ef"))
+        view_box.sigRangeChanged.connect(self._refresh_ground_track_annotations)
         self._ground_track_plot.setXRange(-180.0, 180.0, padding=0.0)
         self._ground_track_plot.setYRange(-90.0, 90.0, padding=0.0)
-        self._ground_track_map = pg.ImageItem(axisOrder="row-major")
         world_map = _load_world_map_rgba()
         if world_map is not None:
-            self._ground_track_map.setImage(world_map)
-            self._ground_track_map.setRect(QtCore.QRectF(-180.0, -90.0, 360.0, 180.0))
-            self._ground_track_map.setOpacity(0.86)
-            self._ground_track_plot.addItem(self._ground_track_map)
-        self._ground_track_curve = self._ground_track_plot.plot(pen=pg.mkPen("#00a6d6", width=2.4))
-        self._ground_track_markers = self._ground_track_plot.plot(
-            pen=None,
-            symbol="o",
-            symbolSize=9,
-            symbolBrush="#f28c28",
-            symbolPen=pg.mkPen("#7d3217", width=1.1),
-        )
+            for offset in range(-2, 3):
+                map_item = pg.ImageItem(axisOrder="row-major")
+                map_item.setImage(world_map)
+                map_item.setRect(QtCore.QRectF(-180.0 + 360.0 * offset, -90.0, 360.0, 180.0))
+                map_item.setOpacity(0.92)
+                map_item.setZValue(-20)
+                self._ground_track_plot.addItem(map_item)
+                self._ground_track_map_items.append(map_item)
+        self._ground_track_curves = [
+            self._ground_track_plot.plot(pen=pg.mkPen("#00e5ff", width=2.0))
+            for _ in range(5)
+        ]
+        self._ground_track_markers = [
+            self._ground_track_plot.plot(
+                pen=None,
+                symbol="o",
+                symbolSize=8,
+                symbolBrush="#ff3b30",
+                symbolPen=pg.mkPen("#fff1b8", width=1.0),
+            )
+            for _ in range(5)
+        ]
         self._ground_track_start_marker = self._ground_track_plot.plot(
             pen=None,
             symbol="star",
@@ -373,72 +656,67 @@ class ManeuverPage(QtWidgets.QWidget):
         self._initial_state_caption_label.setWordWrap(True)
         layout.addWidget(self._initial_state_caption_label)
 
-        content = QtWidgets.QHBoxLayout()
-        content.setSpacing(22)
+        summary_grid = QtWidgets.QGridLayout()
+        summary_grid.setHorizontalSpacing(14)
+        summary_grid.setVerticalSpacing(8)
 
-        form = QtWidgets.QFormLayout()
-        form.setSpacing(10)
-
-        launch_mass_label = QtWidgets.QLabel()
-        launch_mass_field = self._spinbox(5200.0, 100.0, 30000.0, 10.0, 3)
-        form.addRow(launch_mass_label, launch_mass_field)
-        self._top_level_labels["launch_mass_kg"] = launch_mass_label
-        self._top_level_fields["launch_mass_kg"] = launch_mass_field
-
-        t0_epoch_label = QtWidgets.QLabel()
-        t0_epoch_field = QtWidgets.QLineEdit()
-        t0_epoch_field.setClearButtonEnabled(False)
-        t0_epoch_field.setPlaceholderText("2024-01-01T00:00:00Z")
-        form.addRow(t0_epoch_label, t0_epoch_field)
-        self._top_level_text_labels["t0_epoch"] = t0_epoch_label
-        self._top_level_text_fields["t0_epoch"] = t0_epoch_field
-
-        orbit_definitions = {
-            "semi_major_axis_m": (29_478_137.0, 1.0, 1.0e9, 1000.0, 3),
-            "eccentricity": (0.7768460924, 0.0, 0.9999999999, 0.0001, 10),
-            "inclination_deg": (16.5, 0.0, 180.0, 0.1, 6),
-            "argument_of_perigee_deg": (200.0, 0.0, 360.0, 0.1, 6),
-            "raan_deg": (8.53237, 0.0, 360.0, 0.1, 6),
-            "mean_anomaly_deg": (1.85437, 0.0, 360.0, 0.1, 6),
-        }
-        for key, (value, minimum, maximum, step, decimals) in orbit_definitions.items():
-            label = QtWidgets.QLabel()
-            field = self._spinbox(value, minimum, maximum, step, decimals)
-            form.addRow(label, field)
-            self._t0_orbit_labels[key] = label
-            self._t0_orbit_fields[key] = field
-
-        content.addLayout(form, 3)
-
-        aux_layout = QtWidgets.QGridLayout()
-        aux_layout.setHorizontalSpacing(14)
-        aux_layout.setVerticalSpacing(10)
         self._entry_aux_title_label = QtWidgets.QLabel()
         self._entry_aux_title_label.setProperty("role", "cardCaption")
-        aux_layout.addWidget(self._entry_aux_title_label, 0, 0, 1, 2)
-        for row, key in enumerate(
-            (
-                "true_anomaly_deg",
-                "subsatellite_longitude_deg",
-                "subsatellite_latitude_deg",
-                "apogee_altitude_m",
-                "perigee_altitude_m",
-            ),
-            start=1,
-        ):
+        summary_grid.addWidget(self._entry_aux_title_label, 0, 0, 1, 4)
+
+        for index, key in enumerate(("perigee_altitude_m", "apogee_altitude_m", "inclination_deg")):
             label = QtWidgets.QLabel()
             label.setProperty("role", "cardCaption")
-            value = QtWidgets.QLabel("--")
-            value.setProperty("role", "pageBody")
-            value.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextSelectableByMouse)
-            aux_layout.addWidget(label, row, 0)
-            aux_layout.addWidget(value, row, 1)
-            self._entry_aux_labels[key] = label
-            self._entry_aux_values[key] = value
-        aux_layout.setColumnStretch(1, 1)
-        content.addLayout(aux_layout, 2)
+            value_label = self._readonly_value_label()
+            col = index * 2
+            summary_grid.addWidget(label, 1, col)
+            summary_grid.addWidget(value_label, 1, col + 1)
+            if key == "inclination_deg":
+                self._t0_orbit_labels[key] = label
+                self._initial_value_labels[key] = value_label
+            else:
+                self._entry_aux_labels[key] = label
+                self._entry_aux_values[key] = value_label
 
-        layout.addLayout(content)
+        summary_grid.setColumnStretch(1, 1)
+        summary_grid.setColumnStretch(3, 1)
+        summary_grid.setColumnStretch(5, 1)
+        layout.addLayout(summary_grid)
+
+        self._strategy_header_label = QtWidgets.QLabel()
+        self._strategy_header_label.setProperty("role", "cardCaption")
+        layout.addWidget(self._strategy_header_label)
+
+        self._strategy_path_label = QtWidgets.QLabel()
+        self._strategy_path_label.setVisible(False)
+
+        self._strategy_count_label = QtWidgets.QLabel()
+        self._strategy_count_label.setVisible(False)
+
+        self._strategy_table = QtWidgets.QTableWidget(0, 2)
+        self._strategy_table.setAlternatingRowColors(True)
+        self._strategy_table.verticalHeader().setVisible(False)
+        self._strategy_table.horizontalHeader().setStretchLastSection(True)
+        self._strategy_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.Stretch)
+        self._strategy_table.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
+        self._strategy_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
+        self._strategy_table.setMinimumHeight(150)
+        layout.addWidget(self._strategy_table)
+
+        self._strategy_tabs = QtWidgets.QTabWidget()
+        self._strategy_tabs.setVisible(False)
+
+        button_row = QtWidgets.QHBoxLayout()
+        button_row.setSpacing(10)
+        self._reload_button = QtWidgets.QPushButton()
+        self._reload_button.clicked.connect(self.refresh_from_workspace)
+        button_row.addWidget(self._reload_button)
+
+        self._edit_config_button = QtWidgets.QPushButton()
+        self._edit_config_button.clicked.connect(self._open_config_dialog)
+        button_row.addWidget(self._edit_config_button)
+        button_row.addStretch(1)
+        layout.addLayout(button_row)
         return card
 
     def _build_calculation_card(self) -> QtWidgets.QWidget:
@@ -453,6 +731,7 @@ class ManeuverPage(QtWidgets.QWidget):
         layout.addWidget(self._calculation_header_label)
 
         self._calculate_button = QtWidgets.QPushButton()
+        self._calculate_button.setProperty("variant", "primaryAction")
         self._calculate_button.clicked.connect(self.calculate_strategy)
         layout.addWidget(self._calculate_button)
 
@@ -594,30 +873,7 @@ class ManeuverPage(QtWidgets.QWidget):
         )
 
     def strategy(self) -> dict[str, Any]:
-        payload = dict(self._current_strategy)
-        maneuvers: list[dict[str, Any]] = []
-
-        for row, fields in enumerate(self._maneuver_fields):
-            step: dict[str, Any] = {}
-            for column in self._COLUMNS:
-                field = fields[column.key]
-                if column.key == "maneuver_index":
-                    step[column.key] = self._field_int(field, row + 1)
-                elif column.key == "dv_direction":
-                    step[column.key] = self._field_int(field, 1)
-                else:
-                    step[column.key] = self._field_float(field)
-            maneuvers.append(step)
-
-        payload["launch_mass_kg"] = self._top_level_fields["launch_mass_kg"].value()
-        payload["t0_epoch"] = self._resolved_t0_epoch_text()
-        payload["t0_orbit"] = {
-            key: field.value()
-            for key, field in self._t0_orbit_fields.items()
-        }
-        payload["maneuver_count"] = len(maneuvers)
-        payload["maneuvers"] = maneuvers
-        return payload
+        return dict(self._current_strategy)
 
     def _set_initial_state_fields(self, strategy: dict[str, Any]) -> None:
         defaults = default_maneuver_strategy_payload(0)
@@ -626,50 +882,29 @@ class ManeuverPage(QtWidgets.QWidget):
         if not isinstance(orbit_payload, dict):
             orbit_payload = {}
 
-        self._suppress_emit = True
-        for field in (
-            *self._top_level_fields.values(),
-            *self._t0_orbit_fields.values(),
-            *self._top_level_text_fields.values(),
-        ):
-            field.blockSignals(True)
-        try:
-            self._top_level_fields["launch_mass_kg"].setValue(
-                float(strategy.get("launch_mass_kg", defaults["launch_mass_kg"]))
-            )
-            self._top_level_text_fields["t0_epoch"].setText(
-                str(strategy.get("t0_epoch", defaults["t0_epoch"]))
-            )
-            for key, field in self._t0_orbit_fields.items():
-                field.setValue(float(orbit_payload.get(key, orbit_defaults[key])))
-        finally:
-            for field in (
-                *self._top_level_fields.values(),
-                *self._t0_orbit_fields.values(),
-                *self._top_level_text_fields.values(),
-            ):
-                field.blockSignals(False)
-            self._suppress_emit = False
+        for key, label in self._initial_value_labels.items():
+            label.setText(f"{float(orbit_payload.get(key, orbit_defaults[key])):.6f}")
         self._update_entry_auxiliary_values()
 
     def _set_strategy_rows(self, rows: object) -> None:
-        self._suppress_emit = True
-        self._strategy_tabs.blockSignals(True)
-        try:
-            self._strategy_tabs.clear()
-            self._maneuver_field_labels.clear()
-            self._maneuver_fields.clear()
-            if not isinstance(rows, list):
-                return
-            for row_payload in rows:
-                if not isinstance(row_payload, dict):
-                    continue
-                self._append_strategy_tab(row_payload)
-            if self._strategy_tabs.count() > 0:
-                self._strategy_tabs.setCurrentIndex(0)
-        finally:
-            self._strategy_tabs.blockSignals(False)
-            self._suppress_emit = False
+        self._maneuver_field_labels.clear()
+        self._maneuver_fields.clear()
+        self._strategy_tabs.clear()
+        if self._strategy_table is None:
+            return
+        self._strategy_table.setRowCount(0)
+        if not isinstance(rows, list):
+            return
+        for row_payload in rows:
+            if not isinstance(row_payload, dict):
+                continue
+            row = self._strategy_table.rowCount()
+            self._strategy_table.insertRow(row)
+            for column_index, (key, decimals) in enumerate((("Tn_start_min", 3), ("burn_duration_min", 3))):
+                value = row_payload.get(key, 0.0)
+                item = QtWidgets.QTableWidgetItem(f"{self._to_float(str(value)):.{decimals}f}")
+                item.setTextAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+                self._strategy_table.setItem(row, column_index, item)
         self._update_maneuver_tab_labels()
 
     def _append_strategy_tab(self, row_payload: dict[str, Any]) -> None:
@@ -746,10 +981,8 @@ class ManeuverPage(QtWidgets.QWidget):
         if not self._entry_aux_values:
             return
 
-        orbit = {
-            key: field.value()
-            for key, field in self._t0_orbit_fields.items()
-        }
+        orbit_payload = self._current_strategy.get("t0_orbit", {})
+        orbit = orbit_payload if isinstance(orbit_payload, dict) else {}
         try:
             t0_epoch = self._resolved_t0_epoch_text()
             eccentricity = float(orbit["eccentricity"])
@@ -772,11 +1005,21 @@ class ManeuverPage(QtWidgets.QWidget):
                 label.setText("--")
             return
 
-        self._entry_aux_values["true_anomaly_deg"].setText(f"{true_anomaly_deg:.6f} deg")
-        self._entry_aux_values["subsatellite_longitude_deg"].setText(f"{subpoint.longitude_deg:.5f} deg")
-        self._entry_aux_values["subsatellite_latitude_deg"].setText(f"{subpoint.latitude_deg:.5f} deg")
-        self._entry_aux_values["apogee_altitude_m"].setText(f"{apogee_altitude_m:.3f} m")
-        self._entry_aux_values["perigee_altitude_m"].setText(f"{perigee_altitude_m:.3f} m")
+        if "apogee_altitude_m" in self._entry_aux_values:
+            self._entry_aux_values["apogee_altitude_m"].setText(f"{apogee_altitude_m:.3f} m")
+        if "perigee_altitude_m" in self._entry_aux_values:
+            self._entry_aux_values["perigee_altitude_m"].setText(f"{perigee_altitude_m:.3f} m")
+
+    def _open_config_dialog(self) -> None:
+        dialog = _ManeuverConfigDialog(self._i18n, self.strategy(), self._COLUMNS, self)
+        if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+            return
+        self._current_strategy = dialog.strategy()
+        self._set_initial_state_fields(self._current_strategy)
+        self._set_strategy_rows(self._current_strategy.get("maneuvers", []))
+        self._update_strategy_count_label()
+        self.save_strategy()
+        self.strategy_changed.emit(self.strategy())
 
     def _make_maneuver_field(self, column: _StrategyColumn, value: object) -> QtWidgets.QWidget:
         if column.key == "maneuver_index":
@@ -808,14 +1051,8 @@ class ManeuverPage(QtWidgets.QWidget):
 
     def _set_controls_enabled(self, enabled: bool) -> None:
         self._strategy_tabs.setEnabled(enabled)
-        for field in (*self._top_level_fields.values(), *self._t0_orbit_fields.values()):
-            field.setEnabled(enabled)
-        for field in self._top_level_text_fields.values():
-            field.setEnabled(enabled)
         self._reload_button.setEnabled(enabled)
-        self._save_button.setEnabled(enabled)
-        self._add_button.setEnabled(enabled)
-        self._remove_button.setEnabled(enabled)
+        self._edit_config_button.setEnabled(enabled)
         self._calculate_button.setEnabled(enabled)
 
     def _refresh_strategy_path_label(self) -> None:
@@ -826,8 +1063,10 @@ class ManeuverPage(QtWidgets.QWidget):
         self._strategy_path_label.setText(text)
 
     def _update_strategy_count_label(self) -> None:
+        rows = self._current_strategy.get("maneuvers", [])
+        count = len(rows) if isinstance(rows, list) else 0
         self._strategy_count_label.setText(
-            self._i18n.t("maneuver.count", count=self._strategy_tabs.count())
+            self._i18n.t("maneuver.count", count=count)
         )
 
     def _clear_result_summary(self) -> None:
@@ -892,14 +1131,16 @@ class ManeuverPage(QtWidgets.QWidget):
                 self._maneuver_result_table.setItem(row, column, item)
 
     def _clear_visualizations(self) -> None:
-        if self._ground_track_curve is not None:
-            self._ground_track_curve.clear()
-        if self._ground_track_markers is not None:
-            self._ground_track_markers.clear()
+        for curve in self._ground_track_curves:
+            curve.clear()
+        for markers in self._ground_track_markers:
+            markers.clear()
         if self._ground_track_start_marker is not None:
             self._ground_track_start_marker.clear()
         if self._ground_track_start_label is not None:
             self._ground_track_start_label.setText("")
+        self._ground_track_start_row = None
+        self._ground_track_maneuver_summaries = []
         self._clear_maneuver_number_labels()
         if self._orbit_3d_view is not None:
             self._orbit_3d_view.clear_trajectory()
@@ -915,15 +1156,17 @@ class ManeuverPage(QtWidgets.QWidget):
         trajectory = self._trajectory_from_result_rows(rows)
         longitudes = np.asarray([float(row["subsatellite_longitude_deg"]) for row in rows], dtype=np.float64)
         latitudes = np.asarray([float(row["subsatellite_latitude_deg"]) for row in rows], dtype=np.float64)
-        plot_lon, plot_lat = self._with_dateline_breaks(longitudes, latitudes)
+        plot_lon = self._unwrap_longitudes(longitudes)
+        plot_lat = latitudes
 
-        if self._ground_track_curve is not None:
-            self._ground_track_curve.setData(plot_lon, plot_lat)
-        if self._ground_track_markers is not None:
-            self._ground_track_markers.setData(
-                [float(summary["subsatellite_longitude_deg"]) for summary in maneuver_summaries],
-                [float(summary["subsatellite_latitude_deg"]) for summary in maneuver_summaries],
-            )
+        for offset, curve in zip(range(-2, 3), self._ground_track_curves, strict=False):
+            curve.setData(plot_lon + 360.0 * offset, plot_lat)
+        marker_lons = np.asarray([float(summary["subsatellite_longitude_deg"]) for summary in maneuver_summaries], dtype=np.float64)
+        marker_lats = np.asarray([float(summary["subsatellite_latitude_deg"]) for summary in maneuver_summaries], dtype=np.float64)
+        for offset, markers in zip(range(-2, 3), self._ground_track_markers, strict=False):
+            markers.setData(marker_lons + 360.0 * offset, marker_lats)
+        self._ground_track_start_row = rows[0]
+        self._ground_track_maneuver_summaries = maneuver_summaries
         self._set_ground_track_start_marker(rows[0])
         self._set_maneuver_number_labels(maneuver_summaries)
 
@@ -941,6 +1184,7 @@ class ManeuverPage(QtWidgets.QWidget):
             return
         lon = float(row["subsatellite_longitude_deg"])
         lat = float(row["subsatellite_latitude_deg"])
+        lon = self._nearest_visible_longitude(lon)
         self._ground_track_start_marker.setData([lon], [lat])
         if self._ground_track_start_label is not None:
             self._ground_track_start_label.setText(self._i18n.t("maneuver.plot.start_label"))
@@ -960,11 +1204,32 @@ class ManeuverPage(QtWidgets.QWidget):
             )
             label.setZValue(25)
             label.setPos(
-                float(summary["subsatellite_longitude_deg"]),
+                self._nearest_visible_longitude(float(summary["subsatellite_longitude_deg"])),
                 float(summary["subsatellite_latitude_deg"]),
             )
             self._ground_track_plot.addItem(label)
             self._maneuver_number_labels.append(label)
+
+    def _refresh_ground_track_annotations(self) -> None:
+        if self._ground_track_start_row is not None:
+            self._set_ground_track_start_marker(self._ground_track_start_row)
+        if self._ground_track_maneuver_summaries:
+            self._position_maneuver_number_labels()
+
+    def _position_maneuver_number_labels(self) -> None:
+        for label, summary in zip(self._maneuver_number_labels, self._ground_track_maneuver_summaries, strict=False):
+            label.setPos(
+                self._nearest_visible_longitude(float(summary["subsatellite_longitude_deg"])),
+                float(summary["subsatellite_latitude_deg"]),
+            )
+
+    def _nearest_visible_longitude(self, longitude_deg: float) -> float:
+        if self._ground_track_plot is None:
+            return longitude_deg
+        view_range = self._ground_track_plot.viewRange()
+        center_lon = 0.5 * (float(view_range[0][0]) + float(view_range[0][1]))
+        offset = round((center_lon - longitude_deg) / 360.0)
+        return longitude_deg + 360.0 * offset
 
     def _clear_maneuver_number_labels(self) -> None:
         if self._ground_track_plot is None:
@@ -1102,22 +1367,18 @@ class ManeuverPage(QtWidgets.QWidget):
         return segments
 
     @staticmethod
-    def _with_dateline_breaks(
-        longitudes: np.ndarray,
-        latitudes: np.ndarray,
-    ) -> tuple[np.ndarray, np.ndarray]:
+    def _unwrap_longitudes(longitudes: np.ndarray) -> np.ndarray:
         if longitudes.size <= 1:
-            return longitudes, latitudes
+            return longitudes
 
-        plot_lon: list[float] = []
-        plot_lat: list[float] = []
-        for index, (lon, lat) in enumerate(zip(longitudes, latitudes, strict=True)):
-            if index > 0 and abs(lon - longitudes[index - 1]) > 180.0:
-                plot_lon.append(float("nan"))
-                plot_lat.append(float("nan"))
-            plot_lon.append(float(lon))
-            plot_lat.append(float(lat))
-        return np.asarray(plot_lon, dtype=np.float64), np.asarray(plot_lat, dtype=np.float64)
+        unwrapped = np.asarray(longitudes, dtype=np.float64).copy()
+        for index in range(1, unwrapped.size):
+            delta = unwrapped[index] - unwrapped[index - 1]
+            if delta > 180.0:
+                unwrapped[index:] -= 360.0
+            elif delta < -180.0:
+                unwrapped[index:] += 360.0
+        return unwrapped
 
     def _open_result_csv(self) -> None:
         if self._last_result_path is None or not self._last_result_path.exists():
@@ -1134,17 +1395,15 @@ class ManeuverPage(QtWidgets.QWidget):
     def retranslate(self, _language: str | None = None) -> None:
         t = self._i18n.t
         self._title_label.setText(t("maneuver.title"))
-        self._subtitle_label.setText(t("maneuver.subtitle"))
         self._strategy_header_label.setText(t("maneuver.strategy_header"))
         self._initial_state_header_label.setText(t("maneuver.initial_state_header"))
         self._initial_state_caption_label.setText(t("maneuver.initial_state_caption"))
-        self._entry_aux_title_label.setText(t("maneuver.entry_aux.title"))
+        self._entry_aux_title_label.setText(t("maneuver.separation_parameters"))
         self._ground_track_title_label.setText(t("maneuver.ground_track_title"))
         if self._ground_track_plot is not None:
-            self._ground_track_plot.plotItem.setLabel("bottom", t("maneuver.ground_track.longitude"), units="deg")
-            self._ground_track_plot.plotItem.setLabel("left", t("maneuver.ground_track.latitude"), units="deg")
+            self._ground_track_plot.plotItem.setLabel("bottom", "")
+            self._ground_track_plot.plotItem.setLabel("left", "")
         self._orbit_3d_title_label.setText(t("maneuver.orbit_3d_title"))
-        self._top_level_labels["launch_mass_kg"].setText(t("maneuver.field.launch_mass_kg"))
         for key, label in self._top_level_text_labels.items():
             label.setText(t(f"maneuver.field.{key}"))
         for key, label in self._t0_orbit_labels.items():
@@ -1152,9 +1411,7 @@ class ManeuverPage(QtWidgets.QWidget):
         for key, label in self._entry_aux_labels.items():
             label.setText(t(f"maneuver.entry_aux.{key}"))
         self._reload_button.setText(t("maneuver.reload_button"))
-        self._save_button.setText(t("maneuver.save_button"))
-        self._add_button.setText(t("maneuver.add_button"))
-        self._remove_button.setText(t("maneuver.remove_button"))
+        self._edit_config_button.setText(t("maneuver.edit_config_button"))
         self._calculation_header_label.setText(t("maneuver.calculation_header"))
         self._calculate_button.setText(t("maneuver.calculate_button"))
         self._open_result_button.setText(t("maneuver.open_result_button"))
@@ -1170,6 +1427,13 @@ class ManeuverPage(QtWidgets.QWidget):
                 t("maneuver.result.column.propellant"),
             ]
         )
+        if self._strategy_table is not None:
+            self._strategy_table.setHorizontalHeaderLabels(
+                [
+                    t("maneuver.table.Tn_start_min"),
+                    t("maneuver.table.burn_duration_min"),
+                ]
+            )
         for labels in self._maneuver_field_labels:
             for key, label in labels.items():
                 label.setText(t(f"maneuver.table.{key}"))
@@ -1199,6 +1463,18 @@ class ManeuverPage(QtWidgets.QWidget):
         box.setDecimals(decimals)
         box.setButtonSymbols(QtWidgets.QAbstractSpinBox.ButtonSymbols.NoButtons)
         return box
+
+    @staticmethod
+    def _readonly_value_label() -> QtWidgets.QLabel:
+        label = QtWidgets.QLabel("--")
+        label.setProperty("role", "pageBody")
+        label.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextSelectableByMouse)
+        return label
+
+    def _format_maneuver_value(self, column: _StrategyColumn, value: object) -> str:
+        if column.key in {"maneuver_index", "dv_direction"}:
+            return str(self._to_int(str(value), 1))
+        return f"{self._to_float(str(value)):.{column.decimals}f}"
 
     @staticmethod
     def _to_float(value: str) -> float:
@@ -1259,11 +1535,6 @@ class ManeuverPage(QtWidgets.QWidget):
         return default
 
     def _resolved_t0_epoch_text(self) -> str:
-        field = self._top_level_text_fields.get("t0_epoch")
-        if field is not None:
-            candidate = field.text().strip()
-            if candidate:
-                return candidate
         current = str(self._current_strategy.get("t0_epoch", "")).strip()
         if current:
             return current
