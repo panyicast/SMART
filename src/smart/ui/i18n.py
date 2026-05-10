@@ -32,6 +32,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "project.status.created": "已创建项目: {name}",
         "project.status.loaded": "已打开项目: {name}",
         "project.status.autosave_failed": "项目自动保存失败: {error}",
+        "dialog.save": "保存配置",
         "dialog.cancel": "取消",
         "nav.dashboard": "总览",
         "nav.orbit_design": "卫星状态设置",

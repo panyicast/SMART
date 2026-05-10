@@ -68,6 +68,7 @@
 
 - UI layer time fields should be shown and edited in Beijing Time (UTC+8). Convert to UTC only at service/config boundaries.
 - Avoid mouse-wheel-driven parameter edits. Numeric, datetime, and parameter combo-box controls should use no-wheel widgets so scrolling a page/table does not silently modify values.
+- All project dialogs should follow the maneuver strategy configuration dialog style unless the user explicitly requests another style: dark blue/black background, cyan borders and icons, framed section panels, compact two-column parameter grids where practical, cyan-lined editable tables, visible combo-box arrows with all short option lists shown, a custom frameless title bar with a single close button and drag-to-move support, secondary outline buttons, and orange primary action buttons.
 
 ## Launch Window Rules
 

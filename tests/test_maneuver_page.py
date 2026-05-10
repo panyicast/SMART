@@ -22,7 +22,7 @@ def test_maneuver_page_uses_readonly_summary_and_edit_dialog(tmp_path) -> None:
     assert not hasattr(page, "_subtitle_label")
     assert page._ground_track_title_label.text() == "星下点轨迹"
     assert page._initial_state_header_label.text() == "配置参数"
-    assert page._edit_config_button.text() == "修改配置"
+    assert page._edit_config_button.text().endswith("修改配置")
     assert page._calculate_button.text() == "计算变轨策略"
     assert page._calculate_button.property("variant") == "primaryAction"
     assert isinstance(page._ground_track_plot.getViewBox(), _GroundTrackViewBox)
@@ -56,12 +56,15 @@ def test_maneuver_page_uses_readonly_summary_and_edit_dialog(tmp_path) -> None:
     dialog = _ManeuverConfigDialog(page._i18n, page.strategy(), page._COLUMNS, page)
     assert not dialog.findChildren(QtWidgets.QTabWidget)
     assert dialog._table.minimumHeight() == dialog._table.maximumHeight()
-    assert dialog._t0_epoch_field.displayFormat() == "yyyy-MM-dd HH:mm:ss 'BJT'"
+    assert dialog._t0_epoch_field.displayFormat() == "yyyy-MM-dd HH:mm:ss"
     assert dialog._t0_epoch_field.dateTime().timeZone().id().data().decode() == "Asia/Shanghai"
     for column in range(dialog._table.columnCount()):
         widget = dialog._table.cellWidget(0, column)
         assert widget is not None
         assert dialog._table.rowHeight(0) >= widget.sizeHint().height()
+    direction_widget = dialog._table.cellWidget(0, 6)
+    assert isinstance(direction_widget, QtWidgets.QComboBox)
+    assert direction_widget.maxVisibleItems() == 2
     beijing_tz = QtCore.QTimeZone(b"Asia/Shanghai")
     dialog._t0_epoch_field.setDateTime(
         QtCore.QDateTime(QtCore.QDate(2024, 1, 1), QtCore.QTime(8, 0, 0), beijing_tz)

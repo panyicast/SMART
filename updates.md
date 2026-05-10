@@ -130,10 +130,14 @@
 - 提交：`5056b39`
 - 影响文件：自动刷新记录，无额外文件。
 
-## 2026-05-09T22:44:52+08:00 | refactor maneuver strategy page
-- 提交：`dcb79f8`
+## 2026-05-09T22:46:56+08:00 | refactor maneuver strategy page
+- 提交：`1629a33`
 - 影响文件：`src/smart/ui/i18n.py`、`src/smart/ui/theme.py`、`src/smart/ui/widgets/maneuver_page.py`、`tests/test_maneuver_page.py`、`projects/F4/data/tracking_arc_results.json`、`projects/F4/smart_project.json`。
 
-## 2026-05-09T22:45:11+08:00 | refactor maneuver strategy page
+## 2026-05-10T22:28:30+08:00 | refactor maneuver UI styling
+- 提交：`4b117ed`
+- 影响文件：`src/smart/ui/i18n.py`、`src/smart/ui/widgets/maneuver_page.py`、`tests/test_maneuver_page.py`、`AGENTS.md`、`projects/F4/smart_project.json`、`start-codex-app-system-proxy-33210.ps1`、`src/smart/assets/textures/earth_basic_stk.bmp`、`doc/1.png` 等 10 个文件。
+
+## 2026-05-10T22:31:22+08:00 | refactor maneuver UI styling
 - 提交：`待写入本次提交`
 - 影响文件：自动刷新记录，无额外文件。
