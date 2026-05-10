@@ -1,6 +1,6 @@
 # 更新记录
 
-> 此文件由 `scripts/update_updates_md.py` 自动维护。正常执行 `git commit` 时会通过 `.githooks/commit-msg` 自动刷新。
+> 此文件由 `scripts/update_updates_md.py` 自动维护。正常执行 `git commit` 时会通过 `.githooks/post-commit` 自动刷新并补进同一提交。
 
 ## 2026-05-01T00:39:03+08:00 | Initial commit
 - 提交：`ff7eefc`
@@ -134,10 +134,22 @@
 - 提交：`1629a33`
 - 影响文件：`src/smart/ui/i18n.py`、`src/smart/ui/theme.py`、`src/smart/ui/widgets/maneuver_page.py`、`tests/test_maneuver_page.py`、`projects/F4/data/tracking_arc_results.json`、`projects/F4/smart_project.json`。
 
-## 2026-05-10T22:28:30+08:00 | refactor maneuver UI styling
-- 提交：`4b117ed`
+## 2026-05-10T22:33:29+08:00 | refactor maneuver UI styling
+- 提交：`04693cc`
 - 影响文件：`src/smart/ui/i18n.py`、`src/smart/ui/widgets/maneuver_page.py`、`tests/test_maneuver_page.py`、`AGENTS.md`、`projects/F4/smart_project.json`、`start-codex-app-system-proxy-33210.ps1`、`src/smart/assets/textures/earth_basic_stk.bmp`、`doc/1.png` 等 10 个文件。
 
-## 2026-05-10T22:31:22+08:00 | refactor maneuver UI styling
-- 提交：`待写入本次提交`
+## 2026-05-10T22:54:52+08:00 | style ground track maneuver labels
+- 提交：`36d4c09`
+- 影响文件：`src/smart/ui/widgets/spinboxes.py`。
+
+## 2026-05-11T15:58:06+08:00 | Merge pull request #2 from panyicast/MV
+- 提交：`d823e14`
 - 影响文件：自动刷新记录，无额外文件。
+
+## 2026-05-11T16:01:11+08:00 | Revert "Merge pull request #2 from panyicast/MV"
+- 提交：`0a7b638`
+- 影响文件：`src/smart/ui/widgets/spinboxes.py`。
+
+## 2026-05-14T21:00:48+08:00 | fix updates log commit hook
+- 提交：`本次提交`
+- 影响文件：`tests/test_update_updates_md.py`、`scripts/update_updates_md.py`、`AGENTS.md`、`.githooks/commit-msg`、`.githooks/post-commit`。

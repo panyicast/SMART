@@ -10,7 +10,7 @@ from typing import Sequence
 
 AUTOGEN_NOTE = (
     "> 此文件由 `scripts/update_updates_md.py` 自动维护。"
-    "正常执行 `git commit` 时会通过 `.githooks/commit-msg` 自动刷新。"
+    "正常执行 `git commit` 时会通过 `.githooks/post-commit` 自动刷新并补进同一提交。"
 )
 EXCLUDED_PREFIXES = (
     ".venv/",
@@ -102,13 +102,13 @@ def parse_commit_subject(message_text: str) -> str:
     return "Update"
 
 
-def collect_commit_entries(repo_root: Path) -> list[UpdateEntry]:
+def collect_commit_entries(repo_root: Path, *, head_as_current: bool = False) -> list[UpdateEntry]:
     if not repo_has_commits(repo_root):
         return []
 
     revisions = [line.strip() for line in git(repo_root, "rev-list", "--reverse", "HEAD").splitlines() if line.strip()]
     entries: list[UpdateEntry] = []
-    for revision in revisions:
+    for index, revision in enumerate(revisions):
         metadata = git(repo_root, "show", "--quiet", "--date=iso-strict", "--format=%H%n%cI%n%s", revision).splitlines()
         if len(metadata) < 3:
             raise RuntimeError(f"Unexpected git show metadata for revision {revision}")
@@ -122,7 +122,8 @@ def collect_commit_entries(repo_root: Path) -> list[UpdateEntry]:
             revision,
         ).splitlines()
         files = tuple(normalize_path(line) for line in file_lines if should_log_path(line))
-        entries.append(UpdateEntry(timestamp=timestamp, title=subject, files=files, commit_hash=commit_hash[:7]))
+        rendered_hash = "本次提交" if head_as_current and index == len(revisions) - 1 else commit_hash[:7]
+        entries.append(UpdateEntry(timestamp=timestamp, title=subject, files=files, commit_hash=rendered_hash))
     return entries
 
 
@@ -178,8 +179,8 @@ def render_updates(entries: Sequence[UpdateEntry]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def build_updates(repo_root: Path, commit_message_path: Path | None) -> str:
-    entries = collect_commit_entries(repo_root)
+def build_updates(repo_root: Path, commit_message_path: Path | None, *, head_as_current: bool = False) -> str:
+    entries = collect_commit_entries(repo_root, head_as_current=head_as_current)
     pending_entry = collect_pending_entry(repo_root, commit_message_path) if commit_message_path else None
     if pending_entry is not None:
         entries.append(pending_entry)
@@ -196,13 +197,22 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Rebuild SMART updates.md from git history.")
     parser.add_argument("--repo-root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--commit-message-file", type=Path)
+    parser.add_argument(
+        "--head-as-current",
+        action="store_true",
+        help="Render HEAD with a stable current-commit marker for post-commit auto-amend hooks.",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
     repo_root = args.repo_root.resolve()
-    content = build_updates(repo_root, args.commit_message_file.resolve() if args.commit_message_file else None)
+    content = build_updates(
+        repo_root,
+        args.commit_message_file.resolve() if args.commit_message_file else None,
+        head_as_current=args.head_as_current,
+    )
     write_updates(repo_root, content)
     return 0
 

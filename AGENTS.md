@@ -110,6 +110,7 @@
 
 ## Update Log
 
-- Root `updates.md` is auto-maintained by `.githooks/commit-msg` via `scripts/update_updates_md.py`.
+- Root `updates.md` is auto-maintained by `.githooks/post-commit` via `scripts/update_updates_md.py`.
+- The hook auto-amends the just-created commit so `updates.md` is included in that same commit. The newest entry uses the stable marker `本次提交`; older entries are refreshed to their real short commit hashes on the next commit.
 - `.\scripts\setup.ps1` installs the hook automatically. If needed, rerun `.\scripts\install-git-hooks.ps1`.
 - Prefer letting the hook refresh `updates.md` during `git commit` instead of editing the file by hand.

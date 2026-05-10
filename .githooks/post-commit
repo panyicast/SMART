@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+
+if [ "${SMART_UPDATES_AMENDING:-}" = "1" ]; then
+    exit 0
+fi
+
+repo_root="$(git rev-parse --show-toplevel)"
+updates_path="$repo_root/updates.md"
+python "$repo_root/scripts/update_updates_md.py" --repo-root "$repo_root" --head-as-current
+
+if [ -n "$(git status --porcelain -- "$updates_path")" ]; then
+    git add -- "$updates_path"
+    SMART_UPDATES_AMENDING=1 git commit --amend --no-edit --no-verify
+fi

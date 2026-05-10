@@ -1,6 +1,0 @@
-#!/bin/sh
-set -eu
-
-repo_root="$(git rev-parse --show-toplevel)"
-python "$repo_root/scripts/update_updates_md.py" --repo-root "$repo_root" --commit-message-file "$1"
-git add -- "$repo_root/updates.md"

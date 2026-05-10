@@ -90,6 +90,25 @@ def test_commit_message_file_adds_pending_entry(tmp_path: Path) -> None:
     assert "`scripts/task.ps1`" in updates_text
 
 
+def test_head_as_current_uses_stable_marker(tmp_path: Path) -> None:
+    module = _load_module()
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    _init_repo(repo_root)
+
+    (repo_root / "README.md").write_text("# Demo\n", encoding="utf-8")
+    _git(repo_root, "add", "README.md")
+    _git(repo_root, "commit", "-m", "Initial commit")
+
+    assert module.main(["--repo-root", str(repo_root), "--head-as-current"]) == 0
+
+    updates_text = (repo_root / "updates.md").read_text(encoding="utf-8")
+    latest_hash = _git(repo_root, "rev-parse", "--short", "HEAD").strip()
+
+    assert "- 提交：`本次提交`" in updates_text
+    assert latest_hash not in updates_text
+
+
 def test_summarize_files_filters_updates_md_and_temp_noise() -> None:
     module = _load_module()
 
