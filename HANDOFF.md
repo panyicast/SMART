@@ -7,6 +7,7 @@
 - Root `HANDOFF.md` / `NOTES.md` did not exist before this file.
 - `git status` shows WIP across project config, UI, STK link service/page, tests, and F4 generated data.
 - Added persistent small-task checkpoint rules to `AGENTS.md`.
+- Implemented STK scene time sync from the flight-program page when an existing STK scenario is available.
 
 ## Modified / Added Areas
 
@@ -20,11 +21,11 @@
 - `src/smart/ui/i18n.py`: adds Chinese UI text for save-as/close and STK link navigation.
 - `src/smart/ui/nav_icons.py`: adds STK link icon.
 - `src/smart/ui/theme.py`: adds sidebar project name/path roles.
-- `src/smart/ui/widgets/flight_program_page.py`: adds autosave and reference-result cache load/save.
+- `src/smart/ui/widgets/flight_program_page.py`: adds autosave and reference-result cache load/save; launch-source/manual/window/orbit-point T0 changes now try to sync existing STK scenario analysis time.
 - `src/smart/ui/widgets/maneuver_page.py`: changes ground-track maneuver-number labels to yellow text with black outline and smaller offset.
-- `src/smart/services/stk_link.py`: new STK 11.6 launch/connect/import service.
+- `src/smart/services/stk_link.py`: new STK 11.6 launch/connect/import service; now tracks established scenarios and can attach to a running STK scenario without launching STK to update analysis time.
 - `src/smart/ui/widgets/stk_link_page.py`: new STK link UI page with worker thread.
-- Tests updated/added for project workspace, flight program page, maneuver page, sidebar navigation, STK link helpers.
+- Tests updated/added for project workspace, flight program page, maneuver page, sidebar navigation, STK link helpers, and existing-scenario STK time sync.
 
 ## Risks
 
@@ -33,19 +34,21 @@
 - Flight-program reference cache can become stale after orbit, tracking, launch-window, or constraint changes.
 - `projects/F4/data/stk_link/` contains generated artifacts; decide whether to keep in git.
 - Several files show LF-to-CRLF warnings on git diff/status.
-- Targeted tests have not been run in this recovery pass.
+- Real STK 11.6 UI/Connect validation is still needed for the automatic time sync path.
 
 ## Next Minimum Task
 
-Current doc task is complete. Next code task remains:
+Current STK time-sync task is complete.
 
-Run targeted tests:
+Verified:
 
 ```powershell
 D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_project_workspace.py tests/test_flight_program_page.py tests/test_maneuver_page.py tests/test_sidebar_navigation.py tests/test_stk_link.py
 ```
 
-Then decide whether STK generated artifacts should be committed or ignored.
+Result: 58 passed.
+
+Next minimum task: validate the STK time-sync behavior against a real STK 11.6 scenario, then decide whether `projects/F4/data/stk_link/` generated artifacts should remain committed or move to ignore/cleanup.
 
 ## Working Rule
 

@@ -29,6 +29,7 @@ STK_116_APP_PATH = Path(r"D:\Program Files\AGI\STK 116\bin\AgUiApplication.exe")
 GEO_RADIUS_M = 42_164_000.0
 DEFAULT_CONNECT_HOST = "127.0.0.1"
 DEFAULT_CONNECT_PORT = 5001
+_STK_SCENARIO_ESTABLISHED = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,6 +141,30 @@ def launch_or_attach_stk_116(*, app_path: str | Path = STK_116_APP_PATH, timeout
     raise RuntimeError(f"Unable to attach to STK 11.6 COM application: {last_error}")
 
 
+def attach_to_running_stk_116_scenario() -> StkCommandExecutor | None:
+    try:
+        import win32com.client  # type: ignore[import-not-found]
+    except Exception:
+        win32com_client = None
+    else:
+        win32com_client = win32com.client
+
+    if win32com_client is not None:
+        app = _active_stk_app(win32com_client)
+        if app is not None:
+            try:
+                root = app.Personality2
+                if root is not None and getattr(root, "CurrentScenario", None) is not None:
+                    _mark_stk_scenario_established()
+                    return StkComExecutor(root)
+            except Exception:
+                return None
+
+    if _STK_SCENARIO_ESTABLISHED and _socket_ready():
+        return StkSocketExecutor()
+    return None
+
+
 def _launch_and_attach_socket(
     app_path: Path,
     *,
@@ -178,6 +203,7 @@ class StkLinkService:
     ) -> None:
         self._workspace = workspace
         self._executor = executor
+        self._scenario_established = False
         self._commands: list[str] = []
 
     @property
@@ -203,8 +229,35 @@ class StkLinkService:
                 raise RuntimeError(f"Failed to create STK scenario '{scenario_name}': {exc}") from exc
         else:
             self._execute(f"New / Scenario {scenario_name}")
+        self._mark_scenario_established()
         self._apply_flight_program_analysis_time(ignore_failure=True)
         return scenario_name
+
+    def has_current_scenario(self) -> bool:
+        executor = self._executor
+        if executor is None:
+            return False
+        root = getattr(executor, "root", None)
+        if root is None:
+            return self._scenario_established or _STK_SCENARIO_ESTABLISHED
+        try:
+            has_scenario = getattr(root, "CurrentScenario", None) is not None
+        except Exception:
+            return self._scenario_established or _STK_SCENARIO_ESTABLISHED
+        if has_scenario:
+            self._mark_scenario_established()
+        return has_scenario
+
+    def sync_current_scenario_analysis_time(self) -> bool:
+        if not self.has_current_scenario():
+            if self._executor is not None:
+                return False
+            executor = attach_to_running_stk_116_scenario()
+            if executor is None:
+                return False
+            self._executor = executor
+            self._mark_scenario_established()
+        return self._apply_flight_program_analysis_time(ignore_failure=False)
 
     def import_project_to_stk(self) -> StkLinkResult:
         project = self._require_project()
@@ -366,19 +419,20 @@ class StkLinkService:
             return format_utc(parse_utc(value), timespec="microseconds")
         return derive_scenario_epoch_utc(rows)
 
-    def _apply_flight_program_analysis_time(self, *, ignore_failure: bool) -> None:
+    def _apply_flight_program_analysis_time(self, *, ignore_failure: bool) -> bool:
         path = self._orbit_history_path()
         if not path.exists():
-            return
+            return False
         try:
             rows = load_orbit_history_rows(path)
             scenario_epoch_utc = self._scenario_epoch_utc(rows)
             start_time, stop_time = _stk_time_bounds(rows, scenario_epoch_utc=scenario_epoch_utc)
         except Exception:
-            return
+            return False
         self._execute(f'SetAnalysisTimePeriod * "{start_time}" "{stop_time}"', ignore_failure=ignore_failure)
         self._execute("SetAnimation * StartAndCurrentTime UseAnalysisStartTime", ignore_failure=True)
         self._execute("SetAnimation * EndTime UseAnalysisStopTime", ignore_failure=True)
+        return True
 
     def _flight_program_tracking_assets(self) -> list[TrackingAsset]:
         payload = (
@@ -403,6 +457,15 @@ class StkLinkService:
         if project is None:
             raise RuntimeError("No active SMART project.")
         return project
+
+    def _mark_scenario_established(self) -> None:
+        self._scenario_established = True
+        _mark_stk_scenario_established()
+
+
+def _mark_stk_scenario_established() -> None:
+    global _STK_SCENARIO_ESTABLISHED
+    _STK_SCENARIO_ESTABLISHED = True
 
 
 def write_stk_attitude_dcm(

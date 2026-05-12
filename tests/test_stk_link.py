@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -12,6 +13,16 @@ from smart.services.stk_link import (
     write_stk_attitude_dcm,
 )
 from smart.services.project_workspace import ProjectWorkspace
+
+
+class _RecordingExecutor:
+    def __init__(self, *, has_scenario: bool = True) -> None:
+        self.root = SimpleNamespace(CurrentScenario=object() if has_scenario else None)
+        self.commands: list[str] = []
+
+    def execute(self, command: str, *, ignore_failure: bool = False) -> list[str]:
+        self.commands.append(command)
+        return []
 
 
 def test_sanitize_stk_object_name_keeps_connect_safe_names() -> None:
@@ -71,6 +82,36 @@ def test_scenario_epoch_prefers_flight_program_selected_t0(tmp_path: Path) -> No
     service = StkLinkService(workspace)
 
     assert service._scenario_epoch_utc([]) == "2026-05-15T00:12:00.000000Z"
+
+
+def test_sync_current_scenario_analysis_time_updates_existing_stk_scene(tmp_path: Path) -> None:
+    workspace = ProjectWorkspace()
+    workspace.create_project("stk-sync-time", parent_dir=tmp_path)
+    program = workspace.load_flight_program_config() or {}
+    program["selected_t0_utc"] = "2026-05-15T00:12:00Z"
+    workspace.save_flight_program_config(program)
+    (workspace.data_dir() / "full_orbit_history.csv").write_text(
+        "elapsed_time_s\n0\n600\n",
+        encoding="utf-8",
+    )
+    executor = _RecordingExecutor(has_scenario=True)
+
+    assert StkLinkService(workspace, executor=executor).sync_current_scenario_analysis_time() is True
+
+    assert executor.commands == [
+        'SetAnalysisTimePeriod * "15 May 2026 00:12:00.000000" "15 May 2026 00:22:00.000000"',
+        "SetAnimation * StartAndCurrentTime UseAnalysisStartTime",
+        "SetAnimation * EndTime UseAnalysisStopTime",
+    ]
+
+
+def test_sync_current_scenario_analysis_time_skips_when_no_stk_scene(tmp_path: Path) -> None:
+    workspace = ProjectWorkspace()
+    workspace.create_project("stk-no-scene", parent_dir=tmp_path)
+    executor = _RecordingExecutor(has_scenario=False)
+
+    assert StkLinkService(workspace, executor=executor).sync_current_scenario_analysis_time() is False
+    assert executor.commands == []
 
 
 def test_stk_link_assets_use_tracking_arc_config(tmp_path: Path) -> None:

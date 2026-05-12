@@ -16,6 +16,15 @@ from smart.ui.widgets.flight_program_page import FlightProgramOverviewWidget, Fl
 from smart.ui.widgets.table_editing import ComboBoxTableEditDelegate
 
 
+class _FakeStkSyncService:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def sync_current_scenario_analysis_time(self) -> bool:
+        self.calls += 1
+        return True
+
+
 def test_set_playhead_updates_status_without_rebuilding_tables(monkeypatch) -> None:
     _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
 
@@ -124,6 +133,32 @@ def test_manual_launch_change_updates_selected_t0_without_tracking_recompute(mon
 
     assert page._program["selected_launch_utc"] == "2026-05-15T00:10:00Z"
     assert page._program["selected_t0_utc"] == "2026-05-15T00:12:00Z"
+
+
+def test_manual_launch_change_syncs_existing_stk_scene_time(monkeypatch, tmp_path) -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    workspace = ProjectWorkspace()
+    workspace.create_project("flight-stk-sync", parent_dir=tmp_path)
+    service = _FakeStkSyncService()
+    page = FlightProgramPage(I18nManager("zh"), workspace, stk_link_service_factory=lambda: service)  # type: ignore[arg-type]
+    monkeypatch.setattr(page._workspace, "load_tracking_arc_config", lambda: {"rocket_flight_time_s": 120.0})
+    monkeypatch.setattr(page._workspace, "load_launch_window_config", lambda: None)
+    monkeypatch.setattr(page, "_refresh_reference_segments", lambda: None)
+    monkeypatch.setattr(page, "_refresh_all", lambda: None)
+    monkeypatch.setattr(page, "_save_reference_results", lambda: None)
+
+    manual_index = page._launch_source_combo.findData("manual")
+    page._launch_source_combo.blockSignals(True)
+    page._launch_source_combo.setCurrentIndex(manual_index)
+    page._launch_source_combo.blockSignals(False)
+    page._manual_launch_edit.blockSignals(True)
+    page._manual_launch_edit.setDateTime(page._utc_to_qdatetime("2026-05-15T00:10:00Z"))
+    page._manual_launch_edit.blockSignals(False)
+
+    page._on_manual_launch_changed()
+
+    assert service.calls == 1
 
 
 def test_event_changes_autosave_flight_program_config(tmp_path) -> None:

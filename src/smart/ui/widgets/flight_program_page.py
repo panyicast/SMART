@@ -5,7 +5,7 @@ import json
 from dataclasses import asdict
 from datetime import timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from uuid import uuid4
 
 import numpy as np
@@ -40,6 +40,7 @@ from smart.services.launch_window import (
 )
 from smart.services.project_workspace import ProjectWorkspace
 from smart.services.stk_ephemeris import derive_scenario_epoch_utc
+from smart.services.stk_link import StkLinkService
 from smart.services.tracking_arc import (
     TrackingArcAssetSummary,
     TrackingArcOrbitResult,
@@ -100,11 +101,13 @@ class FlightProgramPage(QtWidgets.QWidget):
         self,
         i18n: I18nManager,
         workspace: ProjectWorkspace,
+        stk_link_service_factory: Callable[[], StkLinkService] | None = None,
         parent: QtWidgets.QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._i18n = i18n
         self._workspace = workspace
+        self._stk_link_service_factory = stk_link_service_factory or (lambda: StkLinkService(self._workspace))
         self._program = default_flight_program_payload()
         self._windows: list[Any] = []
         self._tracking_results: dict[str, TrackingArcOrbitResult] = {}
@@ -462,6 +465,7 @@ class FlightProgramPage(QtWidgets.QWidget):
         self._refresh_all()
         self._autosave_program()
         self._save_reference_results()
+        self._sync_stk_analysis_time_if_available()
         self._set_status("statusReady", f"参考轨计算完成：{len(results)} 条。")
 
     def generate_draft(self) -> None:
@@ -514,6 +518,14 @@ class FlightProgramPage(QtWidgets.QWidget):
             self._workspace.save_flight_program_config(self._program)
         except Exception as exc:
             self._set_status("statusDisconnected", f"自动保存飞行程序失败：{exc}")
+
+    def _sync_stk_analysis_time_if_available(self) -> bool:
+        if self._suppress_autosave or self._workspace.current_project is None:
+            return False
+        try:
+            return bool(self._stk_link_service_factory().sync_current_scenario_analysis_time())
+        except Exception:
+            return False
 
     def _save_reference_results(self) -> Path | None:
         if self._suppress_autosave or self._workspace.current_project is None:
@@ -1373,6 +1385,7 @@ class FlightProgramPage(QtWidgets.QWidget):
         self._refresh_all()
         self._autosave_program()
         self._save_reference_results()
+        self._sync_stk_analysis_time_if_available()
 
     def _on_manual_launch_changed(self) -> None:
         if self._launch_selection_mode() != "manual":
@@ -1384,6 +1397,7 @@ class FlightProgramPage(QtWidgets.QWidget):
         self._refresh_all()
         self._autosave_program()
         self._save_reference_results()
+        self._sync_stk_analysis_time_if_available()
 
     def _on_window_changed(self) -> None:
         if self._launch_selection_mode() == "manual":
@@ -1398,6 +1412,7 @@ class FlightProgramPage(QtWidgets.QWidget):
         self._refresh_all()
         self._autosave_program()
         self._save_reference_results()
+        self._sync_stk_analysis_time_if_available()
 
     def _on_orbit_point_changed(self) -> None:
         if self._launch_selection_mode() == "manual":
@@ -1416,6 +1431,7 @@ class FlightProgramPage(QtWidgets.QWidget):
             self._sync_selected_t0_from_launch_state()
         self._refresh_all()
         self._autosave_program()
+        self._sync_stk_analysis_time_if_available()
 
     def _selected_event(self) -> dict[str, Any] | None:
         return next((item for item in self._program.get("events", []) if str(item.get("id")) == self._selected_event_id), None)
