@@ -1,0 +1,18 @@
+stk.v.11.0
+
+BEGIN Ephemeris
+
+NumberOfEphemerisPoints 2
+ScenarioEpoch           24 Apr 2026 13:54:27.000000
+InterpolationMethod     Lagrange
+InterpolationOrder      1
+CentralBody             Earth
+CoordinateSystem        Fixed
+DistanceUnit            Meters
+
+EphemerisTimePosVel
+
+0.00000000000000e+00 9.48483625535472e+06 4.10833394116047e+07 0.00000000000000e+00 0.00000000000000e+00 0.00000000000000e+00 0.00000000000000e+00
+7.10978880000000e+05 9.48483625535472e+06 4.10833394116047e+07 0.00000000000000e+00 0.00000000000000e+00 0.00000000000000e+00 0.00000000000000e+00
+
+END Ephemeris

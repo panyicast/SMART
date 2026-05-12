@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -34,6 +35,7 @@ LAUNCH_WINDOW_FILE = "launch_window.json"
 TRACKING_ARC_FILE = "tracking_arc.json"
 TRACKING_ARC_RESULTS_FILE = "tracking_arc_results.json"
 FLIGHT_PROGRAM_FILE = "flight_program.json"
+FLIGHT_PROGRAM_REFERENCE_RESULTS_FILE = "flight_program_reference_results.json"
 
 
 @dataclass(slots=True, frozen=True)
@@ -110,6 +112,33 @@ class ProjectWorkspace:
         self.config_dir().mkdir(parents=True, exist_ok=True)
         return self._project
 
+    def close_project(self) -> None:
+        self._project = None
+
+    def save_project_as(self, target_dir: str | Path) -> ProjectInfo:
+        project = self._require_project()
+        source_dir = project.root_dir.resolve()
+        destination_dir = Path(target_dir).expanduser().resolve()
+        if destination_dir == source_dir:
+            raise FileExistsError(f"Target project directory is the current project: {destination_dir}")
+        if source_dir in destination_dir.parents:
+            raise ValueError("Target project directory cannot be inside the current project.")
+        if destination_dir.exists() and not destination_dir.is_dir():
+            raise FileExistsError(f"Target project path is not a directory: {destination_dir}")
+        if destination_dir.exists() and any(destination_dir.iterdir()):
+            raise FileExistsError(f"Target project directory is not empty: {destination_dir}")
+
+        if destination_dir.exists():
+            shutil.rmtree(destination_dir)
+        shutil.copytree(source_dir, destination_dir)
+
+        metadata_path = destination_dir / PROJECT_META_FILE
+        payload = _read_json(metadata_path)
+        payload["name"] = destination_dir.name
+        payload["updated_utc"] = _utc_now_iso()
+        _write_json(metadata_path, payload)
+        return self.open_project(destination_dir)
+
     def data_dir(self) -> Path:
         root_dir = self._require_project().root_dir
         return root_dir / DATA_DIR_NAME
@@ -151,6 +180,9 @@ class ProjectWorkspace:
 
     def flight_program_path(self) -> Path:
         return self.config_dir() / FLIGHT_PROGRAM_FILE
+
+    def flight_program_reference_results_path(self) -> Path:
+        return self.data_dir() / FLIGHT_PROGRAM_REFERENCE_RESULTS_FILE
 
     def save_orbit_elements(self, elements: OrbitalElements) -> Path:
         payload = _orbital_elements_payload(elements)
@@ -278,6 +310,18 @@ class ProjectWorkspace:
             return None
         payload = _read_json(file_path)
         return normalize_flight_program_payload(payload)
+
+    def save_flight_program_reference_results(self, payload: dict[str, Any]) -> Path:
+        file_path = self.flight_program_reference_results_path()
+        _write_json(file_path, payload)
+        self._touch_updated_time()
+        return file_path
+
+    def load_flight_program_reference_results(self) -> dict[str, Any] | None:
+        file_path = self.flight_program_reference_results_path()
+        if not file_path.exists():
+            return None
+        return _read_json(file_path)
 
     def load_maneuver_snapshot(self) -> dict[str, float] | None:
         file_path = self.data_dir() / MANEUVER_SNAPSHOT_FILE

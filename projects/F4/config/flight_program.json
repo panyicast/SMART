@@ -2,9 +2,9 @@
   "version": 1,
   "time_reference": "t0_elapsed_min",
   "launch_selection_mode": "window",
-  "selected_launch_utc": "2026-05-15T07:28:00Z",
+  "selected_launch_utc": "2026-05-15T07:18:00Z",
   "selected_orbit_point": "leading",
-  "selected_t0_utc": "2026-05-15T08:03:34Z",
+  "selected_t0_utc": "2026-05-15T07:53:34Z",
   "generation": {
     "transition_duration_min": 20.0,
     "source": "auto_draft"

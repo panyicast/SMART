@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+from dataclasses import asdict
 from datetime import timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -40,7 +41,9 @@ from smart.services.launch_window import (
 from smart.services.project_workspace import ProjectWorkspace
 from smart.services.stk_ephemeris import derive_scenario_epoch_utc
 from smart.services.tracking_arc import (
+    TrackingArcAssetSummary,
     TrackingArcOrbitResult,
+    TrackingArcSegment,
     compute_tracking_arc_for_launch_time,
     compute_tracking_arcs_for_window,
     tracking_arc_launch_points,
@@ -111,6 +114,7 @@ class FlightProgramPage(QtWidgets.QWidget):
         self._playhead_min = 0.0
         self._suppress_table = False
         self._suppress_reference_table = False
+        self._suppress_autosave = False
         self._status_role = "statusDisconnected"
         self._orbit_history_cache_key: tuple[str, int, int] | None = None
         self._orbit_history_rows_cache: list[dict[str, float | str]] | None = None
@@ -171,36 +175,44 @@ class FlightProgramPage(QtWidgets.QWidget):
         self.refresh_from_workspace()
 
     def refresh_from_workspace(self) -> None:
+        self._suppress_autosave = True
         if self._workspace.current_project is None:
             self._program = default_flight_program_payload()
+            self._tracking_results = {}
+            self._reference_segments = []
             self._set_controls_enabled(False)
             self._set_status("statusDisconnected", "没有活动项目。")
             self._refresh_all()
+            self._suppress_autosave = False
             return
-        self._set_controls_enabled(True)
         try:
-            self._program = self._workspace.load_flight_program_config() or default_flight_program_payload()
-        except Exception as exc:
-            self._program = default_flight_program_payload()
-            self._set_status("statusDisconnected", f"加载飞行程序失败：{exc}")
-        self._program = normalize_flight_program_payload(self._program)
-        launch_mode_index = self._launch_source_combo.findData(str(self._program.get("launch_selection_mode", "window")))
-        if launch_mode_index >= 0:
-            self._launch_source_combo.blockSignals(True)
-            self._launch_source_combo.setCurrentIndex(launch_mode_index)
-            self._launch_source_combo.blockSignals(False)
-        point_index = self._orbit_point_combo.findData(str(self._program.get("selected_orbit_point", "leading")))
-        if point_index >= 0:
-            self._orbit_point_combo.blockSignals(True)
-            self._orbit_point_combo.setCurrentIndex(point_index)
-            self._orbit_point_combo.blockSignals(False)
-        self._sync_manual_launch_field_from_state()
-        self._reload_windows(show_status=False)
-        self._update_launch_source_controls()
-        self._sync_selected_t0_from_launch_state()
-        self._refresh_source_labels()
-        self._refresh_all()
-        self._set_status("statusReady", "飞行程序页面已就绪。")
+            self._set_controls_enabled(True)
+            try:
+                self._program = self._workspace.load_flight_program_config() or default_flight_program_payload()
+            except Exception as exc:
+                self._program = default_flight_program_payload()
+                self._set_status("statusDisconnected", f"加载飞行程序失败：{exc}")
+            self._program = normalize_flight_program_payload(self._program)
+            launch_mode_index = self._launch_source_combo.findData(str(self._program.get("launch_selection_mode", "window")))
+            if launch_mode_index >= 0:
+                self._launch_source_combo.blockSignals(True)
+                self._launch_source_combo.setCurrentIndex(launch_mode_index)
+                self._launch_source_combo.blockSignals(False)
+            point_index = self._orbit_point_combo.findData(str(self._program.get("selected_orbit_point", "leading")))
+            if point_index >= 0:
+                self._orbit_point_combo.blockSignals(True)
+                self._orbit_point_combo.setCurrentIndex(point_index)
+                self._orbit_point_combo.blockSignals(False)
+            self._sync_manual_launch_field_from_state()
+            self._reload_windows(show_status=False)
+            self._update_launch_source_controls()
+            self._sync_selected_t0_from_launch_state()
+            self._load_saved_reference_results()
+            self._refresh_source_labels()
+            self._refresh_all()
+            self._set_status("statusReady", "飞行程序页面已就绪。")
+        finally:
+            self._suppress_autosave = False
 
     def eventFilter(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:
         if isinstance(watched, QtWidgets.QTableWidget) and event.type() == QtCore.QEvent.Type.KeyPress:
@@ -448,6 +460,8 @@ class FlightProgramPage(QtWidgets.QWidget):
             self._program["selected_launch_utc"] = selected.launch_utc
         self._refresh_reference_segments()
         self._refresh_all()
+        self._autosave_program()
+        self._save_reference_results()
         self._set_status("statusReady", f"参考轨计算完成：{len(results)} 条。")
 
     def generate_draft(self) -> None:
@@ -479,6 +493,7 @@ class FlightProgramPage(QtWidgets.QWidget):
         self._update_launch_source_controls()
         self._refresh_reference_segments()
         self._refresh_all()
+        self._autosave_program()
         self._set_status("statusReady", "已生成可编辑飞行程序草案。")
 
     def save_program(self) -> None:
@@ -491,6 +506,50 @@ class FlightProgramPage(QtWidgets.QWidget):
             self._set_status("statusDisconnected", f"保存飞行程序失败：{exc}")
             return
         self._set_status("statusReady", f"已保存飞行程序：{path}")
+
+    def _autosave_program(self) -> None:
+        if self._suppress_autosave or self._workspace.current_project is None:
+            return
+        try:
+            self._workspace.save_flight_program_config(self._program)
+        except Exception as exc:
+            self._set_status("statusDisconnected", f"自动保存飞行程序失败：{exc}")
+
+    def _save_reference_results(self) -> Path | None:
+        if self._suppress_autosave or self._workspace.current_project is None:
+            return None
+        payload = {
+            "version": 1,
+            "launch_selection_mode": self._launch_selection_mode(),
+            "selected_orbit_point": str(self._program.get("selected_orbit_point", "")),
+            "selected_launch_utc": str(self._program.get("selected_launch_utc", "")),
+            "selected_t0_utc": str(self._program.get("selected_t0_utc", "")),
+            "results": [asdict(result) for result in self._tracking_results.values()],
+        }
+        try:
+            return self._workspace.save_flight_program_reference_results(payload)
+        except Exception as exc:
+            self._set_status("statusDisconnected", f"自动保存参考轨失败：{exc}")
+            return None
+
+    def _load_saved_reference_results(self) -> bool:
+        self._tracking_results = {}
+        if self._workspace.current_project is None:
+            return False
+        try:
+            payload = self._workspace.load_flight_program_reference_results()
+        except Exception:
+            return False
+        if not isinstance(payload, dict):
+            return False
+        raw_results = payload.get("results")
+        if not isinstance(raw_results, list):
+            return False
+        results = [self._tracking_result_from_payload(item) for item in raw_results if isinstance(item, dict)]
+        if not results:
+            return False
+        self._tracking_results = {result.point_key: result for result in results}
+        return True
 
     def _refresh_all(self) -> None:
         self._refresh_reference_segments()
@@ -1169,6 +1228,7 @@ class FlightProgramPage(QtWidgets.QWidget):
         self._selected_event_id = str(event["id"])
         self._table_tabs.setCurrentWidget(self._event_table)
         self._refresh_all()
+        self._autosave_program()
 
     def _upsert_event(self, event: object) -> None:
         if not isinstance(event, dict):
@@ -1186,6 +1246,7 @@ class FlightProgramPage(QtWidgets.QWidget):
         self._refresh_timeline()
         self._refresh_warnings()
         self._refresh_sample_preview()
+        self._autosave_program()
 
     def _add_event(self, mode_or_kind: str, elapsed_min: float) -> None:
         is_deployment = mode_or_kind == "deployment"
@@ -1207,6 +1268,7 @@ class FlightProgramPage(QtWidgets.QWidget):
         self._program["events"] = [*self._program.get("events", []), event]
         self._selected_event_id = str(event["id"])
         self._refresh_all()
+        self._autosave_program()
 
     def _duplicate_selected_event(self) -> None:
         event = self._selected_event()
@@ -1224,6 +1286,7 @@ class FlightProgramPage(QtWidgets.QWidget):
         self._program["events"] = [*self._program.get("events", []), normalize_flight_event(copy)]
         self._selected_event_id = str(copy["id"])
         self._refresh_all()
+        self._autosave_program()
 
     def _jump_to_selected_event(self) -> None:
         event = self._selected_event()
@@ -1264,6 +1327,7 @@ class FlightProgramPage(QtWidgets.QWidget):
         ]
         self._selected_event_id = ""
         self._refresh_all()
+        self._autosave_program()
 
     def _select_event(self, event_id: str) -> None:
         self._selected_event_id = event_id
@@ -1307,6 +1371,8 @@ class FlightProgramPage(QtWidgets.QWidget):
         self._refresh_reference_segments()
         self._update_launch_source_controls()
         self._refresh_all()
+        self._autosave_program()
+        self._save_reference_results()
 
     def _on_manual_launch_changed(self) -> None:
         if self._launch_selection_mode() != "manual":
@@ -1316,6 +1382,8 @@ class FlightProgramPage(QtWidgets.QWidget):
         self._sync_selected_t0_from_launch_state()
         self._refresh_reference_segments()
         self._refresh_all()
+        self._autosave_program()
+        self._save_reference_results()
 
     def _on_window_changed(self) -> None:
         if self._launch_selection_mode() == "manual":
@@ -1328,6 +1396,8 @@ class FlightProgramPage(QtWidgets.QWidget):
         self._sync_selected_t0_from_launch_state()
         self._refresh_reference_segments()
         self._refresh_all()
+        self._autosave_program()
+        self._save_reference_results()
 
     def _on_orbit_point_changed(self) -> None:
         if self._launch_selection_mode() == "manual":
@@ -1345,6 +1415,7 @@ class FlightProgramPage(QtWidgets.QWidget):
                 self._sync_manual_launch_field_from_state()
             self._sync_selected_t0_from_launch_state()
         self._refresh_all()
+        self._autosave_program()
 
     def _selected_event(self) -> dict[str, Any] | None:
         return next((item for item in self._program.get("events", []) if str(item.get("id")) == self._selected_event_id), None)
@@ -1762,6 +1833,44 @@ class FlightProgramPage(QtWidgets.QWidget):
 
     def _orbit_history_path(self) -> Path:
         return self._workspace.data_dir() / "full_orbit_history.csv"
+
+    @staticmethod
+    def _tracking_result_from_payload(payload: dict[str, Any]) -> TrackingArcOrbitResult:
+        segments = [
+            TrackingArcSegment(
+                row_label=str(item.get("row_label", "")),
+                start_utc=str(item.get("start_utc", "")),
+                end_utc=str(item.get("end_utc", "")),
+                kind=str(item.get("kind", "")),
+                tooltip=str(item.get("tooltip", "")),
+            )
+            for item in payload.get("segments", [])
+            if isinstance(item, dict)
+        ]
+        summaries = [
+            TrackingArcAssetSummary(
+                name=str(item.get("name", "")),
+                asset_type=str(item.get("asset_type", "")),
+                interval_count=int(item.get("interval_count", 0)),
+                total_duration_min=float(item.get("total_duration_min", 0.0)),
+                longest_duration_min=float(item.get("longest_duration_min", 0.0)),
+            )
+            for item in payload.get("asset_summaries", [])
+            if isinstance(item, dict)
+        ]
+        return TrackingArcOrbitResult(
+            point_key=str(payload.get("point_key", "")),
+            point_label=str(payload.get("point_label", "")),
+            launch_utc=str(payload.get("launch_utc", "")),
+            t0_utc=str(payload.get("t0_utc", "")),
+            timeline_start_utc=str(payload.get("timeline_start_utc", "")),
+            timeline_end_utc=str(payload.get("timeline_end_utc", "")),
+            row_labels=[str(item) for item in payload.get("row_labels", [])],
+            segments=segments,
+            asset_summaries=summaries,
+            shadow_total_min=float(payload.get("shadow_total_min", 0.0)),
+            maneuver_count=int(payload.get("maneuver_count", 0)),
+        )
 
     @staticmethod
     def _format_beijing(value: str) -> str:

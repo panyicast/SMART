@@ -82,6 +82,16 @@ QLabel[role="brandSubtitle"] {
     font-size: 10pt;
     line-height: 140%;
 }
+QLabel[role="sidebarProjectName"] {
+    color: #ffd85a;
+    font-size: 17pt;
+    font-weight: 800;
+}
+QLabel[role="sidebarProjectPath"] {
+    color: #7fd7e8;
+    font-size: 10pt;
+    line-height: 140%;
+}
 QListWidget[role="nav"] {
     background: transparent;
     color: #9fb5bf;

@@ -126,6 +126,39 @@ def test_manual_launch_change_updates_selected_t0_without_tracking_recompute(mon
     assert page._program["selected_t0_utc"] == "2026-05-15T00:12:00Z"
 
 
+def test_event_changes_autosave_flight_program_config(tmp_path) -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    workspace = ProjectWorkspace()
+    workspace.create_project("flight-autosave", parent_dir=tmp_path)
+    page = FlightProgramPage(I18nManager("zh"), workspace)
+
+    page._add_event("SPM", 12.0)
+
+    restored = workspace.load_flight_program_config()
+    assert restored is not None
+    assert len(restored["events"]) == 1
+    assert restored["events"][0]["name"] == "SPM 姿态"
+    assert restored["events"][0]["start_min"] == 12.0
+
+
+def test_saved_reference_results_load_on_refresh(tmp_path) -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    workspace = ProjectWorkspace()
+    workspace.create_project("flight-reference-cache", parent_dir=tmp_path)
+    page = FlightProgramPage(I18nManager("zh"), workspace)
+    page._tracking_results = {"leading": _tracking_result()}
+    page._program["selected_orbit_point"] = "leading"
+    page._save_reference_results()
+
+    restored_page = FlightProgramPage(I18nManager("zh"), workspace)
+
+    assert "leading" in restored_page._tracking_results
+    assert restored_page._reference_table.rowCount() == 0
+    assert restored_page._selected_tracking_result() is not None
+
+
 def test_timeline_drag_updates_playhead() -> None:
     _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
 

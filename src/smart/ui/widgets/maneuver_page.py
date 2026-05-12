@@ -30,6 +30,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[4]
 _DYNAMICS_SCRIPT_PATH = _REPO_ROOT / "scripts" / "satellite_dynamics_equation.py"
 _EARTH_RADIUS_KM = 6378.14
 _MANEUVER_PHASES = {"settle", "orbit_control"}
+_GROUND_TRACK_MANEUVER_LABEL_LAT_OFFSET_DEG = 5.0
 BEIJING_TZ = timezone(timedelta(hours=8))
 BEIJING_QT_TIMEZONE_ID = b"Asia/Shanghai"
 _EARTH_TEXTURE_PATHS = (
@@ -1079,6 +1080,7 @@ class ManeuverPage(QtWidgets.QWidget):
         self._ground_track_start_label: pg.TextItem | None = None
         self._ground_track_start_row: dict[str, Any] | None = None
         self._maneuver_number_labels: list[pg.TextItem] = []
+        self._maneuver_number_label_outlines: list[tuple[pg.TextItem, float, float]] = []
         self._ground_track_axis_labels: list[pg.TextItem] = []
         self._ground_track_grid_lines: list[pg.PlotDataItem] = []
         self._ground_track_maneuver_summaries: list[dict[str, Any]] = []
@@ -1957,19 +1959,28 @@ class ManeuverPage(QtWidgets.QWidget):
         if self._ground_track_plot is None:
             return
         self._clear_maneuver_number_labels()
+        font = QtGui.QFont()
+        font.setBold(True)
+        font.setPointSize(9)
         for summary in maneuver_summaries:
+            text = str(int(summary["maneuver_index"]))
+            x = self._nearest_visible_longitude(float(summary["subsatellite_longitude_deg"]))
+            y = float(summary["subsatellite_latitude_deg"]) + _GROUND_TRACK_MANEUVER_LABEL_LAT_OFFSET_DEG
+            for dx, dy in ((-0.55, 0.0), (0.55, 0.0), (0.0, -0.55), (0.0, 0.55)):
+                outline = pg.TextItem(text, color="#02070a", anchor=(0.5, 1.45))
+                outline.setFont(font)
+                outline.setZValue(24)
+                outline.setPos(x + dx, y + dy)
+                self._ground_track_plot.addItem(outline)
+                self._maneuver_number_label_outlines.append((outline, dx, dy))
             label = pg.TextItem(
-                str(int(summary["maneuver_index"])),
-                color="#f8fdff",
+                text,
+                color="#ffd85a",
                 anchor=(0.5, 1.45),
-                border=pg.mkPen("#27d8f6", width=1.2),
-                fill=pg.mkBrush(7, 28, 41, 235),
             )
+            label.setFont(font)
             label.setZValue(25)
-            label.setPos(
-                self._nearest_visible_longitude(float(summary["subsatellite_longitude_deg"])),
-                float(summary["subsatellite_latitude_deg"]) + 8.0,
-            )
+            label.setPos(x, y)
             self._ground_track_plot.addItem(label)
             self._maneuver_number_labels.append(label)
 
@@ -1981,11 +1992,14 @@ class ManeuverPage(QtWidgets.QWidget):
             self._position_maneuver_number_labels()
 
     def _position_maneuver_number_labels(self) -> None:
+        outline_index = 0
         for label, summary in zip(self._maneuver_number_labels, self._ground_track_maneuver_summaries, strict=False):
-            label.setPos(
-                self._nearest_visible_longitude(float(summary["subsatellite_longitude_deg"])),
-                float(summary["subsatellite_latitude_deg"]) + 8.0,
-            )
+            x = self._nearest_visible_longitude(float(summary["subsatellite_longitude_deg"]))
+            y = float(summary["subsatellite_latitude_deg"]) + _GROUND_TRACK_MANEUVER_LABEL_LAT_OFFSET_DEG
+            label.setPos(x, y)
+            for outline, dx, dy in self._maneuver_number_label_outlines[outline_index : outline_index + 4]:
+                outline.setPos(x + dx, y + dy)
+            outline_index += 4
 
     def _nearest_visible_longitude(self, longitude_deg: float) -> float:
         if self._ground_track_plot is None:
@@ -1998,7 +2012,11 @@ class ManeuverPage(QtWidgets.QWidget):
     def _clear_maneuver_number_labels(self) -> None:
         if self._ground_track_plot is None:
             self._maneuver_number_labels.clear()
+            self._maneuver_number_label_outlines.clear()
             return
+        for outline, _, _ in self._maneuver_number_label_outlines:
+            self._ground_track_plot.removeItem(outline)
+        self._maneuver_number_label_outlines.clear()
         for label in self._maneuver_number_labels:
             self._ground_track_plot.removeItem(label)
         self._maneuver_number_labels.clear()

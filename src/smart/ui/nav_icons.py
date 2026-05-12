@@ -92,6 +92,19 @@ _NAV_SVG: dict[str, str] = {
         '<path d="M7 9.5 L11.5 6 L16 10 L20 5.5" stroke-dasharray="0"/>'
         '</svg>'
     ),
+    "nav.stk_link": (
+        '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" '
+        'fill="none" stroke="' + _COLOR_TOKEN + '" stroke-width="1.8" '
+        'stroke-linecap="round" stroke-linejoin="round">'
+        '<path d="M4 17.5 C7.2 15.2 10.8 15.2 14 17.5 C16.2 19 18.7 19 21 17.5"/>'
+        '<path d="M12 3.5 C9.7 6.1 8.4 8.8 8.4 12 L8.4 16 L15.6 16 L15.6 12 C15.6 8.8 14.3 6.1 12 3.5 Z"/>'
+        '<circle cx="12" cy="11" r="1.4"/>'
+        '<path d="M7.2 8.7 L4 6.2"/>'
+        '<path d="M16.8 8.7 L20 6.2"/>'
+        '<path d="M5.4 5.2 L3.5 3.7"/>'
+        '<path d="M18.6 5.2 L20.5 3.7"/>'
+        '</svg>'
+    ),
     "nav.spice_kernels": (
         '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" '
         'fill="none" stroke="' + _COLOR_TOKEN + '" stroke-width="1.8" '

@@ -73,6 +73,24 @@ def test_create_project_creates_expected_structure(tmp_path: Path) -> None:
     assert tracking_payload["ground_station_min_elevation_deg"] == launch_payload["ground_station_min_elevation_deg"]
 
 
+def test_save_project_as_copies_current_project_and_closes(tmp_path: Path) -> None:
+    workspace = ProjectWorkspace()
+    info = workspace.create_project("mission_alpha", parent_dir=tmp_path)
+    marker = info.root_dir / "data" / "marker.txt"
+    marker.write_text("payload", encoding="utf-8")
+
+    copied = workspace.save_project_as(tmp_path / "mission_beta")
+
+    assert copied.name == "mission_beta"
+    assert copied.root_dir == (tmp_path / "mission_beta").resolve()
+    assert workspace.current_project == copied
+    assert (copied.root_dir / "data" / "marker.txt").read_text(encoding="utf-8") == "payload"
+
+    workspace.close_project()
+
+    assert workspace.current_project is None
+
+
 def test_create_project_without_parent_dir_uses_projects_directory(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -242,6 +260,21 @@ def test_tracking_arc_config_is_saved_independently_from_launch_window(tmp_path:
     assert tracking_payload is not None
     assert launch_payload["ground_station_min_elevation_deg"] == pytest.approx(5.0)
     assert tracking_payload["ground_station_min_elevation_deg"] == pytest.approx(12.5)
+
+
+def test_save_and_load_flight_program_reference_results(tmp_path: Path) -> None:
+    workspace = ProjectWorkspace()
+    workspace.create_project("mission_flight_program_refs", parent_dir=tmp_path)
+    payload = {
+        "version": 1,
+        "selected_t0_utc": "2026-05-15T00:00:00Z",
+        "results": [{"point_key": "leading", "segments": []}],
+    }
+
+    file_path = workspace.save_flight_program_reference_results(payload)
+
+    assert file_path == workspace.root_dir / "data" / "flight_program_reference_results.json"
+    assert workspace.load_flight_program_reference_results() == payload
 
 
 def test_open_project_requires_metadata_file(tmp_path: Path) -> None:

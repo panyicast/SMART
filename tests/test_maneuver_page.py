@@ -44,6 +44,12 @@ def test_maneuver_page_uses_readonly_summary_and_edit_dialog(tmp_path) -> None:
     page._refresh_ground_track_annotations()
     assert page._ground_track_start_marker.xData[0] == 370.0
     assert page._maneuver_number_labels[0].pos().x() == 380.0
+    assert page._maneuver_number_labels[0].pos().y() == 10.0
+    assert page._maneuver_number_labels[0].border.style() == QtCore.Qt.PenStyle.NoPen
+    assert page._maneuver_number_labels[0].fill.style() == QtCore.Qt.BrushStyle.NoBrush
+    assert page._maneuver_number_labels[0].textItem.font().bold()
+    assert page._maneuver_number_labels[0].textItem.font().pointSize() == 9
+    assert len(page._maneuver_number_label_outlines) == 4
     assert page._strategy_table.editTriggers() == QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers
     assert page._strategy_table.columnCount() == 2
     assert page._strategy_table.rowCount() == len(strategy["maneuvers"])

@@ -31,6 +31,36 @@ def test_nav_items_carry_icons_and_tooltips() -> None:
             assert not item.icon().isNull(), f"nav item for {key} should have an icon"
             assert item.toolTip(), f"nav item for {key} should have a tooltip"
             assert item.data(QtCore.Qt.ItemDataRole.UserRole) == key
+        assert not hasattr(window, "_subtitle_label")
+        assert not hasattr(window, "_footer_label")
+        assert window._project_name_label.property("role") == "sidebarProjectName"
+        assert window._project_path_label.property("role") == "sidebarProjectPath"
+    finally:
+        window.deleteLater()
+
+
+def test_project_menu_has_save_as_and_close_actions(tmp_path) -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    window = MainWindow()
+    try:
+        assert window._save_project_as_action.text() == "项目另存为..."
+        assert window._close_project_action.text() == "关闭当前项目"
+        assert window._save_project_as_action.isEnabled() is False
+        assert window._close_project_action.isEnabled() is False
+
+        window._projects_root = tmp_path
+        window._workspace.create_project("menu-actions", parent_dir=tmp_path)
+        window._refresh_project_actions()
+
+        assert window._save_project_as_action.isEnabled() is True
+        assert window._close_project_action.isEnabled() is True
+
+        window._workspace.close_project()
+        window._refresh_project_actions()
+
+        assert window._save_project_as_action.isEnabled() is False
+        assert window._close_project_action.isEnabled() is False
     finally:
         window.deleteLater()
 
@@ -46,7 +76,7 @@ def test_sidebar_toggle_collapses_and_restores_labels() -> None:
         expanded_width = window._sidebar_frame.width()
         first_item_text_expanded = window._nav_list.item(0).text()
         assert first_item_text_expanded != ""
-        assert window._subtitle_label.isHidden() is False
+        assert window._project_header_label.isHidden() is False
 
         window._toggle_sidebar_collapsed()
         assert window._sidebar_collapsed is True
@@ -54,7 +84,7 @@ def test_sidebar_toggle_collapses_and_restores_labels() -> None:
         assert collapsed_width < expanded_width
         assert window._nav_list.item(0).text() == ""
         assert window._nav_list.item(0).toolTip() != ""
-        assert window._subtitle_label.isHidden() is True
+        assert window._project_header_label.isHidden() is True
         assert window._brand_title_label.isHidden() is True
 
         window._toggle_sidebar_collapsed()
