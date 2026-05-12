@@ -10,6 +10,7 @@
 - Implemented STK scene time sync from the flight-program page when an existing STK scenario is available.
 - Fixed flight-program timeline/playhead sync so dragging or jumping the playhead sends STK `SetAnimation * CurrentTime`.
 - Fixed STK page sync failure caused by reusing a COM executor across Qt worker threads; STK operations now refresh the executor per background operation.
+- Improved flight-program playhead/STK sync performance: drag/slider movement is debounced and coalesced, while explicit jumps still sync STK immediately.
 
 ## Modified / Added Areas
 
@@ -23,12 +24,12 @@
 - `src/smart/ui/i18n.py`: adds Chinese UI text for save-as/close and STK link navigation.
 - `src/smart/ui/nav_icons.py`: adds STK link icon.
 - `src/smart/ui/theme.py`: adds sidebar project name/path roles.
-- `src/smart/ui/widgets/flight_program_page.py`: adds autosave and reference-result cache load/save; launch-source/manual/window/orbit-point T0 changes now try to sync existing STK scenario analysis time; playhead changes now try to sync STK current animation time.
+- `src/smart/ui/widgets/flight_program_page.py`: adds autosave and reference-result cache load/save; launch-source/manual/window/orbit-point T0 changes now try to sync existing STK scenario analysis time; playhead jumps sync STK current animation time immediately, while drag/slider changes use a short trailing debounce.
 - `src/smart/ui/widgets/maneuver_page.py`: changes ground-track maneuver-number labels to yellow text with black outline and smaller offset.
 - `src/smart/services/stk_link.py`: new STK 11.6 launch/connect/import service; now tracks established scenarios, can attach to a running STK scenario without launching STK, can set STK current animation time, and can discard COM executors without losing established-scenario state.
 - `src/smart/ui/widgets/stk_link_page.py`: new STK link UI page with worker thread; shares the MainWindow-owned `StkLinkService` so scenario state survives page switches; clears COM executor before and after each worker operation to avoid cross-thread COM reuse.
 - `src/smart/ui/main_window.py`: owns one shared `StkLinkService` for STK link page and flight-program page.
-- Tests updated/added for project workspace, flight program page, maneuver page, sidebar navigation, STK link helpers, and existing-scenario STK time sync.
+- Tests updated/added for project workspace, flight program page, maneuver page, sidebar navigation, STK link helpers, existing-scenario STK time sync, debounced drag sync, and reference-jump sync.
 
 ## Risks
 
@@ -40,20 +41,21 @@
 - Real STK 11.6 UI/Connect validation is still needed for the automatic time sync path.
 - Local F4 project has new STK-generated artifacts under `projects/F4/data/stk_link/20260512_132638/` and an updated `projects/F4/smart_project.json`; include them in the checkpoint only if preserving the real STK validation run is desired.
 - Local `projects/F4/smart_project.json` changed again during real STK use and was intentionally left out of this COM-threading checkpoint.
+- Local real STK retry also generated `projects/F4/data/stk_link/20260512_134342/`; decide later whether to keep committed, clean, or ignore generated STK exports.
 
 ## Next Minimum Task
 
-Current STK sync failure fix is complete. STK worker operations no longer reuse stale/cross-thread COM executors.
+Current playhead sync performance/jump fix is complete. Dragging no longer calls STK on every mouse move, and explicit jump paths route through immediate STK current-time sync.
 
 Verified:
 
 ```powershell
-D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_stk_link.py tests/test_flight_program_page.py tests/test_sidebar_navigation.py
+D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_project_workspace.py tests/test_flight_program_page.py tests/test_maneuver_page.py tests/test_sidebar_navigation.py tests/test_stk_link.py
 ```
 
-Result: 49 passed.
+Result: 63 passed.
 
-Next minimum task: retry "同步当前项目到 STK" in the real STK 11.6 UI. If it works, validate playhead sync; then decide whether STK generated artifacts should remain committed or move to ignore/cleanup.
+Next minimum task: retry real STK 11.6 drag and jump behavior. If accepted, decide whether generated STK artifacts under `projects/F4/data/stk_link/` should remain committed or move to ignore/cleanup.
 
 ## Working Rule
 

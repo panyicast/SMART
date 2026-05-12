@@ -181,6 +181,43 @@ def test_playhead_change_syncs_stk_current_time(tmp_path) -> None:
     assert service.current_times == ["2026-05-15T00:24:30Z"]
 
 
+def test_dragged_playhead_defers_and_coalesces_stk_current_time(tmp_path) -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    workspace = ProjectWorkspace()
+    workspace.create_project("flight-stk-drag-time", parent_dir=tmp_path)
+    service = _FakeStkSyncService()
+    page = FlightProgramPage(I18nManager("zh"), workspace, stk_link_service_factory=lambda: service)  # type: ignore[arg-type]
+    page._program["selected_t0_utc"] = "2026-05-15T00:12:00Z"
+    page._refresh_sample_preview = lambda: None  # type: ignore[method-assign]
+
+    page._set_playhead(10.0, sync_immediately=False)
+    page._set_playhead(12.5, sync_immediately=False)
+
+    assert service.current_times == []
+
+    QtTest.QTest.qWait(240)
+
+    assert service.current_times == ["2026-05-15T00:24:30Z"]
+
+
+def test_reference_selection_jump_syncs_stk_current_time(tmp_path) -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    workspace = ProjectWorkspace()
+    workspace.create_project("flight-stk-reference-jump", parent_dir=tmp_path)
+    service = _FakeStkSyncService()
+    page = FlightProgramPage(I18nManager("zh"), workspace, stk_link_service_factory=lambda: service)  # type: ignore[arg-type]
+    page._program["selected_t0_utc"] = "2026-05-15T00:12:00Z"
+    page._reference_segments = [{"id": "ref-1", "start_min": 8.0, "end_min": 9.0, "kind": "ground", "name": "ref"}]
+    page._refresh_sample_preview = lambda: None  # type: ignore[method-assign]
+
+    page._select_reference("ref-1")
+
+    assert page._playhead_min == 8.0
+    assert service.current_times == ["2026-05-15T00:20:00Z"]
+
+
 def test_event_changes_autosave_flight_program_config(tmp_path) -> None:
     _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
 

@@ -115,6 +115,7 @@ class FlightProgramPage(QtWidgets.QWidget):
         self._selected_event_id = ""
         self._selected_reference_id = ""
         self._playhead_min = 0.0
+        self._pending_stk_playhead_sync = False
         self._suppress_table = False
         self._suppress_reference_table = False
         self._suppress_autosave = False
@@ -126,6 +127,10 @@ class FlightProgramPage(QtWidgets.QWidget):
         self._orbit_history_epoch_cache: object = None
         self._sample_context_cache_key: tuple[tuple[str, int, int], str, str] | None = None
         self._sample_context_cache: FlightProgramSamplingContext | None = None
+        self._stk_playhead_sync_timer = QtCore.QTimer(self)
+        self._stk_playhead_sync_timer.setSingleShot(True)
+        self._stk_playhead_sync_timer.setInterval(180)
+        self._stk_playhead_sync_timer.timeout.connect(self._flush_stk_playhead_sync)
 
         outer_root = QtWidgets.QVBoxLayout(self)
         outer_root.setContentsMargins(0, 0, 0, 0)
@@ -289,7 +294,7 @@ class FlightProgramPage(QtWidgets.QWidget):
         self._time_label.setProperty("role", "cardCaption")
         layout.addWidget(self._time_label)
         self._overview = FlightProgramOverviewWidget()
-        self._overview.playhead_changed.connect(self._set_playhead)
+        self._overview.playhead_changed.connect(lambda value: self._set_playhead(value, sync_immediately=False))
         self._overview.event_selected.connect(self._select_event)
         self._overview.reference_selected.connect(self._select_reference)
         layout.addWidget(self._overview, 1)
@@ -526,6 +531,16 @@ class FlightProgramPage(QtWidgets.QWidget):
             return bool(self._stk_link_service_factory().sync_current_scenario_analysis_time())
         except Exception:
             return False
+
+    def _schedule_stk_playhead_sync(self) -> None:
+        self._pending_stk_playhead_sync = True
+        self._stk_playhead_sync_timer.start()
+
+    def _flush_stk_playhead_sync(self) -> bool:
+        if self._stk_playhead_sync_timer.isActive():
+            self._stk_playhead_sync_timer.stop()
+        self._pending_stk_playhead_sync = False
+        return self._sync_stk_current_time_if_available()
 
     def _sync_stk_current_time_if_available(self) -> bool:
         if self._suppress_autosave or self._workspace.current_project is None:
@@ -1024,14 +1039,14 @@ class FlightProgramPage(QtWidgets.QWidget):
         reference = self._reference_by_id(str(item.data(QtCore.Qt.ItemDataRole.UserRole) or ""))
         if reference is None:
             return
-        self._set_playhead(float(reference.get("start_min", self._playhead_min)))
+        self._set_playhead(float(reference.get("start_min", self._playhead_min)), sync_immediately=True)
 
     def _on_table_item_double_clicked(self, item: QtWidgets.QTableWidgetItem) -> None:
         event_id = str(item.data(QtCore.Qt.ItemDataRole.UserRole) or "")
         event = self._event_by_id(event_id)
         if event is None:
             return
-        self._set_playhead(float(event.get("start_min", self._playhead_min)))
+        self._set_playhead(float(event.get("start_min", self._playhead_min)), sync_immediately=True)
 
     def _on_table_item_changed(self, item: QtWidgets.QTableWidgetItem) -> None:
         if self._suppress_table:
@@ -1219,7 +1234,7 @@ class FlightProgramPage(QtWidgets.QWidget):
         if chosen == create_event:
             self._create_event_from_reference(reference)
         elif chosen == jump:
-            self._set_playhead(float(reference.get("start_min", self._playhead_min)))
+            self._set_playhead(float(reference.get("start_min", self._playhead_min)), sync_immediately=True)
 
     def _create_event_from_reference(self, reference: dict[str, Any]) -> None:
         kind = str(reference.get("kind", ""))
@@ -1316,7 +1331,7 @@ class FlightProgramPage(QtWidgets.QWidget):
         event = self._selected_event()
         if event is None:
             return
-        self._set_playhead(float(event.get("start_min", self._playhead_min)))
+        self._set_playhead(float(event.get("start_min", self._playhead_min)), sync_immediately=True)
 
     def _jump_to_table_current_row(self, table: QtWidgets.QTableWidget) -> bool:
         row = table.currentRow()
@@ -1331,13 +1346,13 @@ class FlightProgramPage(QtWidgets.QWidget):
             if reference is None:
                 return False
             self._select_reference(item_id)
-            self._set_playhead(float(reference.get("start_min", self._playhead_min)))
+            self._set_playhead(float(reference.get("start_min", self._playhead_min)), sync_immediately=True)
             return True
         event = self._event_by_id(item_id)
         if event is None:
             return False
         self._select_event(item_id)
-        self._set_playhead(float(event.get("start_min", self._playhead_min)))
+        self._set_playhead(float(event.get("start_min", self._playhead_min)), sync_immediately=True)
         return True
 
     def _delete_selected_event(self) -> None:
@@ -1368,20 +1383,23 @@ class FlightProgramPage(QtWidgets.QWidget):
         self._selected_event_id = ""
         reference = self._selected_reference()
         if reference is not None:
-            self._playhead_min = min(max(0.0, float(reference.get("start_min", self._playhead_min))), self._timeline_duration())
+            self._set_playhead(float(reference.get("start_min", self._playhead_min)), sync_immediately=True)
         if hasattr(self, "_table_tabs"):
             self._table_tabs.setCurrentWidget(self._reference_table)
         self._refresh_timeline()
         self._refresh_sample_preview()
 
-    def _set_playhead(self, elapsed_min: float) -> None:
+    def _set_playhead(self, elapsed_min: float, *, sync_immediately: bool = True) -> None:
         self._playhead_min = min(max(0.0, float(elapsed_min)), self._timeline_duration())
         self._refresh_timeline(rebuild_tables=False)
         self._refresh_sample_preview()
-        self._sync_stk_current_time_if_available()
+        if sync_immediately:
+            self._flush_stk_playhead_sync()
+        else:
+            self._schedule_stk_playhead_sync()
 
     def _on_slider_changed(self, value: int) -> None:
-        self._set_playhead((float(value) / 10000.0) * self._timeline_duration())
+        self._set_playhead((float(value) / 10000.0) * self._timeline_duration(), sync_immediately=False)
 
     def _on_launch_source_changed(self) -> None:
         self._program["launch_selection_mode"] = self._launch_selection_mode()
