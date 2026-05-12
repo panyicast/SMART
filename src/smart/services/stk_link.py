@@ -162,6 +162,8 @@ def attach_to_running_stk_116_scenario() -> StkCommandExecutor | None:
 
     if _STK_SCENARIO_ESTABLISHED and _socket_ready():
         return StkSocketExecutor()
+    if _socket_ready():
+        return StkSocketExecutor()
     return None
 
 
@@ -258,6 +260,19 @@ class StkLinkService:
             self._executor = executor
             self._mark_scenario_established()
         return self._apply_flight_program_analysis_time(ignore_failure=False)
+
+    def sync_current_scenario_time(self, current_utc: str | datetime) -> bool:
+        if not self.has_current_scenario():
+            if self._executor is not None:
+                return False
+            executor = attach_to_running_stk_116_scenario()
+            if executor is None:
+                return False
+            self._executor = executor
+            self._mark_scenario_established()
+        current = parse_utc(current_utc) if isinstance(current_utc, str) else current_utc
+        self._execute(f'SetAnimation * CurrentTime "{_format_stk_epoch(current)}"', ignore_failure=False)
+        return True
 
     def import_project_to_stk(self) -> StkLinkResult:
         project = self._require_project()

@@ -38,11 +38,13 @@ class StkLinkPage(QtWidgets.QWidget):
         self,
         i18n: I18nManager,
         workspace: ProjectWorkspace,
+        stk_link_service: StkLinkService | None = None,
         parent: QtWidgets.QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._i18n = i18n
         self._workspace = workspace
+        self._stk_link_service = stk_link_service or StkLinkService(self._workspace)
         self._thread: QtCore.QThread | None = None
         self._worker: _StkOperationWorker | None = None
         self._status_role = "statusDisconnected"
@@ -168,18 +170,18 @@ class StkLinkPage(QtWidgets.QWidget):
         self._run_operation(
             lambda: _OperationResult(
                 "已连接本地 STK 11.6。",
-                detail=str(getattr(StkLinkService(self._workspace).connect(), "root", "")),
+                detail=str(getattr(self._stk_link_service.connect(), "root", "")),
             )
         )
 
     def _create_scenario(self) -> None:
         self._run_operation(
-            lambda: _OperationResult(f"已建立新场景：{StkLinkService(self._workspace).create_new_scenario()}")
+            lambda: _OperationResult(f"已建立新场景：{self._stk_link_service.create_new_scenario()}")
         )
 
     def _sync_project(self) -> None:
         def operation() -> _OperationResult:
-            result = StkLinkService(self._workspace).import_project_to_stk()
+            result = self._stk_link_service.import_project_to_stk()
             detail_lines = [
                 f"场景：{result.scenario_name}",
                 f"主星：{result.satellite_name}",

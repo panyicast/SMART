@@ -8,6 +8,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from smart.domain.models import OrbitInitializationSettings, SatelliteStatusSettings
 from smart.services.project_workspace import ProjectInfo, ProjectWorkspace
 from smart.services.spice_service import SpiceKernelManager
+from smart.services.stk_link import StkLinkService
 from smart.ui.i18n import I18nManager
 from smart.ui.mission_state import MissionState
 from smart.ui.nav_icons import chevron_icon, nav_icon
@@ -45,6 +46,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._i18n = I18nManager(language="zh")
         self._mission_state = MissionState()
         self._workspace = ProjectWorkspace()
+        self._stk_link_service = StkLinkService(self._workspace)
         self._projects_root = self._workspace.projects_dir(self._workspace_root)
         self._spice_manager = SpiceKernelManager()
         self._latest_satellite_settings: SatelliteStatusSettings | None = None
@@ -77,9 +79,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self._launch_window_page = LaunchWindowPage(self._i18n, self._workspace)
         self._ai_project_page = AIProjectAnalysisPage(self._i18n, self._workspace, self._settings)
         self._tracking_arc_page = TrackingArcPage(self._i18n, self._workspace)
-        self._flight_program_page = FlightProgramPage(self._i18n, self._workspace)
+        self._flight_program_page = FlightProgramPage(
+            self._i18n,
+            self._workspace,
+            stk_link_service_factory=lambda: self._stk_link_service,
+        )
         self._viz_page = DataVisualizationPage(self._mission_state, self._i18n, self._workspace)
-        self._stk_link_page = StkLinkPage(self._i18n, self._workspace)
+        self._stk_link_page = StkLinkPage(self._i18n, self._workspace, self._stk_link_service)
         self._spice_page = SpiceKernelPage(
             self._spice_manager,
             self._i18n,

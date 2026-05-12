@@ -19,9 +19,14 @@ from smart.ui.widgets.table_editing import ComboBoxTableEditDelegate
 class _FakeStkSyncService:
     def __init__(self) -> None:
         self.calls = 0
+        self.current_times: list[str] = []
 
     def sync_current_scenario_analysis_time(self) -> bool:
         self.calls += 1
+        return True
+
+    def sync_current_scenario_time(self, current_utc: str) -> bool:
+        self.current_times.append(current_utc)
         return True
 
 
@@ -159,6 +164,21 @@ def test_manual_launch_change_syncs_existing_stk_scene_time(monkeypatch, tmp_pat
     page._on_manual_launch_changed()
 
     assert service.calls == 1
+
+
+def test_playhead_change_syncs_stk_current_time(tmp_path) -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    workspace = ProjectWorkspace()
+    workspace.create_project("flight-stk-current-time", parent_dir=tmp_path)
+    service = _FakeStkSyncService()
+    page = FlightProgramPage(I18nManager("zh"), workspace, stk_link_service_factory=lambda: service)  # type: ignore[arg-type]
+    page._program["selected_t0_utc"] = "2026-05-15T00:12:00Z"
+    page._refresh_sample_preview = lambda: None  # type: ignore[method-assign]
+
+    page._set_playhead(12.5)
+
+    assert service.current_times == ["2026-05-15T00:24:30Z"]
 
 
 def test_event_changes_autosave_flight_program_config(tmp_path) -> None:

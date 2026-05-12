@@ -527,6 +527,18 @@ class FlightProgramPage(QtWidgets.QWidget):
         except Exception:
             return False
 
+    def _sync_stk_current_time_if_available(self) -> bool:
+        if self._suppress_autosave or self._workspace.current_project is None:
+            return False
+        t0_value = str(self._program.get("selected_t0_utc", "") or "")
+        if not t0_value:
+            return False
+        try:
+            current_utc = parse_utc(t0_value) + timedelta(minutes=float(self._playhead_min))
+            return bool(self._stk_link_service_factory().sync_current_scenario_time(format_utc(current_utc)))
+        except Exception:
+            return False
+
     def _save_reference_results(self) -> Path | None:
         if self._suppress_autosave or self._workspace.current_project is None:
             return None
@@ -1366,6 +1378,7 @@ class FlightProgramPage(QtWidgets.QWidget):
         self._playhead_min = min(max(0.0, float(elapsed_min)), self._timeline_duration())
         self._refresh_timeline(rebuild_tables=False)
         self._refresh_sample_preview()
+        self._sync_stk_current_time_if_available()
 
     def _on_slider_changed(self, value: int) -> None:
         self._set_playhead((float(value) / 10000.0) * self._timeline_duration())
