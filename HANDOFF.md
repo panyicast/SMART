@@ -9,6 +9,7 @@
 - Added persistent small-task checkpoint rules to `AGENTS.md`.
 - Implemented STK scene time sync from the flight-program page when an existing STK scenario is available.
 - Fixed flight-program timeline/playhead sync so dragging or jumping the playhead sends STK `SetAnimation * CurrentTime`.
+- Fixed STK page sync failure caused by reusing a COM executor across Qt worker threads; STK operations now refresh the executor per background operation.
 
 ## Modified / Added Areas
 
@@ -24,8 +25,8 @@
 - `src/smart/ui/theme.py`: adds sidebar project name/path roles.
 - `src/smart/ui/widgets/flight_program_page.py`: adds autosave and reference-result cache load/save; launch-source/manual/window/orbit-point T0 changes now try to sync existing STK scenario analysis time; playhead changes now try to sync STK current animation time.
 - `src/smart/ui/widgets/maneuver_page.py`: changes ground-track maneuver-number labels to yellow text with black outline and smaller offset.
-- `src/smart/services/stk_link.py`: new STK 11.6 launch/connect/import service; now tracks established scenarios, can attach to a running STK scenario without launching STK, and can set STK current animation time.
-- `src/smart/ui/widgets/stk_link_page.py`: new STK link UI page with worker thread; shares the MainWindow-owned `StkLinkService` so scenario state survives page switches.
+- `src/smart/services/stk_link.py`: new STK 11.6 launch/connect/import service; now tracks established scenarios, can attach to a running STK scenario without launching STK, can set STK current animation time, and can discard COM executors without losing established-scenario state.
+- `src/smart/ui/widgets/stk_link_page.py`: new STK link UI page with worker thread; shares the MainWindow-owned `StkLinkService` so scenario state survives page switches; clears COM executor before and after each worker operation to avoid cross-thread COM reuse.
 - `src/smart/ui/main_window.py`: owns one shared `StkLinkService` for STK link page and flight-program page.
 - Tests updated/added for project workspace, flight program page, maneuver page, sidebar navigation, STK link helpers, and existing-scenario STK time sync.
 
@@ -38,20 +39,21 @@
 - Several files show LF-to-CRLF warnings on git diff/status.
 - Real STK 11.6 UI/Connect validation is still needed for the automatic time sync path.
 - Local F4 project has new STK-generated artifacts under `projects/F4/data/stk_link/20260512_132638/` and an updated `projects/F4/smart_project.json`; include them in the checkpoint only if preserving the real STK validation run is desired.
+- Local `projects/F4/smart_project.json` changed again during real STK use and was intentionally left out of this COM-threading checkpoint.
 
 ## Next Minimum Task
 
-Current STK time-sync task is complete. It now covers both T0 analysis-time sync and playhead current-time sync.
+Current STK sync failure fix is complete. STK worker operations no longer reuse stale/cross-thread COM executors.
 
 Verified:
 
 ```powershell
-D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_project_workspace.py tests/test_flight_program_page.py tests/test_maneuver_page.py tests/test_sidebar_navigation.py tests/test_stk_link.py
+D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_stk_link.py tests/test_flight_program_page.py tests/test_sidebar_navigation.py
 ```
 
-Result: 60 passed.
+Result: 49 passed.
 
-Next minimum task: validate the playhead sync against the currently open real STK 11.6 scenario, then decide whether STK generated artifacts should remain committed or move to ignore/cleanup.
+Next minimum task: retry "同步当前项目到 STK" in the real STK 11.6 UI. If it works, validate playhead sync; then decide whether STK generated artifacts should remain committed or move to ignore/cleanup.
 
 ## Working Rule
 

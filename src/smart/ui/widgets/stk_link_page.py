@@ -207,7 +207,7 @@ class StkLinkPage(QtWidgets.QWidget):
         self._set_busy(True)
         self._set_status("statusLoading", "STK 操作执行中。")
         self._thread = QtCore.QThread(self)
-        self._worker = _StkOperationWorker(operation)
+        self._worker = _StkOperationWorker(self._fresh_stk_operation(operation))
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.run)
         self._worker.finished.connect(self._on_operation_finished)
@@ -216,6 +216,16 @@ class StkLinkPage(QtWidgets.QWidget):
         self._worker.failed.connect(self._thread.quit)
         self._thread.finished.connect(self._cleanup_thread)
         self._thread.start()
+
+    def _fresh_stk_operation(self, operation: Callable[[], _OperationResult]) -> Callable[[], _OperationResult]:
+        def wrapped() -> _OperationResult:
+            self._stk_link_service.clear_executor()
+            try:
+                return operation()
+            finally:
+                self._stk_link_service.clear_executor()
+
+        return wrapped
 
     @QtCore.Slot(object)
     def _on_operation_finished(self, payload: object) -> None:

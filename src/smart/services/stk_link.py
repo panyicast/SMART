@@ -212,6 +212,9 @@ class StkLinkService:
     def executor(self) -> StkCommandExecutor | None:
         return self._executor
 
+    def clear_executor(self) -> None:
+        self._executor = None
+
     def connect(self) -> StkCommandExecutor:
         if self._executor is None:
             self._executor = launch_or_attach_stk_116()

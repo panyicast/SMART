@@ -124,6 +124,18 @@ def test_sync_current_scenario_time_sets_stk_animation_time(tmp_path: Path) -> N
     assert executor.commands == ['SetAnimation * CurrentTime "15 May 2026 00:24:30.000000"']
 
 
+def test_clear_executor_keeps_established_scenario_state(tmp_path: Path) -> None:
+    workspace = ProjectWorkspace()
+    workspace.create_project("stk-clear-executor", parent_dir=tmp_path)
+    service = StkLinkService(workspace, executor=_RecordingExecutor(has_scenario=True))
+
+    assert service.has_current_scenario() is True
+    service.clear_executor()
+
+    assert service.executor is None
+    assert service._scenario_established is True
+
+
 def test_stk_link_assets_use_tracking_arc_config(tmp_path: Path) -> None:
     workspace = ProjectWorkspace()
     workspace.create_project("stk-assets", parent_dir=tmp_path)
