@@ -64,6 +64,13 @@
 - Use planning files as working memory. Promote only stable, reusable conclusions into `AGENTS.md` or the relevant permanent doc.
 - Do not store secrets, full kernel contents, or large CSV dumps in planning files; record concise summaries and paths instead.
 
+## Small Task Checkpoints
+
+- After each completed small task, summarize the current changes.
+- Update `HANDOFF.md` or `NOTES.md` with the current state, risks, and next minimum task.
+- Create a git checkpoint commit for the completed small task.
+- Continue in a new Codex session when requested, using the handoff file as the starting context.
+
 ## UI Rules
 
 - UI layer time fields should be shown and edited in Beijing Time (UTC+8). Convert to UTC only at service/config boundaries.

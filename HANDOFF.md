@@ -6,9 +6,11 @@
 - No prior hidden context assumed.
 - Root `HANDOFF.md` / `NOTES.md` did not exist before this file.
 - `git status` shows WIP across project config, UI, STK link service/page, tests, and F4 generated data.
+- Added persistent small-task checkpoint rules to `AGENTS.md`.
 
 ## Modified / Added Areas
 
+- `AGENTS.md`: added "Small Task Checkpoints" section requiring summary, handoff update, git checkpoint, and new-session continuation.
 - `projects/F4/config/flight_program.json`: selected launch/T0 shifted 10 minutes earlier.
 - `projects/F4/smart_project.json`: project `updated_utc` refreshed.
 - `projects/F4/data/flight_program_reference_results.json`: new cached flight-program reference results.
@@ -34,6 +36,8 @@
 - Targeted tests have not been run in this recovery pass.
 
 ## Next Minimum Task
+
+Current doc task is complete. Next code task remains:
 
 Run targeted tests:
 
