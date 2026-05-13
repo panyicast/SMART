@@ -93,7 +93,7 @@ class StkLinkPage(QtWidgets.QWidget):
         self._project_label.setText(f"当前项目：{project.name}\n{project.root_dir}")
         self._history_label.setText(f"轨道数据：{self._workspace.data_dir() / 'full_orbit_history.csv'}")
         self._attitude_label.setText(f"姿态配置：{self._workspace.flight_program_path()}")
-        self._config_label.setText(f"测控/中继配置：{self._workspace.satellite_status_path()}")
+        self._config_label.setText(f"测控/中继配置：{self._workspace.tracking_arc_path()}")
         self._populate_asset_table()
         enabled = self._thread is None
         self._create_scene_button.setEnabled(enabled)
@@ -264,20 +264,22 @@ class StkLinkPage(QtWidgets.QWidget):
     def _populate_asset_table(self) -> None:
         self._asset_table.setRowCount(0)
         try:
-            settings = self._workspace.load_satellite_status()
+            assets = self._stk_link_service.tracking_assets_for_sync()
         except Exception:
-            settings = None
-        if settings is None:
             return
-        for asset in settings.ground_assets:
+        for asset in assets:
+            if asset.asset_type != "ground":
+                continue
             self._append_asset_row(
                 "地面站/船",
                 asset.name,
                 f"{float(asset.longitude_deg):.6f}",
                 f"{float(asset.latitude_deg):.6f}",
             )
-        for relay in settings.relay_satellites:
-            self._append_asset_row("中继星", relay.name, relay.orbital_slot_orbit, "0.000000")
+        for relay in assets:
+            if relay.asset_type != "relay":
+                continue
+            self._append_asset_row("中继星", relay.name, f"{float(relay.longitude_deg):.6f}", "0.000000")
 
     def _append_asset_row(self, asset_type: str, name: str, lon_or_slot: str, lat: str) -> None:
         row = self._asset_table.rowCount()

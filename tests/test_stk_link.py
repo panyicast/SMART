@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
+from PySide6 import QtWidgets
 
 from smart.services.stk_link import (
     StkLinkService,
@@ -13,6 +14,8 @@ from smart.services.stk_link import (
     write_stk_attitude_dcm,
 )
 from smart.services.project_workspace import ProjectWorkspace
+from smart.ui.i18n import I18nManager
+from smart.ui.widgets.stk_link_page import StkLinkPage
 
 
 class _RecordingExecutor:
@@ -166,9 +169,84 @@ def test_stk_link_assets_use_tracking_arc_config(tmp_path: Path) -> None:
         }
     )
 
-    assets = StkLinkService(workspace)._flight_program_tracking_assets()
+    assets = StkLinkService(workspace).tracking_assets_for_sync()
 
     assert [(asset.name, asset.asset_type, asset.longitude_deg) for asset in assets] == [
         ("Ground-A", "ground", 110.0),
         ("Relay-A", "relay", 77.0),
     ]
+
+
+def test_stk_link_assets_translate_default_tracking_names_to_english(tmp_path: Path) -> None:
+    workspace = ProjectWorkspace()
+    workspace.create_project("stk-english-assets", parent_dir=tmp_path)
+    workspace.save_tracking_arc_config(
+        {
+            "ground_station_presets": [
+                {
+                    "enabled": True,
+                    "name": "厦门站",
+                    "asset_type": "ground",
+                    "longitude_deg": 117.97,
+                    "latitude_deg": 24.64,
+                    "altitude_m": 0.0,
+                }
+            ],
+            "relay_satellite_presets": [
+                {
+                    "enabled": True,
+                    "name": "TL2-2",
+                    "asset_type": "relay",
+                    "longitude_deg": 171.0,
+                    "latitude_deg": 0.0,
+                    "altitude_m": 35_786_000.0,
+                }
+            ],
+            "custom_ground_stations": [],
+            "custom_relay_satellites": [],
+        }
+    )
+
+    assets = StkLinkService(workspace).tracking_assets_for_sync()
+
+    assert [(asset.name, asset.asset_type) for asset in assets] == [
+        ("Xiamen Station", "ground"),
+        ("TL2-2", "relay"),
+    ]
+
+
+def test_stk_link_page_preview_uses_tracking_arc_assets(tmp_path: Path) -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    workspace = ProjectWorkspace()
+    workspace.create_project("stk-page-assets", parent_dir=tmp_path)
+    workspace.save_tracking_arc_config(
+        {
+            "ground_station_presets": [
+                {
+                    "enabled": True,
+                    "name": "Xiamen Station",
+                    "asset_type": "ground",
+                    "longitude_deg": 117.97,
+                    "latitude_deg": 24.64,
+                    "altitude_m": 0.0,
+                }
+            ],
+            "relay_satellite_presets": [
+                {
+                    "enabled": True,
+                    "name": "TL2-2",
+                    "asset_type": "relay",
+                    "longitude_deg": 171.0,
+                    "latitude_deg": 0.0,
+                    "altitude_m": 35_786_000.0,
+                }
+            ],
+            "custom_ground_stations": [],
+            "custom_relay_satellites": [],
+        }
+    )
+
+    page = StkLinkPage(I18nManager(), workspace)
+
+    names = [page._asset_table.item(row, 1).text() for row in range(page._asset_table.rowCount())]
+    assert names == ["Xiamen Station", "TL2-2"]

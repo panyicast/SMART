@@ -143,7 +143,7 @@
   "ground_station_presets": [
     {
       "enabled": true,
-      "name": "厦门站",
+      "name": "Xiamen Station",
       "longitude_deg": 117.97,
       "latitude_deg": 24.64,
       "altitude_m": 0.0,
@@ -151,7 +151,7 @@
     },
     {
       "enabled": true,
-      "name": "渭南站",
+      "name": "Weinan Station",
       "longitude_deg": 109.5,
       "latitude_deg": 34.47,
       "altitude_m": 0.0,
@@ -159,7 +159,7 @@
     },
     {
       "enabled": false,
-      "name": "佳木斯站",
+      "name": "Jiamusi Station",
       "longitude_deg": 130.3,
       "latitude_deg": 46.8,
       "altitude_m": 0.0,
@@ -167,7 +167,7 @@
     },
     {
       "enabled": true,
-      "name": "喀什站",
+      "name": "Kashi Station",
       "longitude_deg": 75.99,
       "latitude_deg": 39.47,
       "altitude_m": 0.0,

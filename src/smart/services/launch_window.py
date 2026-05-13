@@ -43,6 +43,12 @@ _CONSTRAINT_TIME_TOKEN_RE = re.compile(
     flags=re.IGNORECASE,
 )
 _CONSTRAINT_TIME_VARIABLE_RE = re.compile(r"T(\d+)_(start|end)", flags=re.IGNORECASE)
+_TRACKING_ASSET_NAME_ALIASES = {
+    "厦门站": "Xiamen Station",
+    "渭南站": "Weinan Station",
+    "佳木斯站": "Jiamusi Station",
+    "喀什站": "Kashi Station",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,10 +136,10 @@ class ManeuverInterval:
 
 def default_ground_station_presets() -> list[dict[str, Any]]:
     return [
-        {"enabled": True, "name": "厦门站", "longitude_deg": 117.97, "latitude_deg": 24.64, "altitude_m": 0.0},
-        {"enabled": True, "name": "渭南站", "longitude_deg": 109.50, "latitude_deg": 34.47, "altitude_m": 0.0},
-        {"enabled": False, "name": "佳木斯站", "longitude_deg": 130.30, "latitude_deg": 46.80, "altitude_m": 0.0},
-        {"enabled": False, "name": "喀什站", "longitude_deg": 75.99, "latitude_deg": 39.47, "altitude_m": 0.0},
+        {"enabled": True, "name": "Xiamen Station", "longitude_deg": 117.97, "latitude_deg": 24.64, "altitude_m": 0.0},
+        {"enabled": True, "name": "Weinan Station", "longitude_deg": 109.50, "latitude_deg": 34.47, "altitude_m": 0.0},
+        {"enabled": False, "name": "Jiamusi Station", "longitude_deg": 130.30, "latitude_deg": 46.80, "altitude_m": 0.0},
+        {"enabled": False, "name": "Kashi Station", "longitude_deg": 75.99, "latitude_deg": 39.47, "altitude_m": 0.0},
     ]
 
 
@@ -480,7 +486,7 @@ def _normalize_tracking_asset_rows(
         rows.append(
             {
                 "enabled": bool(item.get("enabled", True)),
-                "name": str(item.get("name", "")).strip(),
+                "name": _normalize_tracking_asset_name(str(item.get("name", "")).strip()),
                 "longitude_deg": float(item.get("longitude_deg", 0.0)),
                 "latitude_deg": float(item.get("latitude_deg", 0.0)),
                 "altitude_m": float(item.get("altitude_m", 0.0 if asset_type == "ground" else GEO_ALTITUDE_M)),
@@ -488,6 +494,10 @@ def _normalize_tracking_asset_rows(
             }
         )
     return rows
+
+
+def _normalize_tracking_asset_name(name: str) -> str:
+    return _TRACKING_ASSET_NAME_ALIASES.get(name, name)
 
 
 def config_from_payload(payload: dict[str, Any]) -> LaunchWindowConfig:

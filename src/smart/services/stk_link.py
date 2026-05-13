@@ -310,7 +310,7 @@ class StkLinkService:
             self._execute(f'VO */Satellite/{satellite_name} Model Detail On', ignore_failure=True)
             self._commands.append(f"# attitude import skipped: {exc}")
 
-        assets = self._flight_program_tracking_assets()
+        assets = self.tracking_assets_for_sync()
         ground_count = self._create_ground_stations([asset for asset in assets if asset.asset_type == "ground"])
         relay_paths = self._create_relay_satellites(
             [asset for asset in assets if asset.asset_type == "relay"],
@@ -452,13 +452,16 @@ class StkLinkService:
         self._execute("SetAnimation * EndTime UseAnalysisStopTime", ignore_failure=True)
         return True
 
-    def _flight_program_tracking_assets(self) -> list[TrackingAsset]:
+    def tracking_assets_for_sync(self) -> list[TrackingAsset]:
         payload = (
             self._workspace.load_tracking_arc_config()
             or self._workspace.load_launch_window_config()
             or default_launch_window_config()
         )
         return tracking_assets_from_config(config_from_payload(payload))
+
+    def _flight_program_tracking_assets(self) -> list[TrackingAsset]:
+        return self.tracking_assets_for_sync()
 
     def _orbit_history_path(self) -> Path:
         return self._workspace.data_dir() / "full_orbit_history.csv"

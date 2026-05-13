@@ -39,6 +39,7 @@ from smart.services.launch_window import (
     compute_shadow_intervals_for_launch,
     compute_launch_windows,
     config_from_payload,
+    default_ground_station_presets,
     default_relay_satellite_presets,
     default_launch_window_config,
     normalize_launch_window_config,
@@ -158,6 +159,17 @@ def test_default_relay_satellite_presets_use_five_slots_and_expected_longitudes(
 
     assert [item["name"] for item in presets] == ["TL2-1", "TL2-2", "TL2-3", "TL2-4", "TL2-5"]
     assert [item["longitude_deg"] for item in presets] == [77.0, 171.0, 10.6, 80.0, 20.4]
+
+
+def test_default_ground_station_presets_use_english_names() -> None:
+    presets = default_ground_station_presets()
+
+    assert [item["name"] for item in presets] == [
+        "Xiamen Station",
+        "Weinan Station",
+        "Jiamusi Station",
+        "Kashi Station",
+    ]
 
 
 def test_normalize_launch_window_config_preserves_editable_constraint_rows() -> None:
@@ -313,6 +325,7 @@ def test_normalize_launch_window_config_preserves_tracking_assets() -> None:
     )
 
     assert payload["ground_station_presets"][0]["asset_type"] == "ground"
+    assert payload["ground_station_presets"][0]["name"] == "Jiamusi Station"
     assert payload["ground_station_presets"][0]["longitude_deg"] == 130.3
     assert payload["relay_satellite_presets"][0]["asset_type"] == "relay"
     assert payload["relay_satellite_presets"][0]["altitude_m"] == 35_786_000.0
@@ -323,8 +336,8 @@ def test_normalize_launch_window_config_preserves_tracking_assets() -> None:
 def test_tracking_assets_from_config_uses_enabled_ground_and_relay_assets() -> None:
     config_payload = default_launch_window_config()
     config_payload["ground_station_presets"] = [
-        {"enabled": True, "name": "厦门站", "longitude_deg": 117.97, "latitude_deg": 24.64, "altitude_m": 0.0},
-        {"enabled": False, "name": "渭南站", "longitude_deg": 109.5, "latitude_deg": 34.47, "altitude_m": 0.0},
+        {"enabled": True, "name": "Xiamen Station", "longitude_deg": 117.97, "latitude_deg": 24.64, "altitude_m": 0.0},
+        {"enabled": False, "name": "Weinan Station", "longitude_deg": 109.5, "latitude_deg": 34.47, "altitude_m": 0.0},
     ]
     config_payload["relay_satellite_presets"] = [
         {"enabled": True, "name": "TL2-2", "longitude_deg": 171.0, "latitude_deg": 0.0, "altitude_m": 35_786_000.0},
@@ -338,7 +351,7 @@ def test_tracking_assets_from_config_uses_enabled_ground_and_relay_assets() -> N
 
     assets = tracking_assets_from_config(config_from_payload(config_payload))
 
-    assert [asset.name for asset in assets] == ["厦门站", "测试站", "TL2-2"]
+    assert [asset.name for asset in assets] == ["Xiamen Station", "测试站", "TL2-2"]
     assert [asset.asset_type for asset in assets] == ["ground", "ground", "relay"]
 
 
