@@ -409,10 +409,13 @@ class StkLinkService:
         scenario_epoch_utc: str,
     ) -> int:
         program = normalize_flight_program_payload(self._workspace.load_flight_program_config() or {})
-        events = [event for event in program.get("events", []) if isinstance(event, dict)]
-        if not events or not rows:
+        events = [
+            event
+            for event in program.get("events", [])
+            if isinstance(event, dict) and str(event.get("kind", "")).strip().lower() == "attitude"
+        ]
+        if not events:
             return 0
-        elapsed_min = [_row_elapsed_min(row) for row in rows]
         epoch = parse_utc(scenario_epoch_utc)
         self._execute("VO * Annotation Delete AllAnnotations Text", ignore_failure=True)
         count = 0
@@ -421,13 +424,8 @@ class StkLinkService:
             end_min = float(event.get("end_min", start_min))
             if bool(event.get("instant", False)) or end_min <= start_min:
                 end_min = start_min + 1.0
-            row = rows[_nearest_row_index(elapsed_min, start_min)]
             name = f"FP_Event_{index:03d}"
-            label = _escape_stk_string(_english_event_label(event, index))
-            time_label = _escape_stk_string(_event_interval_label(start_min, end_min, bool(event.get("instant", False))))
-            lon = float(row.get("subsatellite_longitude_deg", 0.0))
-            lat = float(row.get("subsatellite_latitude_deg", 0.0))
-            alt = float(row.get("subsatellite_altitude_m", row.get("orbit_height_m", 0.0)))
+            label = _escape_stk_string(_attitude_mode_label(event, index))
             start_time = _format_stk_epoch(epoch + timedelta(minutes=start_min))
             stop_time = _format_stk_epoch(epoch + timedelta(minutes=end_min))
             self._execute(
@@ -435,11 +433,12 @@ class StkLinkService:
                     [
                         f"VO * Annotation Add {name} Text",
                         f'String "{label}"',
-                        f'String "{time_label}"',
-                        "Coord LatLon",
-                        f"Position {lon:.9f} {lat:.9f} {max(0.0, alt):.3f}",
+                        "Coord Pixel",
+                        "Position 24 32 0",
+                        "HorizPixelOrigin Left",
+                        "VertPixelOrigin Top",
                         "Color #FFD54A",
-                        "FontStyle Small",
+                        "FontStyle Large",
                         f'Interval Add 1 "{start_time}" "{stop_time}"',
                     ]
                 ),
@@ -681,59 +680,17 @@ def _parse_stk_epoch(value: str) -> datetime:
     return datetime.strptime(value, "%d %b %Y %H:%M:%S.%f").replace(tzinfo=timezone.utc)
 
 
-def _row_elapsed_min(row: dict[str, float | str]) -> float:
-    if "elapsed_time_min" in row:
-        return float(row["elapsed_time_min"])
-    return float(row.get("elapsed_time_s", 0.0)) / 60.0
-
-
-def _nearest_row_index(elapsed_min: list[float], target_min: float) -> int:
-    if not elapsed_min:
-        return 0
-    return min(range(len(elapsed_min)), key=lambda index: abs(elapsed_min[index] - float(target_min)))
-
-
-def _event_interval_label(start_min: float, end_min: float, instant: bool) -> str:
-    if instant:
-        return f"T0+{start_min:.1f} min"
-    return f"T0+{start_min:.1f}-{end_min:.1f} min"
-
-
 def _escape_stk_string(value: str) -> str:
     return str(value).replace("\\", "\\\\").replace('"', '\\"')
 
 
-def _english_event_label(event: dict[str, Any], index: int) -> str:
-    kind = str(event.get("kind", "") or "").strip().lower()
-    mode = str(event.get("mode", "") or "").strip()
-    properties = event.get("properties")
-    props = properties if isinstance(properties, dict) else {}
-    maneuver_index = props.get("maneuver_index")
-    if kind == "attitude":
-        prefix = f"T{int(maneuver_index)} " if maneuver_index not in {None, ""} else ""
-        if mode == "SPM":
-            return "Sun Pointing Mode"
-        if mode == "AFM":
-            return f"{prefix}Burn Attitude Mode".strip()
-        if mode == "Transition":
-            from_mode = str(props.get("from", "") or "").strip()
-            to_mode = str(props.get("to", "") or "").strip()
-            if from_mode and to_mode:
-                return f"{prefix}{from_mode} to {to_mode} Transition".strip()
-            return f"{prefix}Attitude Transition".strip()
-        if mode:
-            return _english_stk_label(f"{prefix}{mode}", fallback=f"Attitude Event {index}")
-        return f"Attitude Event {index}"
-    if kind == "deployment":
-        subsystem = str(props.get("subsystem", "") or "").strip().lower()
-        if subsystem == "solar_array" or mode == "SolarArrayDeploy":
-            return "Solar Array Deployment"
-        if subsystem == "communication_antenna" or mode == "AntennaDeploy":
-            return "Communication Antenna Deployment"
-        if mode:
-            return _english_stk_label(mode, fallback=f"Deployment Event {index}")
-        return f"Deployment Event {index}"
-    return _english_stk_label(str(event.get("name", "") or ""), fallback=f"Flight Event {index}")
+def _attitude_mode_label(event: dict[str, Any], index: int) -> str:
+    mode = str(event.get("mode", "") or "").strip().upper()
+    if mode in {"SPM", "EPM", "AFM"}:
+        return mode
+    if mode in {"TRANSITION", "TRM"}:
+        return "TRM"
+    return _english_stk_label(mode, fallback=f"ATTITUDE_{index}")
 
 
 def _english_stk_label(value: str, *, fallback: str) -> str:
