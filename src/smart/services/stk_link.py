@@ -14,7 +14,7 @@ from typing import Any, Protocol
 import numpy as np
 
 from smart.services.earth_orientation import format_utc, parse_utc
-from smart.services.flight_program import sample_flight_program_states
+from smart.services.flight_program import normalize_flight_program_payload, sample_flight_program_states
 from smart.services.launch_window import (
     TrackingAsset,
     config_from_payload,
@@ -296,7 +296,7 @@ class StkLinkService:
         self._execute("SetAnimation * EndTime UseAnalysisStopTime", ignore_failure=True)
         self._ensure_satellite(satellite_name)
         self._execute(f'SetState */Satellite/{satellite_name} FromFile "{orbit_metadata.output_path}" FileFormat StkPL')
-        self._apply_satellite_graphics(satellite_name, label=project.name)
+        self._apply_satellite_graphics(satellite_name, label=_english_stk_label(project.name, fallback=satellite_name))
 
         attitude_path: Path | None = None
         try:
@@ -319,6 +319,7 @@ class StkLinkService:
             start_time=start_time,
             stop_time=stop_time,
         )
+        self._create_flight_event_annotations(rows, scenario_epoch_utc=orbit_metadata.scenario_epoch_utc)
 
         self._execute("Animate * Reset", ignore_failure=True)
         return StkLinkResult(
@@ -376,7 +377,7 @@ class StkLinkService:
                 duration_s=max(60.0, (_parse_stk_epoch(stop_time) - _parse_stk_epoch(start_time)).total_seconds()),
             )
             self._execute(f'SetState */Satellite/{name} FromFile "{relay_path}" FileFormat StkPL')
-            self._apply_satellite_graphics(name, label=relay.name or name, color="#FFB347")
+            self._apply_satellite_graphics(name, label=_english_stk_label(relay.name or name, fallback=name), color="#FFB347")
             output_paths.append(relay_path)
         return output_paths
 
@@ -401,13 +402,60 @@ class StkLinkService:
         ]
         return write_stk_attitude_dcm(points, output_path, scenario_epoch_utc=scenario_epoch_utc)
 
+    def _create_flight_event_annotations(
+        self,
+        rows: list[dict[str, float | str]],
+        *,
+        scenario_epoch_utc: str,
+    ) -> int:
+        program = normalize_flight_program_payload(self._workspace.load_flight_program_config() or {})
+        events = [event for event in program.get("events", []) if isinstance(event, dict)]
+        if not events or not rows:
+            return 0
+        elapsed_min = [_row_elapsed_min(row) for row in rows]
+        epoch = parse_utc(scenario_epoch_utc)
+        self._execute("VO * Annotation Delete AllAnnotations Text", ignore_failure=True)
+        count = 0
+        for index, event in enumerate(events, start=1):
+            start_min = float(event.get("start_min", 0.0))
+            end_min = float(event.get("end_min", start_min))
+            if bool(event.get("instant", False)) or end_min <= start_min:
+                end_min = start_min + 1.0
+            row = rows[_nearest_row_index(elapsed_min, start_min)]
+            name = f"FP_Event_{index:03d}"
+            label = _escape_stk_string(_english_event_label(event, index))
+            time_label = _escape_stk_string(_event_interval_label(start_min, end_min, bool(event.get("instant", False))))
+            lon = float(row.get("subsatellite_longitude_deg", 0.0))
+            lat = float(row.get("subsatellite_latitude_deg", 0.0))
+            alt = float(row.get("subsatellite_altitude_m", row.get("orbit_height_m", 0.0)))
+            start_time = _format_stk_epoch(epoch + timedelta(minutes=start_min))
+            stop_time = _format_stk_epoch(epoch + timedelta(minutes=end_min))
+            self._execute(
+                " ".join(
+                    [
+                        f"VO * Annotation Add {name} Text",
+                        f'String "{label}"',
+                        f'String "{time_label}"',
+                        "Coord LatLon",
+                        f"Position {lon:.9f} {lat:.9f} {max(0.0, alt):.3f}",
+                        "Color #FFD54A",
+                        "FontStyle Small",
+                        f'Interval Add 1 "{start_time}" "{stop_time}"',
+                    ]
+                ),
+                ignore_failure=True,
+            )
+            count += 1
+        self._execute("VO * Annotation Declutter On", ignore_failure=True)
+        return count
+
     def _ensure_satellite(self, name: str) -> None:
         self._execute(f"Unload / */Satellite/{name}", ignore_failure=True)
         self._execute(f"New / */Satellite {name}")
 
     def _apply_satellite_graphics(self, name: str, *, label: str, color: str = "#00E5FF") -> None:
         path = f"*/Satellite/{name}"
-        escaped_label = str(label).replace('"', '\\"')
+        escaped_label = _escape_stk_string(_english_stk_label(label, fallback=name))
         self._execute(f"Graphics {path} SetColor {color} GroundTrack", ignore_failure=True)
         self._execute(f"Graphics {path} SetColor {color} Marker", ignore_failure=True)
         self._execute(f"Graphics {path} Label Show On", ignore_failure=True)
@@ -631,6 +679,67 @@ def _format_stk_epoch(value: datetime) -> str:
 
 def _parse_stk_epoch(value: str) -> datetime:
     return datetime.strptime(value, "%d %b %Y %H:%M:%S.%f").replace(tzinfo=timezone.utc)
+
+
+def _row_elapsed_min(row: dict[str, float | str]) -> float:
+    if "elapsed_time_min" in row:
+        return float(row["elapsed_time_min"])
+    return float(row.get("elapsed_time_s", 0.0)) / 60.0
+
+
+def _nearest_row_index(elapsed_min: list[float], target_min: float) -> int:
+    if not elapsed_min:
+        return 0
+    return min(range(len(elapsed_min)), key=lambda index: abs(elapsed_min[index] - float(target_min)))
+
+
+def _event_interval_label(start_min: float, end_min: float, instant: bool) -> str:
+    if instant:
+        return f"T0+{start_min:.1f} min"
+    return f"T0+{start_min:.1f}-{end_min:.1f} min"
+
+
+def _escape_stk_string(value: str) -> str:
+    return str(value).replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _english_event_label(event: dict[str, Any], index: int) -> str:
+    kind = str(event.get("kind", "") or "").strip().lower()
+    mode = str(event.get("mode", "") or "").strip()
+    properties = event.get("properties")
+    props = properties if isinstance(properties, dict) else {}
+    maneuver_index = props.get("maneuver_index")
+    if kind == "attitude":
+        prefix = f"T{int(maneuver_index)} " if maneuver_index not in {None, ""} else ""
+        if mode == "SPM":
+            return "Sun Pointing Mode"
+        if mode == "AFM":
+            return f"{prefix}Burn Attitude Mode".strip()
+        if mode == "Transition":
+            from_mode = str(props.get("from", "") or "").strip()
+            to_mode = str(props.get("to", "") or "").strip()
+            if from_mode and to_mode:
+                return f"{prefix}{from_mode} to {to_mode} Transition".strip()
+            return f"{prefix}Attitude Transition".strip()
+        if mode:
+            return _english_stk_label(f"{prefix}{mode}", fallback=f"Attitude Event {index}")
+        return f"Attitude Event {index}"
+    if kind == "deployment":
+        subsystem = str(props.get("subsystem", "") or "").strip().lower()
+        if subsystem == "solar_array" or mode == "SolarArrayDeploy":
+            return "Solar Array Deployment"
+        if subsystem == "communication_antenna" or mode == "AntennaDeploy":
+            return "Communication Antenna Deployment"
+        if mode:
+            return _english_stk_label(mode, fallback=f"Deployment Event {index}")
+        return f"Deployment Event {index}"
+    return _english_stk_label(str(event.get("name", "") or ""), fallback=f"Flight Event {index}")
+
+
+def _english_stk_label(value: str, *, fallback: str) -> str:
+    cleaned = re.sub(r"[^0-9A-Za-z_ .:+\\-/()]", " ", str(value))
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned or fallback
 
 
 def _active_stk_app(win32com_client: Any) -> Any | None:

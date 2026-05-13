@@ -26,6 +26,7 @@
 - Unless the user explicitly asks for STK 12.2, default all STK operations, automation, compatibility assumptions, and help/doc lookups to STK 11.6.
 - Do not assume `C:\Program Files\AGI\STK 11` is the active STK 11.6 runtime path.
 - When checking command syntax or API behavior, prefer STK 11.6 help content first and avoid mixing in 12.2-only behavior by default.
+- All text set inside STK must be English-only / ASCII-only, including object display labels, annotation text, interval labels, and other visible graphics text. Do not send Chinese text to STK settings.
 
 ## Qt WebEngine Pitfalls
 

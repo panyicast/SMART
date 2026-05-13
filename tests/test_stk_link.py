@@ -250,3 +250,78 @@ def test_stk_link_page_preview_uses_tracking_arc_assets(tmp_path: Path) -> None:
 
     names = [page._asset_table.item(row, 1).text() for row in range(page._asset_table.rowCount())]
     assert names == ["Xiamen Station", "TL2-2"]
+
+
+def test_flight_event_annotations_use_english_text_and_event_intervals(tmp_path: Path) -> None:
+    workspace = ProjectWorkspace()
+    workspace.create_project("stk-event-annotations", parent_dir=tmp_path)
+    program = workspace.load_flight_program_config() or {}
+    program["events"] = [
+        {
+            "id": "att-1",
+            "name": "T1 点火前过渡",
+            "kind": "attitude",
+            "mode": "Transition",
+            "start_min": 10.0,
+            "end_min": 20.0,
+            "instant": False,
+            "source": "auto",
+            "locked": False,
+            "notes": "",
+            "properties": {"from": "SPM", "to": "AFM", "maneuver_index": 1},
+        },
+        {
+            "id": "dep-1",
+            "name": "太阳翼展开",
+            "kind": "deployment",
+            "mode": "SolarArrayDeploy",
+            "start_min": 30.0,
+            "end_min": 30.0,
+            "instant": True,
+            "source": "auto",
+            "locked": False,
+            "notes": "",
+            "properties": {"subsystem": "solar_array"},
+        },
+    ]
+    workspace.save_flight_program_config(program)
+    rows = [
+        {
+            "elapsed_time_min": 0.0,
+            "elapsed_time_s": 0.0,
+            "subsatellite_longitude_deg": 100.0,
+            "subsatellite_latitude_deg": 20.0,
+            "subsatellite_altitude_m": 500_000.0,
+        },
+        {
+            "elapsed_time_min": 10.0,
+            "elapsed_time_s": 600.0,
+            "subsatellite_longitude_deg": 110.0,
+            "subsatellite_latitude_deg": 25.0,
+            "subsatellite_altitude_m": 510_000.0,
+        },
+        {
+            "elapsed_time_min": 30.0,
+            "elapsed_time_s": 1800.0,
+            "subsatellite_longitude_deg": 120.0,
+            "subsatellite_latitude_deg": 30.0,
+            "subsatellite_altitude_m": 520_000.0,
+        },
+    ]
+    executor = _RecordingExecutor(has_scenario=True)
+
+    count = StkLinkService(workspace, executor=executor)._create_flight_event_annotations(
+        rows,
+        scenario_epoch_utc="2026-05-15T00:00:00Z",
+    )
+
+    annotation_commands = [command for command in executor.commands if command.startswith("VO * Annotation Add")]
+    assert count == 2
+    assert all(command.isascii() for command in annotation_commands)
+    assert 'String "T1 SPM to AFM Transition"' in annotation_commands[0]
+    assert 'String "T0+10.0-20.0 min"' in annotation_commands[0]
+    assert 'Position 110.000000000 25.000000000 510000.000' in annotation_commands[0]
+    assert 'Interval Add 1 "15 May 2026 00:10:00.000000" "15 May 2026 00:20:00.000000"' in annotation_commands[0]
+    assert 'String "Solar Array Deployment"' in annotation_commands[1]
+    assert 'String "T0+30.0 min"' in annotation_commands[1]
+    assert 'Interval Add 1 "15 May 2026 00:30:00.000000" "15 May 2026 00:31:00.000000"' in annotation_commands[1]
