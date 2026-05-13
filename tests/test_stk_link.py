@@ -8,6 +8,7 @@ from PySide6 import QtWidgets
 
 from smart.services.stk_link import (
     StkLinkService,
+    _english_stk_label,
     parse_relay_longitude_deg,
     sanitize_stk_object_name,
     write_geo_relay_ephemeris,
@@ -39,6 +40,11 @@ def test_parse_relay_longitude_deg_handles_geo_slot_text() -> None:
     assert parse_relay_longitude_deg("171 W") == -171.0
     assert parse_relay_longitude_deg("TL2-5 20.4E") == 20.4
     assert parse_relay_longitude_deg("") is None
+
+
+def test_english_stk_label_accepts_path_safe_ascii_without_regex_range_error() -> None:
+    assert _english_stk_label("F4 mission A/B-01", fallback="Fallback") == "F4 mission A/B-01"
+    assert _english_stk_label("中文任务", fallback="Fallback") == "Fallback"
 
 
 def test_write_geo_relay_ephemeris_uses_fixed_geo_slot(tmp_path: Path) -> None:

@@ -737,7 +737,7 @@ def _english_event_label(event: dict[str, Any], index: int) -> str:
 
 
 def _english_stk_label(value: str, *, fallback: str) -> str:
-    cleaned = re.sub(r"[^0-9A-Za-z_ .:+\\-/()]", " ", str(value))
+    cleaned = re.sub(r"[^0-9A-Za-z_ .:+\\/()-]", " ", str(value))
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
     return cleaned or fallback
 

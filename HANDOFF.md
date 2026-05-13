@@ -13,6 +13,7 @@
 - Improved flight-program playhead/STK sync performance: drag/slider movement is debounced and coalesced, while explicit jumps still sync STK immediately.
 - Fixed STK link resource sync: the STK link page now previews the same tracking-arc assets that `StkLinkService` imports into STK, and default tracking ground-station names are English.
 - Added STK 3D flight-event annotations: each flight-program event becomes a `VO * Annotation` text label with a display interval matching the event start/end time. STK-visible text is forced to English/ASCII.
+- Fixed STK sync crash from an invalid English-label regex character range when sanitizing STK-visible text.
 
 ## Modified / Added Areas
 
@@ -29,6 +30,7 @@
 - `src/smart/ui/widgets/flight_program_page.py`: adds autosave and reference-result cache load/save; launch-source/manual/window/orbit-point T0 changes now try to sync existing STK scenario analysis time; playhead jumps sync STK current animation time immediately, while drag/slider changes use a short trailing debounce.
 - `src/smart/ui/widgets/maneuver_page.py`: changes ground-track maneuver-number labels to yellow text with black outline and smaller offset.
 - `src/smart/services/stk_link.py`: new STK 11.6 launch/connect/import service; now tracks established scenarios, can attach to a running STK scenario without launching STK, can set STK current animation time, can discard COM executors without losing established-scenario state, and adds English-only 3D annotations for flight-program events.
+- `tests/test_stk_link.py`: covers English-only label sanitization so path-safe ASCII labels do not trigger regex range errors.
 - `src/smart/services/launch_window.py`: tracking ground-station defaults now use English names, and old Chinese default station names migrate to their English equivalents when configs are normalized.
 - `src/smart/ui/widgets/stk_link_page.py`: new STK link UI page with worker thread; shares the MainWindow-owned `StkLinkService` so scenario state survives page switches; clears COM executor before and after each worker operation to avoid cross-thread COM reuse; previews tracking-arc assets instead of satellite-status assets.
 - `projects/F4/config/launch_window.json`, `projects/F4/config/tracking_arc.json`: default tracking ground stations renamed to English.
@@ -50,6 +52,7 @@
 
 Current STK tracking-resource sync fix is complete. STK link preview and STK import both use tracking-arc assets, and default tracking station names are English.
 Current STK flight-event annotation fix is complete. STK import creates English-only `VO Annotation` labels for all flight-program events using their computed start/end intervals.
+Current STK label regex crash fix is complete. `_english_stk_label()` now accepts ASCII `/` and `-` without forming an invalid regex range.
 
 Verified:
 
@@ -59,9 +62,10 @@ D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_stk_link.py tests/t
 D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_project_workspace.py tests/test_tracking_arc.py tests/test_launch_window_page.py
 D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_stk_link.py
 D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_stk_link.py tests/test_flight_program.py tests/test_flight_program_page.py
+D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_stk_link.py
 ```
 
-Result: 63 passed for the previous playhead checkpoint; 41 passed for STK/launch-window focused tests; 26 passed for project/tracking/page regression tests; 13 passed for STK annotation tests; 54 passed for STK/flight-program regression tests.
+Result: 63 passed for the previous playhead checkpoint; 41 passed for STK/launch-window focused tests; 26 passed for project/tracking/page regression tests; 13 passed for STK annotation tests; 54 passed for STK/flight-program regression tests; 14 passed for the STK label regex fix.
 
 Next minimum task: run one real STK 11.6 sync from the STK link page and confirm STK creates `Xiamen_Station`, `Weinan_Station`, `Kashi_Station`, `TL2_2`, and `TL2_3` from the F4 tracking-arc config, plus `FP_Event_###` 3D annotations with English-only text and correct intervals. If accepted, decide whether generated STK artifacts under `projects/F4/data/stk_link/` should remain committed or move to ignore/cleanup.
 
