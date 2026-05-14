@@ -69,9 +69,10 @@ def test_create_project_creates_expected_structure(tmp_path: Path) -> None:
         (info.root_dir / "config" / "design_maneuver_strategy.json").read_text(encoding="utf-8")
     )
     assert design_payload["planner"]["version"] == "V4.2_simplified_transfer_type"
-    assert design_payload["initial"]["m0_kg"] == pytest.approx(5200.0)
+    assert design_payload["initial"]["m0_kg"] == pytest.approx(6515.0)
     assert design_payload["target"]["a_km"] == pytest.approx(42164.2)
     assert design_payload["maneuver_count"]["user"] == 0
+    assert design_payload["maneuver_count"]["total_dv_est_user_mps"] == pytest.approx(1539.0)
 
     launch_payload = json.loads((info.root_dir / "config" / "launch_window.json").read_text(encoding="utf-8"))
     assert launch_payload["start_utc"] == "2026-05-15T00:00:00Z"

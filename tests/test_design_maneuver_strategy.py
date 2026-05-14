@@ -20,6 +20,9 @@ def test_supersynchronous_design_planner_outputs_fixed_tail() -> None:
 
     assert result.summary["orbit_type"] == "supersynchronous_transfer"
     assert result.summary["actual_count"] == result.summary["recommended_count"]
+    assert result.summary["actual_count"] == 5
+    assert result.summary["estimated_total_delta_v_mps"] == pytest.approx(1539.0)
+    assert result.summary["design_single_burn_delta_v_mps"] == pytest.approx(312.123864, rel=1e-6)
     assert result.summary["apsis_pattern"].endswith("A,P")
     assert len(result.burns) == result.summary["actual_count"]
     assert result.burns[-2].burn_type == "tail_fixed"
@@ -27,6 +30,10 @@ def test_supersynchronous_design_planner_outputs_fixed_tail() -> None:
     assert result.burns[-2].target_post_a_km == pytest.approx(47271.168509)
     assert result.burns[-1].target_post_a_km == pytest.approx(42164.2)
     assert result.burns[-1].post_a_km == pytest.approx(42164.2)
+    assert result.burns[0].elapsed_min == pytest.approx(1254.557603, rel=1e-6)
+    assert result.burns[0].longitude_deg_e == pytest.approx(73.475824, rel=1e-6)
+    assert result.burns[0].delta_v_mps == pytest.approx(304.666667, rel=1e-6)
+    assert result.burns[-1].delta_v_mps == pytest.approx(161.946868, rel=1e-6)
     assert all(0.0 <= burn.longitude_deg_e < 360.0 for burn in result.burns)
     assert result.checks
 
@@ -91,3 +98,31 @@ def test_design_maneuver_config_normalizes_booleans_and_windows() -> None:
     assert payload["engine"]["use_settling"] is False
     assert payload["longitude"]["planning_window_degE"] == [50.0, 170.0]
     assert payload["maneuver_count"]["max"] == 2
+
+
+def test_design_maneuver_config_accepts_reference_package_shape() -> None:
+    payload = normalize_design_maneuver_strategy_payload(
+        {
+            "version": "V4.2_simplified_transfer_type",
+            "t0_bj": "2026-04-24 21:54:27",
+            "initial_mass_kg": 6515.0,
+            "initial_orbit": {
+                "a_km": 29478.137,
+                "e": 0.77684692,
+                "i_deg": 16.5,
+                "argp_deg": 200.0,
+                "M_deg": 1.8547,
+                "ascending_node_longitude_deg": 8.53237,
+            },
+            "maneuver_count": {
+                "user": 0,
+                "total_dv_est_user_mps": 1539.0,
+                "engineering_min_count_supersync": 5,
+            },
+        }
+    )
+
+    assert payload["initial"]["t0_epoch"] == "2026-04-24T13:54:27Z"
+    assert payload["initial"]["m0_kg"] == pytest.approx(6515.0)
+    assert payload["initial"]["mean_anomaly_deg"] == pytest.approx(1.8547)
+    assert payload["maneuver_count"]["engineering_min_count_supersync"] == 5

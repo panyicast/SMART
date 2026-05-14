@@ -546,6 +546,8 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             self._t0_epoch_field.setDateTime(self._utc_to_qdatetime(str(normalized["initial"]["t0_epoch"])))
             for (section, key), field in self._number_fields.items():
                 value = normalized[section][key]
+                if value is None:
+                    value = 0
                 if isinstance(field, QtWidgets.QSpinBox):
                     field.setValue(int(value))
                 else:

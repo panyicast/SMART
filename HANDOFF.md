@@ -16,6 +16,7 @@
 - Fixed STK sync crash from an invalid English-label regex character range when sanitizing STK-visible text.
 - Updated STK 3D event annotations to show only spacecraft attitude mode text (`SPM`, `EPM`, `AFM`, `TRM`) as large Pixel annotations at the 3D view upper-left; `Transition` events display as `TRM`, and non-attitude events are not annotated.
 - Added a new "设计变轨策略" page below "导入变轨策略". It uses independent `config/design_maneuver_strategy.json` and implements V4.2 simplified impulse initial planning outputs: count recommendation, A/P pulse table, and constraint checks.
+- Updated the design maneuver strategy planner against the user-provided V4.2 reference package. Defaults now match the reference mission, and planning uses J2 secular apsis events, q-sequence search, local-horizontal impulses, fixed-tail semi-major-axis Δv solving, and reference-shape config import.
 
 ## Modified / Added Areas
 
@@ -41,6 +42,7 @@
 - `src/smart/services/design_maneuver_strategy.py`: new independent V4.2 simplified impulse planner service and config normalizer.
 - `src/smart/ui/widgets/design_maneuver_strategy_page.py`: new Qt page with Beijing-time epoch field, no-wheel numeric controls, independent save/load, current-project baseline import, planning result tables, and reserved future-task area.
 - `tests/test_design_maneuver_strategy.py`: covers supersynchronous fixed-tail planning, standard transfer user count, page config independence, and config normalization.
+- `tests/test_design_maneuver_strategy.py`: now also checks reference default output landmarks: 5 burns, 1539 m/s estimate, 312.123864 m/s design burn, first apogee event longitude/time, and final fixed-tail Δv.
 
 ## Risks
 
@@ -53,6 +55,7 @@
 - Local `projects/F4/smart_project.json` changed again during real STK use and was intentionally left out of this COM-threading checkpoint.
 - Local real STK retry also generated `projects/F4/data/stk_link/20260512_134342/`; decide later whether to keep committed, clean, or ignore generated STK exports.
 - Design maneuver page currently produces simplified impulse initial-planning tables only. Direction-angle optimization, J2 high-fidelity propagation, finite-thrust expansion, and explicit export into `maneuver_strategy.json` remain future work.
+- SciPy is not installed in the repo venv, so the planner currently evaluates the reference initial template and fixed-tail solve without Powell optimization. Optional optimizer fields are preserved in config for future SciPy-backed optimization.
 
 ## Next Minimum Task
 
@@ -61,6 +64,7 @@ Current STK flight-event annotation fix is complete. STK import creates English-
 Current STK label regex crash fix is complete. `_english_stk_label()` now accepts ASCII `/` and `-` without forming an invalid regex range.
 Current STK attitude-mode annotation update is complete. STK import now labels only attitude modes with `SPM`/`EPM`/`AFM`/`TRM` in the 3D upper-left corner.
 Current design maneuver strategy page task is complete. The page has its own config file and does not mutate the import maneuver strategy config.
+Current reference-alignment task is complete. The default design planner now matches the provided V4.2 package shape and major default-output landmarks while staying runnable without SciPy.
 
 Verified:
 
@@ -75,9 +79,11 @@ D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_stk_link.py
 D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_stk_link.py tests/test_flight_program.py tests/test_flight_program_page.py
 D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_design_maneuver_strategy.py tests/test_project_workspace.py tests/test_maneuver_page.py
 D:\Spark\SMART\.venv\Scripts\python.exe -m pytest
+D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_design_maneuver_strategy.py tests/test_project_workspace.py
+D:\Spark\SMART\.venv\Scripts\python.exe -m pytest
 ```
 
-Result: 63 passed for the previous playhead checkpoint; 41 passed for STK/launch-window focused tests; 26 passed for project/tracking/page regression tests; 13 passed for STK annotation tests; 54 passed for STK/flight-program regression tests; 14 passed for the STK label regex fix; 14 passed for the attitude-mode Pixel annotation test; 55 passed for STK/flight-program regression tests; 16 passed for design maneuver focused tests; 182 passed for full suite.
+Result: 63 passed for the previous playhead checkpoint; 41 passed for STK/launch-window focused tests; 26 passed for project/tracking/page regression tests; 13 passed for STK annotation tests; 54 passed for STK/flight-program regression tests; 14 passed for the STK label regex fix; 14 passed for the attitude-mode Pixel annotation test; 55 passed for STK/flight-program regression tests; 16 passed for design maneuver focused tests; 182 passed for full suite; after reference alignment, 16 focused tests passed and 183 full tests passed.
 
 Next minimum task: if continuing design strategy work, add an explicit user-confirmed export/mapping from pulse output into finite-thrust `maneuver_strategy.json`; otherwise run one real STK 11.6 sync from the STK link page and decide what to do with generated STK artifacts.
 
