@@ -150,6 +150,58 @@
 - 提交：`0a7b638`
 - 影响文件：`src/smart/ui/widgets/spinboxes.py`。
 
-## 2026-05-14T21:00:48+08:00 | fix updates log commit hook
-- 提交：`本次提交`
+## 2026-05-14T21:01:32+08:00 | fix updates log commit hook
+- 提交：`8f5634f`
 - 影响文件：`tests/test_update_updates_md.py`、`scripts/update_updates_md.py`、`AGENTS.md`、`.githooks/commit-msg`、`.githooks/post-commit`。
+
+## 2026-05-14T21:07:19+08:00 | checkpoint: recover smart workspace state
+- 提交：`a3d5635`
+- 影响文件：`src/smart/services/project_workspace.py`、`src/smart/services/stk_link.py`、`src/smart/ui/i18n.py`、`src/smart/ui/main_window.py`、`src/smart/ui/nav_icons.py`、`src/smart/ui/theme.py`、`src/smart/ui/widgets/flight_program_page.py`、`src/smart/ui/widgets/maneuver_page.py` 等 21 个文件。
+
+## 2026-05-14T21:07:33+08:00 | checkpoint: document small task handoff workflow
+- 提交：`54b4bb7`
+- 影响文件：`AGENTS.md`、`HANDOFF.md`。
+
+## 2026-05-14T21:07:33+08:00 | checkpoint: sync STK time from flight program
+- 提交：`e44f63f`
+- 影响文件：`src/smart/services/stk_link.py`、`src/smart/ui/widgets/flight_program_page.py`、`tests/test_flight_program_page.py`、`tests/test_stk_link.py`、`HANDOFF.md`。
+
+## 2026-05-14T21:07:34+08:00 | checkpoint: sync STK current time from flight timeline
+- 提交：`81b008c`
+- 影响文件：`src/smart/services/stk_link.py`、`src/smart/ui/main_window.py`、`src/smart/ui/widgets/flight_program_page.py`、`src/smart/ui/widgets/stk_link_page.py`、`tests/test_flight_program_page.py`、`tests/test_stk_link.py`、`HANDOFF.md`、`projects/F4/smart_project.json` 等 12 个文件。
+
+## 2026-05-14T21:07:34+08:00 | checkpoint: avoid cross-thread STK COM reuse
+- 提交：`b9a708c`
+- 影响文件：`src/smart/services/stk_link.py`、`src/smart/ui/widgets/stk_link_page.py`、`tests/test_stk_link.py`、`HANDOFF.md`。
+
+## 2026-05-14T21:07:35+08:00 | checkpoint: debounce STK playhead sync
+- 提交：`342db02`
+- 影响文件：`src/smart/ui/widgets/flight_program_page.py`、`tests/test_flight_program_page.py`、`HANDOFF.md`。
+
+## 2026-05-14T21:07:35+08:00 | checkpoint: align STK tracking resources
+- 提交：`467a47e`
+- 影响文件：`src/smart/services/launch_window.py`、`src/smart/services/stk_link.py`、`src/smart/ui/widgets/stk_link_page.py`、`tests/test_launch_window.py`、`tests/test_stk_link.py`、`HANDOFF.md`、`projects/F4/config/launch_window.json`、`projects/F4/config/tracking_arc.json`。
+
+## 2026-05-14T21:07:35+08:00 | checkpoint: annotate STK flight events
+- 提交：`737ebcb`
+- 影响文件：`src/smart/services/stk_link.py`、`tests/test_stk_link.py`、`AGENTS.md`、`HANDOFF.md`。
+
+## 2026-05-14T21:07:36+08:00 | checkpoint: fix STK label regex
+- 提交：`28241ba`
+- 影响文件：`src/smart/services/stk_link.py`、`tests/test_stk_link.py`、`HANDOFF.md`。
+
+## 2026-05-14T21:07:36+08:00 | checkpoint: show STK attitude mode annotation
+- 提交：`4de6d43`
+- 影响文件：`src/smart/services/stk_link.py`、`tests/test_stk_link.py`、`HANDOFF.md`。
+
+## 2026-05-14T21:07:36+08:00 | add design maneuver strategy page
+- 提交：`5d9701a`
+- 影响文件：`src/smart/services/design_maneuver_strategy.py`、`src/smart/services/module_catalog.py`、`src/smart/services/project_workspace.py`、`src/smart/ui/i18n.py`、`src/smart/ui/main_window.py`、`src/smart/ui/nav_icons.py`、`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py` 等 10 个文件。
+
+## 2026-05-14T21:07:37+08:00 | add docs and STK export artifacts
+- 提交：`90e665f`
+- 影响文件：`projects/F4/smart_project.json`、`"doc//344/272/224/346/254/241/346/234/211/351/231/220/346/216/250/345/212/233/345/217/230/350/275/250/345/272/217/350/264/257/344/274/230/345/214/226/347/256/227/346/263/225/350/257/246/347/273/206/350/256/276/350/256/241/346/226/207/346/241/243_V1.1.md"`、`"doc//344/272/224/346/254/241/350/204/211/345/206/262/347/202/271/347/201/253/344/273/273/345/212/241/350/247/204/345/210/222/347/256/227/346/263/225/346/226/207/346/241/243_/350/277/234/345/234/260/347/202/271/345/233/236/345/275/222/347/272/246/346/235/237_V1.0.md"`、`"doc//347/256/200/345/214/226/350/204/211/345/206/262/345/210/235/345/247/213/350/247/204/345/210/222/347/256/227/346/263/225_V4.2_/350/266/205/345/220/214/346/255/245/350/275/254/347/247/273/344/270/216/346/240/207/345/207/206/350/275/254/347/247/273.md"`、`"doc//347/256/200/345/214/226/350/204/211/345/206/262/350/247/204/345/210/222/347/256/227/346/263/225_V4_/345/211/215/344/270/211/346/254/241/345/235/207/345/214/200/346/234/272/345/212/250/351/207/217/345/210/206/351/205/215.md"`、`projects/F4/data/stk_link/20260512_134342/F4_attitude.a`、`projects/F4/data/stk_link/20260512_134342/F4_orbit.e`、`projects/F4/data/stk_link/20260512_134342/TL2_2_geo.e` 等 22 个文件。
+
+## 2026-05-14T21:08:13+08:00 | refresh updates log after rebase
+- 提交：`本次提交`
+- 影响文件：自动刷新记录，无额外文件。
