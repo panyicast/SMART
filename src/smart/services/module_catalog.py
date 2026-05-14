@@ -20,6 +20,10 @@ def build_module_catalog() -> list[ModuleDescriptor]:
             status="Operational",
         ),
         ModuleDescriptor(
+            key="design_maneuver_strategy",
+            status="Operational",
+        ),
+        ModuleDescriptor(
             key="launch_window",
             status="Planned",
         ),

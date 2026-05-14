@@ -16,6 +16,10 @@ from smart.domain.models import (
     SatelliteStatusSettings,
 )
 from smart.services.earth_orientation import format_utc, parse_utc, utc_now_iso_z
+from smart.services.design_maneuver_strategy import (
+    default_design_maneuver_strategy_payload,
+    normalize_design_maneuver_strategy_payload,
+)
 from smart.services.launch_window import default_launch_window_config, normalize_launch_window_config
 from smart.services.flight_program import default_flight_program_payload, normalize_flight_program_payload
 
@@ -31,6 +35,7 @@ MANEUVER_SNAPSHOT_FILE = "maneuver_snapshot.json"
 SATELLITE_SETTINGS_FILE = "satellite_status.json"
 ORBIT_INITIALIZATION_FILE = "orbit_initialization.json"
 MANEUVER_STRATEGY_FILE = "maneuver_strategy.json"
+DESIGN_MANEUVER_STRATEGY_FILE = "design_maneuver_strategy.json"
 LAUNCH_WINDOW_FILE = "launch_window.json"
 TRACKING_ARC_FILE = "tracking_arc.json"
 TRACKING_ARC_RESULTS_FILE = "tracking_arc_results.json"
@@ -95,6 +100,7 @@ class ProjectWorkspace:
         self.save_satellite_status(SatelliteStatusSettings())
         self.save_orbit_initialization(OrbitInitializationSettings())
         self.save_maneuver_strategy(default_maneuver_strategy_payload())
+        self.save_design_maneuver_strategy(default_design_maneuver_strategy_payload())
         launch_window_config = default_launch_window_config()
         self.save_launch_window_config(launch_window_config)
         self.save_tracking_arc_config(launch_window_config)
@@ -168,6 +174,9 @@ class ProjectWorkspace:
 
     def maneuver_strategy_path(self) -> Path:
         return self.config_dir() / MANEUVER_STRATEGY_FILE
+
+    def design_maneuver_strategy_path(self) -> Path:
+        return self.config_dir() / DESIGN_MANEUVER_STRATEGY_FILE
 
     def launch_window_path(self) -> Path:
         return self.config_dir() / LAUNCH_WINDOW_FILE
@@ -256,6 +265,20 @@ class ProjectWorkspace:
             return None
         payload = _read_json(file_path)
         return _normalize_maneuver_strategy_payload(payload)
+
+    def save_design_maneuver_strategy(self, strategy: dict[str, Any]) -> Path:
+        payload = normalize_design_maneuver_strategy_payload(strategy)
+        file_path = self.design_maneuver_strategy_path()
+        _write_json(file_path, payload)
+        self._touch_updated_time()
+        return file_path
+
+    def load_design_maneuver_strategy(self) -> dict[str, Any] | None:
+        file_path = self.design_maneuver_strategy_path()
+        if not file_path.exists():
+            return None
+        payload = _read_json(file_path)
+        return normalize_design_maneuver_strategy_payload(payload)
 
     def save_launch_window_config(self, config: dict[str, Any]) -> Path:
         payload = normalize_launch_window_config(config)

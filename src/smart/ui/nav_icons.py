@@ -45,6 +45,19 @@ _NAV_SVG: dict[str, str] = {
         '<path d="M9.8 21 L12 18.5 L14.2 21"/>'
         '</svg>'
     ),
+    "nav.design_maneuver_strategy": (
+        '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" '
+        'fill="none" stroke="' + _COLOR_TOKEN + '" stroke-width="1.8" '
+        'stroke-linecap="round" stroke-linejoin="round">'
+        '<path d="M4 19 C8.5 16.5 15.5 16.5 20 19"/>'
+        '<path d="M6.5 15 C10 12.5 14 12.5 17.5 15"/>'
+        '<circle cx="7" cy="15" r="1.4" fill="' + _COLOR_TOKEN + '"/>'
+        '<circle cx="12" cy="12.7" r="1.4" fill="' + _COLOR_TOKEN + '"/>'
+        '<circle cx="17" cy="15" r="1.4" fill="' + _COLOR_TOKEN + '"/>'
+        '<path d="M12 3.5 L15.5 7 L12 10.5 L8.5 7 Z"/>'
+        '<path d="M12 10.5 L12 12.2"/>'
+        '</svg>'
+    ),
     "nav.launch_window": (
         '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" '
         'fill="none" stroke="' + _COLOR_TOKEN + '" stroke-width="1.8" '

@@ -29,6 +29,7 @@ def test_create_project_creates_expected_structure(tmp_path: Path) -> None:
     assert (info.root_dir / "config" / "orbit_initialization.json").exists()
     assert (info.root_dir / "config" / "satellite_status.json").exists()
     assert (info.root_dir / "config" / "maneuver_strategy.json").exists()
+    assert (info.root_dir / "config" / "design_maneuver_strategy.json").exists()
     assert (info.root_dir / "config" / "launch_window.json").exists()
     assert (info.root_dir / "config" / "tracking_arc.json").exists()
 
@@ -63,6 +64,14 @@ def test_create_project_creates_expected_structure(tmp_path: Path) -> None:
     assert first_step["orbit_control_isp_s"] == pytest.approx(314.1)
     assert first_step["settle_thrust_n"] == pytest.approx(20.0)
     assert first_step["settle_isp_s"] == pytest.approx(290.0)
+
+    design_payload = json.loads(
+        (info.root_dir / "config" / "design_maneuver_strategy.json").read_text(encoding="utf-8")
+    )
+    assert design_payload["planner"]["version"] == "V4.2_simplified_transfer_type"
+    assert design_payload["initial"]["m0_kg"] == pytest.approx(5200.0)
+    assert design_payload["target"]["a_km"] == pytest.approx(42164.2)
+    assert design_payload["maneuver_count"]["user"] == 0
 
     launch_payload = json.loads((info.root_dir / "config" / "launch_window.json").read_text(encoding="utf-8"))
     assert launch_payload["start_utc"] == "2026-05-15T00:00:00Z"

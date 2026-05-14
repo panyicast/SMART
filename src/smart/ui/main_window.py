@@ -14,6 +14,7 @@ from smart.ui.mission_state import MissionState
 from smart.ui.nav_icons import chevron_icon, nav_icon
 from smart.ui.widgets.dashboard_page import DashboardPage
 from smart.ui.widgets.data_visualization_page import DataVisualizationPage
+from smart.ui.widgets.design_maneuver_strategy_page import DesignManeuverStrategyPage
 from smart.ui.widgets.ai_project_analysis_page import AIProjectAnalysisPage
 from smart.ui.widgets.flight_program_page import FlightProgramPage
 from smart.ui.widgets.launch_window_page import LaunchWindowPage
@@ -28,6 +29,7 @@ _NAV_KEYS = [
     "nav.dashboard",
     "nav.orbit_design",
     "nav.maneuver_strategy",
+    "nav.design_maneuver_strategy",
     "nav.launch_window",
     "nav.tracking_arc",
     "nav.flight_program",
@@ -76,6 +78,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._dashboard_page.set_recent_projects(self._recent_project_paths)
         self._satellite_page = SatelliteStatusPage(self._i18n)
         self._maneuver_page = ManeuverPage(self._i18n, self._workspace)
+        self._design_maneuver_page = DesignManeuverStrategyPage(self._i18n, self._workspace)
         self._launch_window_page = LaunchWindowPage(self._i18n, self._workspace)
         self._ai_project_page = AIProjectAnalysisPage(self._i18n, self._workspace, self._settings)
         self._tracking_arc_page = TrackingArcPage(self._i18n, self._workspace)
@@ -96,6 +99,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self._dashboard_page,
             self._satellite_page,
             self._maneuver_page,
+            self._design_maneuver_page,
             self._launch_window_page,
             self._tracking_arc_page,
             self._flight_program_page,
@@ -425,6 +429,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._autosave_enabled = False
         try:
             self._maneuver_page.refresh_from_workspace()
+            self._design_maneuver_page.refresh_from_workspace()
             self._launch_window_page.refresh_from_workspace()
             self._tracking_arc_page.refresh_from_workspace()
             self._flight_program_page.refresh_from_workspace()
@@ -468,6 +473,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     self._latest_satellite_settings = self._satellite_page.settings()
 
                 self._maneuver_page.refresh_from_workspace()
+                self._design_maneuver_page.refresh_from_workspace()
                 self._launch_window_page.refresh_from_workspace()
                 self._tracking_arc_page.refresh_from_workspace()
                 self._flight_program_page.refresh_from_workspace()
@@ -477,6 +483,7 @@ class MainWindow(QtWidgets.QMainWindow):
             else:
                 self._latest_satellite_settings = self._satellite_page.settings()
                 self._maneuver_page.refresh_from_workspace()
+                self._design_maneuver_page.refresh_from_workspace()
                 self._launch_window_page.refresh_from_workspace()
                 self._tracking_arc_page.refresh_from_workspace()
                 self._flight_program_page.refresh_from_workspace()
