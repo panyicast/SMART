@@ -412,14 +412,17 @@ def plan_design_maneuver_strategy(payload: dict[str, Any] | None) -> DesignManeu
         alpha_values=alpha_values,
     )
     delta_vs = phase_plan["delta_vs"]
-    burns = _build_burns(
-        config,
-        apsis_pattern=apsis_pattern,
-        delta_vs=delta_vs,
-        alpha_values=alpha_values,
-        warnings=warnings,
-        q_sequence_override=phase_plan["q_sequence"],
-    )
+    if "burns" in phase_plan and phase_plan["burns"]:
+        burns = phase_plan["burns"]
+    else:
+        burns = _build_burns(
+            config,
+            apsis_pattern=apsis_pattern,
+            delta_vs=delta_vs,
+            alpha_values=alpha_values,
+            warnings=warnings,
+            q_sequence_override=phase_plan["q_sequence"],
+        )
     ignore_uniform = bool(phase_plan["delta_v_optimized"])
     checks = _build_checks(config, burns, ignore_uniform=ignore_uniform)
     duration_limit = float(burn_limit["max_total_burn_time_min"])
@@ -745,17 +748,12 @@ def _select_phase_plan(
             "initial_error_deg": None,
         }
 
-    base_error = _phase_terminal_longitude_error(
-        config,
-        apsis_pattern=apsis_pattern,
-        delta_vs=delta_vs,
-        alpha_values=alpha_values,
-        q_sequence=base_sequence,
+    best_score, base_error, best_burns = _phase_score(
+        config, apsis_pattern, delta_vs, alpha_values, base_sequence
     )
     best_sequence = list(base_sequence)
     best_error = base_error
     best_delta_vs = list(delta_vs)
-    best_score = _phase_score(config, apsis_pattern, best_delta_vs, alpha_values, best_sequence)
     tolerance = float(config["terminal_tolerance"]["lon_deg"])
     for candidate in _phase_q_candidates(config, apsis_pattern, base_sequence):
         optimized = _optimize_phase_delta_vs(
@@ -772,6 +770,7 @@ def _select_phase_plan(
             best_error = error
             best_delta_vs = list(optimized["delta_vs"])
             best_score = score
+            best_burns = optimized["burns"]
             if score[0] == 0 and abs(best_error) <= tolerance:
                 break
     return {
@@ -780,6 +779,7 @@ def _select_phase_plan(
         "optimized": best_sequence != base_sequence or best_delta_vs != list(delta_vs),
         "delta_v_optimized": best_delta_vs != list(delta_vs),
         "initial_error_deg": base_error,
+        "burns": best_burns,
     }
 
 
@@ -838,16 +838,12 @@ def _optimize_phase_delta_vs(
 ) -> dict[str, Any]:
     front_count = max(0, len(delta_vs) - 2)
     if front_count < 3:
+        score, error, _burns = _phase_score(config, apsis_pattern, delta_vs, alpha_values, q_sequence)
         return {
             "delta_vs": list(delta_vs),
-            "error_deg": _phase_terminal_longitude_error(
-                config,
-                apsis_pattern=apsis_pattern,
-                delta_vs=delta_vs,
-                alpha_values=alpha_values,
-                q_sequence=q_sequence,
-            ),
-            "score": _phase_score(config, apsis_pattern, delta_vs, alpha_values, q_sequence),
+            "error_deg": error,
+            "score": score,
+            "burns": _burns,
         }
     front_base = [float(value or 0.0) for value in delta_vs[:front_count]]
     seeds = [
@@ -855,16 +851,11 @@ def _optimize_phase_delta_vs(
         [front_base[0] * 0.55, front_base[1] * 0.55, front_base[2] * 1.18],
     ]
     best_delta_vs = list(delta_vs)
-    best_error = _phase_terminal_longitude_error(
-        config,
-        apsis_pattern=apsis_pattern,
-        delta_vs=best_delta_vs,
-        alpha_values=alpha_values,
-        q_sequence=q_sequence,
+    best_score, best_error, best_burns = _phase_score(
+        config, apsis_pattern, best_delta_vs, alpha_values, q_sequence
     )
-    best_score = _phase_score(config, apsis_pattern, best_delta_vs, alpha_values, q_sequence)
     for seed in seeds:
-        optimized_delta_vs, error, score = _coordinate_search_front_delta_vs(
+        optimized_delta_vs, error, score, opt_burns = _coordinate_search_front_delta_vs(
             config,
             apsis_pattern=apsis_pattern,
             delta_vs=delta_vs,
@@ -876,7 +867,8 @@ def _optimize_phase_delta_vs(
             best_delta_vs = optimized_delta_vs
             best_error = error
             best_score = score
-    return {"delta_vs": best_delta_vs, "error_deg": best_error, "score": best_score}
+            best_burns = opt_burns
+    return {"delta_vs": best_delta_vs, "error_deg": best_error, "score": best_score, "burns": best_burns}
 
 
 def _coordinate_search_front_delta_vs(
@@ -887,18 +879,13 @@ def _coordinate_search_front_delta_vs(
     alpha_values: list[float],
     q_sequence: list[int],
     seed_front: list[float],
-) -> tuple[list[float | None], float, tuple[int, float, float, float]]:
+) -> tuple[list[float | None], float, tuple[int, float, float, float], list[DesignManeuverBurn]]:
     front_count = len(seed_front)
     current = [float(value) for value in seed_front]
     candidate_delta_vs: list[float | None] = current + list(delta_vs[front_count:])
-    best_error = _phase_terminal_longitude_error(
-        config,
-        apsis_pattern=apsis_pattern,
-        delta_vs=candidate_delta_vs,
-        alpha_values=alpha_values,
-        q_sequence=q_sequence,
+    best_score, best_error, best_burns = _phase_score(
+        config, apsis_pattern, candidate_delta_vs, alpha_values, q_sequence
     )
-    best_score = _phase_score(config, apsis_pattern, candidate_delta_vs, alpha_values, q_sequence)
     min_dv = float(config["distribution"]["dv_min_per_burn_mps"])
     max_dv = max(700.0, max(current, default=0.0) + 100.0)
     search_indices = range(1, front_count) if _first_post_a_control_km(config) is not None else range(front_count)
@@ -915,24 +902,21 @@ def _coordinate_search_front_delta_vs(
                     if trial[index] < min_dv or trial[index] > max_dv:
                         continue
                     trial_delta_vs: list[float | None] = trial + list(delta_vs[front_count:])
-                    score = _phase_score(config, apsis_pattern, trial_delta_vs, alpha_values, q_sequence)
+                    score, trial_error, _trial_burns = _phase_score(
+                        config, apsis_pattern, trial_delta_vs, alpha_values, q_sequence
+                    )
                     eval_count += 1
                     if score < best_score:
                         current = trial
                         best_score = score
-                        best_error = _phase_terminal_longitude_error(
-                            config,
-                            apsis_pattern=apsis_pattern,
-                            delta_vs=trial_delta_vs,
-                            alpha_values=alpha_values,
-                            q_sequence=q_sequence,
-                        )
+                        best_error = trial_error
+                        best_burns = _trial_burns
                         candidate_delta_vs = trial_delta_vs
                         improved = True
                         break
                 if improved:
                     break
-    return candidate_delta_vs, best_error, best_score
+    return candidate_delta_vs, best_error, best_score, best_burns
 
 
 def _first_post_a_control_km(config: dict[str, Any]) -> float | None:
@@ -945,7 +929,7 @@ def _phase_score(
     delta_vs: list[float | None],
     alpha_values: list[float],
     q_sequence: list[int],
-) -> tuple[int, float, float, float]:
+) -> tuple[tuple[int, float, float, float], float, list[DesignManeuverBurn]]:
     warnings: list[str] = []
     burns = _build_burns(
         config,
@@ -956,14 +940,15 @@ def _phase_score(
         q_sequence_override=q_sequence,
     )
     if not burns:
-        return (1, float("inf"), float("inf"), float("inf"))
-    error = abs(_wrap180(burns[-1].longitude_deg_e - float(config["target"]["lon_degE"])))
+        return (1, float("inf"), float("inf"), float("inf")), float("inf"), []
+    signed_error = _wrap180(burns[-1].longitude_deg_e - float(config["target"]["lon_degE"]))
+    error = abs(signed_error)
     max_duration = max(burn.total_burn_time_min for burn in burns)
     duration_limit = float(config["burn_limit"]["max_total_burn_time_min"])
     duration_penalty = max(0.0, max_duration - duration_limit) * 1000.0
     invalid = 1 if warnings or duration_penalty > 0.0 else 0
     spread = _uniform_spread([burn.delta_v_mps for burn in burns if burn.burn_type != "tail_fixed"])
-    return (invalid, error + duration_penalty + (1000.0 if warnings else 0.0), max_duration, spread)
+    return (invalid, error + duration_penalty + (1000.0 if warnings else 0.0), max_duration, spread), signed_error, burns
 
 
 def _phase_terminal_longitude_error(
@@ -1287,6 +1272,7 @@ def _build_burns(
         ),
     )
     flight_revolution = 2
+    pre_a: float | None = None
 
     for index, apsis in enumerate(apsis_pattern):
         longitude_ok = _in_window(longitude, planning_window)
@@ -1295,7 +1281,8 @@ def _build_burns(
         elif not longitude_ok:
             warnings.append(f"第 {index + 1} 次点火经度未满足规划窗口。")
 
-        pre_a, pre_e, pre_i, *_ = _rv_to_coe(r, v)
+        if pre_a is None:
+            pre_a, *_ = _rv_to_coe(r, v)
         target_post_a = None
         burn_type = "normal"
         fixed_tail = (
@@ -1369,6 +1356,7 @@ def _build_burns(
             )
         )
         mass = mass_after
+        pre_a = current_a
         if index < len(apsis_pattern) - 1:
             next_apsis_name = apsis_pattern[index + 1]
             q = q_sequence[index] if index < len(q_sequence) else int(apsis_cfg["q_AA_default"])
