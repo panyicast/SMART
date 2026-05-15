@@ -294,6 +294,10 @@
 - 提交：`1e089e1`
 - 影响文件：`doc/design_maneuver_pulse_planning_algorithm.md`、`HANDOFF.md`。
 
-## 2026-05-16T00:00:30+08:00 | add scipy dependency for maneuver optimization
-- 提交：`本次提交`
+## 2026-05-16T00:00:33+08:00 | add scipy dependency for maneuver optimization
+- 提交：`fcb9bd1`
 - 影响文件：`pyproject.toml`、`HANDOFF.md`。
+
+## 2026-05-16T00:20:16+08:00 | optimize design maneuver phase planning
+- 提交：`本次提交`
+- 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。

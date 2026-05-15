@@ -35,6 +35,7 @@
 - Reworked design-maneuver yaw-angle optimization so longitude phasing first establishes the post-burn semi-major-axis chain, then alpha/yaw is optimized with those semi-major axes locked. The score now treats terminal longitude, terminal inclination, terminal semi-major axis, duration, and warnings as constraints before minimizing propellant. For supersynchronous transfers, the final perigee burn is kept tangential and no longer performs hidden inclination trim.
 - Added `doc/design_maneuver_pulse_planning_algorithm.md`, a full Markdown description of the current design-maneuver pulse planning algorithm, including inputs, q sequence, longitude phasing, fixed semi-major-axis chain, yaw/inclination optimization, scoring, propellant calculation, UI output, archive behavior, and limitations.
 - Added SciPy as a runtime dependency and installed it in the project venv so future design-maneuver SLSQP continuous optimization can use `scipy.optimize.minimize(method="SLSQP")`.
+- Implemented the design-maneuver hybrid phase optimizer: q sequences are fully enumerated up to the q limit, quick-screened, optimized by coordinate search for the top candidates, refined with SciPy SLSQP for the best candidates, and finally ranked with hard-constraint-first tuple scoring. Summary diagnostics now report q candidate counts, SLSQP attempts, feasibility counts, active constraints, terminal margins, and fallback state.
 
 ## Modified / Added Areas
 
@@ -103,7 +104,7 @@
 - Local `projects/F4/smart_project.json` changed again during real STK use and was intentionally left out of this COM-threading checkpoint.
 - Local real STK retry also generated `projects/F4/data/stk_link/20260512_134342/`; decide later whether to keep committed, clean, or ignore generated STK exports.
 - Design maneuver page currently produces simplified impulse initial-planning tables only. Direction-angle optimization, J2 high-fidelity propagation, finite-thrust expansion, and explicit export into `maneuver_strategy.json` remain future work.
-- SciPy is not installed in the repo venv, so the planner currently evaluates the reference initial template and fixed-tail solve without Powell optimization. Optional optimizer fields are preserved in config for future SciPy-backed optimization.
+- SciPy is installed in the repo venv and the design-maneuver planner can use SLSQP. If SciPy import fails at runtime, the planner falls back to the coordinate-search path.
 
 ## Next Minimum Task
 
@@ -179,8 +180,9 @@ Latest merge-readiness fix runs: 13 project workspace tests passed; 6 design man
 Latest yaw-angle optimization runs: py_compile passed; 19 design/project tests passed.
 Latest algorithm-documentation task: documentation-only change; no code tests required.
 Latest SciPy dependency task: SciPy 1.17.1 installed; SLSQP smoke test passed; 19 design/project tests passed.
+Latest hybrid optimizer task: py_compile passed; default and F4-like planning smoke runs completed in about 18-20 s with terminal longitude/inclination inside 0.01 deg; 6 design tests passed; 13 project workspace tests passed; 19 combined design/project tests passed.
 
-Next minimum task: implement the SLSQP path behind an optimizer-method switch while retaining the current coordinate-search fallback.
+Next minimum task: tune the hybrid optimizer UI/runtime defaults if real project runs show the 30 s time budget or Top-K values need adjustment.
 
 ## Working Rule
 

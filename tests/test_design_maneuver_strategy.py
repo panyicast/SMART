@@ -43,6 +43,9 @@ def test_supersynchronous_design_planner_outputs_fixed_tail() -> None:
     assert result.burns[0].longitude_deg_e == pytest.approx(73.475631, rel=1e-6)
     assert result.summary["phase_optimized"] is True
     assert result.summary["phase_delta_v_optimized"] is True
+    assert result.summary["phase_diagnostics"]["q_total_candidates"] >= 1
+    assert result.summary["phase_diagnostics"]["q_tested_fast"] >= 1
+    assert result.summary["phase_diagnostics"]["feasible_solutions"] >= 1
     if abs(baseline.summary["terminal_errors"]["i_deg"]) <= baseline.config["terminal_tolerance"]["i_deg"]:
         assert result.summary["optimized_propellant_kg"] <= baseline.summary["optimized_propellant_kg"]
     assert abs(result.summary["terminal_errors"]["i_deg"]) <= result.config["terminal_tolerance"]["i_deg"]
@@ -77,6 +80,10 @@ def test_design_planner_phase_q_search_hits_f4_terminal_longitude() -> None:
     assert result.summary["phase_optimized"] is True
     assert result.summary["phase_delta_v_optimized"] is True
     assert result.summary["phase_alpha_optimized"] is True
+    assert result.summary["phase_diagnostics"]["q_total_candidates"] >= 27
+    assert result.summary["phase_diagnostics"]["q_tested_fast"] <= result.summary["phase_diagnostics"]["q_total_candidates"]
+    assert result.summary["phase_diagnostics"]["q_tested_slsqp"] >= 1
+    assert result.summary["phase_diagnostics"]["optimizer_method"] in {"SLSQP", "coordinate"}
     assert result.burns[-1].apsis == "P"
     assert abs(abs(result.burns[-1].alpha_deg) - 180.0) <= 1.0e-9
     if abs(baseline.summary["terminal_errors"]["i_deg"]) <= baseline.config["terminal_tolerance"]["i_deg"]:

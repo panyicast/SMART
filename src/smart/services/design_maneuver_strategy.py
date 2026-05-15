@@ -2,10 +2,17 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
+from itertools import product
 import math
+from time import perf_counter
 from typing import Any
 
 import numpy as np
+
+try:
+    from scipy.optimize import minimize
+except Exception:  # pragma: no cover - optional runtime fallback
+    minimize = None
 
 from smart.domain.models import OrbitalElements
 from smart.services.earth_orientation import format_utc, greenwich_angle_at_utc, parse_utc, utc_now_iso_z
@@ -208,12 +215,20 @@ def default_design_maneuver_strategy_payload() -> dict[str, Any]:
         },
         "optimizer": {
             "enabled": True,
-            "method": "Powell",
+            "method": "SLSQP",
             "maxiter": 900,
             "maxfev": 25000,
+            "q_fast_optimize_top_k": 10,
+            "slsqp_top_k": 6,
+            "slsqp_multistart_top_k": 2,
+            "slsqp_maxiter": 120,
+            "time_budget_sec": 30.0,
             "terminal_weight": 1.0e6,
-            "longitude_weight": 1.0e6,
-            "duration_weight": 1.0e6,
+            "longitude_weight": 1.0e8,
+            "inclination_weight": 1.0e7,
+            "eccentricity_weight": 1.0e8,
+            "semi_major_axis_weight": 1.0e5,
+            "duration_weight": 1.0e7,
             "uniform_weight": 1.0e3,
             "tail_weight": 1.0e9,
             "correction_weight": 1.0e2,
@@ -264,10 +279,14 @@ def normalize_design_maneuver_strategy_payload(payload: dict[str, Any] | None) -
         "optimizer": (
             "terminal_weight",
             "longitude_weight",
+            "inclination_weight",
+            "eccentricity_weight",
+            "semi_major_axis_weight",
             "duration_weight",
             "uniform_weight",
             "tail_weight",
             "correction_weight",
+            "time_budget_sec",
         ),
     }.items():
         for key in keys:
@@ -293,8 +312,13 @@ def normalize_design_maneuver_strategy_payload(payload: dict[str, Any] | None) -
     )
     result["alpha"]["optimize_alpha"] = bool(result["alpha"].get("optimize_alpha", False))
     result["optimizer"]["enabled"] = bool(result["optimizer"].get("enabled", True))
+    result["optimizer"]["method"] = str(result["optimizer"].get("method", defaults["optimizer"]["method"])).upper()
     result["optimizer"]["maxiter"] = max(1, int(result["optimizer"].get("maxiter", 900)))
     result["optimizer"]["maxfev"] = max(1, int(result["optimizer"].get("maxfev", 25000)))
+    result["optimizer"]["q_fast_optimize_top_k"] = max(1, int(result["optimizer"].get("q_fast_optimize_top_k", 10)))
+    result["optimizer"]["slsqp_top_k"] = max(0, int(result["optimizer"].get("slsqp_top_k", 6)))
+    result["optimizer"]["slsqp_multistart_top_k"] = max(0, int(result["optimizer"].get("slsqp_multistart_top_k", 2)))
+    result["optimizer"]["slsqp_maxiter"] = max(1, int(result["optimizer"].get("slsqp_maxiter", 120)))
     result["optimizer"]["random_seed"] = int(result["optimizer"].get("random_seed", 7))
     result["maneuver_count"]["min"] = max(1, int(result["maneuver_count"].get("min", 1)))
     result["maneuver_count"]["max"] = max(result["maneuver_count"]["min"], int(result["maneuver_count"].get("max", 10)))
@@ -468,6 +492,7 @@ def plan_design_maneuver_strategy(payload: dict[str, Any] | None) -> DesignManeu
         "uniform_spread_mps": uniform_spread,
         "uniform_ok": uniform_ok,
         "terminal_errors": terminal_errors,
+        "phase_diagnostics": dict(phase_plan.get("diagnostics", {})),
     }
     return DesignManeuverResult(config=config, summary=summary, burns=burns, checks=checks, warnings=warnings)
 
@@ -742,6 +767,15 @@ def _select_phase_plan(
     alpha_values: list[float],
 ) -> dict[str, Any]:
     base_sequence = _q_sequence(config, len(apsis_pattern), orbit_type)
+    empty_diagnostics = {
+        "q_total_candidates": 1,
+        "q_tested_fast": 0,
+        "q_tested_slsqp": 0,
+        "feasible_solutions": 0,
+        "optimizer_method": "disabled",
+        "optimizer_converged": False,
+        "fallback_used": False,
+    }
     if not _can_phase_optimize(config, orbit_type, apsis_pattern):
         return {
             "q_sequence": list(base_sequence),
@@ -752,16 +786,30 @@ def _select_phase_plan(
             "alpha_optimized": False,
             "initial_error_deg": None,
             "burns": [],
+            "diagnostics": empty_diagnostics,
         }
 
-    best_score, base_error, best_burns = _phase_score(
+    base_score, base_error, _base_burns = _phase_score(
         config, apsis_pattern, delta_vs, alpha_values, base_sequence
     )
-    best_sequence = list(base_sequence)
-    best_error = base_error
-    best_delta_vs = list(delta_vs)
-    best_alpha_values = list(alpha_values)
-    for candidate in _phase_q_candidates(config, apsis_pattern, base_sequence):
+    q_candidates = _phase_q_candidates(config, apsis_pattern, base_sequence)
+    screened: list[dict[str, Any]] = []
+    for candidate in q_candidates:
+        score, error, burns = _phase_score(config, apsis_pattern, delta_vs, alpha_values, candidate)
+        screened.append(
+            {
+                "q_sequence": list(candidate),
+                "score": score,
+                "error_deg": error,
+                "burns": burns,
+            }
+        )
+    screened.sort(key=lambda item: item["score"])
+    optimize_top_k = min(len(screened), int(config["optimizer"].get("q_fast_optimize_top_k", 10)))
+    selected_keys = {tuple(item["q_sequence"]) for item in screened[:optimize_top_k]}
+    selected_keys.add(tuple(base_sequence))
+    candidates: list[dict[str, Any]] = []
+    for candidate in [item["q_sequence"] for item in screened if tuple(item["q_sequence"]) in selected_keys]:
         optimized = _optimize_phase_controls(
             config,
             orbit_type=orbit_type,
@@ -770,15 +818,70 @@ def _select_phase_plan(
             alpha_values=alpha_values,
             q_sequence=candidate,
         )
-        score = optimized["score"]
-        error = float(optimized["error_deg"])
-        if score < best_score:
-            best_sequence = list(candidate)
-            best_error = error
-            best_delta_vs = list(optimized["delta_vs"])
-            best_alpha_values = list(optimized["alpha_values"])
-            best_score = score
-            best_burns = optimized["burns"]
+        candidates.append(
+            {
+                "q_sequence": list(candidate),
+                "delta_vs": list(optimized["delta_vs"]),
+                "alpha_values": list(optimized["alpha_values"]),
+                "error_deg": float(optimized["error_deg"]),
+                "score": optimized["score"],
+                "burns": optimized["burns"],
+                "method": "coordinate",
+                "slsqp_success": False,
+                "slsqp_message": "",
+                "slsqp_nfev": 0,
+            }
+        )
+    if not candidates:
+        candidates.append(
+            {
+                "q_sequence": list(base_sequence),
+                "delta_vs": list(delta_vs),
+                "alpha_values": list(alpha_values),
+                "error_deg": base_error,
+                "score": base_score,
+                "burns": _base_burns,
+                "method": "base",
+                "slsqp_success": False,
+                "slsqp_message": "",
+                "slsqp_nfev": 0,
+            }
+        )
+    candidates.sort(key=lambda item: item["score"])
+    diagnostics = _build_phase_diagnostics(config, candidates, optimizer_method="coordinate")
+    diagnostics["q_total_candidates"] = len(q_candidates)
+    diagnostics["q_screened_candidates"] = len(screened)
+    if _should_use_slsqp(config):
+        start = perf_counter()
+        refined, slsqp_diag = _refine_top_phase_candidates_slsqp(
+            config,
+            orbit_type=orbit_type,
+            apsis_pattern=apsis_pattern,
+            candidates=candidates,
+            started_at=start,
+        )
+        candidates = refined
+        diagnostics.update(slsqp_diag)
+    else:
+        diagnostics.update(
+            {
+                "q_tested_slsqp": 0,
+                "optimizer_method": str(config["optimizer"].get("method", "coordinate")),
+                "optimizer_converged": False,
+                "fallback_used": False,
+            }
+        )
+    candidates.sort(key=lambda item: item["score"])
+    best = candidates[0]
+    best_sequence = list(best["q_sequence"])
+    best_delta_vs = list(best["delta_vs"])
+    best_alpha_values = list(best["alpha_values"])
+    best_burns = list(best["burns"])
+    best_error = float(best["error_deg"])
+    final_diagnostics = _build_phase_diagnostics(config, candidates, optimizer_method=str(best["method"]))
+    final_diagnostics["q_total_candidates"] = len(q_candidates)
+    final_diagnostics["q_screened_candidates"] = len(screened)
+    diagnostics.update(final_diagnostics)
     return {
         "q_sequence": best_sequence,
         "delta_vs": best_delta_vs,
@@ -790,6 +893,7 @@ def _select_phase_plan(
         "alpha_optimized": best_alpha_values != list(alpha_values),
         "initial_error_deg": base_error,
         "burns": best_burns,
+        "diagnostics": diagnostics,
     }
 
 
@@ -815,22 +919,19 @@ def _phase_q_candidates(
     q_user = config["apsis"].get("q_sequence_user", [])
     if isinstance(q_user, list) and q_user:
         return [base_sequence]
-    q_default = _q_limit(config)
-    tail_q = 1 if apsis_pattern[-2:] == ["A", "P"] else base_sequence[-1]
-    raw = [
-        base_sequence,
-        [max(1, q_default - 1), max(1, q_default - 1), 1, tail_q],
-        [max(1, q_default - 1), 1, 1, tail_q],
-        [q_default, q_default, 1, tail_q],
-        [1, q_default, min(2, q_default), tail_q],
-        [1, 1, 1, tail_q],
-    ]
+    q_limit = _q_limit(config)
     candidates: list[list[int]] = []
     seen: set[tuple[int, ...]] = set()
+    raw: list[list[int]] = [base_sequence]
+    for values in product(range(1, q_limit + 1), repeat=len(base_sequence)):
+        candidate = list(values)
+        if apsis_pattern[-2:] == ["A", "P"]:
+            candidate[-1] = 1
+        raw.append(candidate)
     for candidate in raw:
-        if len(candidate) != len(base_sequence):
-            continue
-        normalized = [max(1, min(q_default, int(value))) for value in candidate]
+        normalized = [max(1, min(q_limit, int(value))) for value in candidate]
+        if apsis_pattern[-2:] == ["A", "P"]:
+            normalized[-1] = 1
         key = tuple(normalized)
         if key not in seen:
             candidates.append(normalized)
@@ -917,6 +1018,273 @@ def _optimize_phase_controls(
         "score": best_score,
         "burns": best_burns,
     }
+
+
+def _should_use_slsqp(config: dict[str, Any]) -> bool:
+    if minimize is None:
+        return False
+    optimizer = config["optimizer"]
+    method = str(optimizer.get("method", "")).upper()
+    return (
+        bool(optimizer.get("enabled", True))
+        and bool(config["alpha"].get("optimize_alpha", True))
+        and method == "SLSQP"
+        and int(optimizer.get("slsqp_top_k", 0)) > 0
+    )
+
+
+def _refine_top_phase_candidates_slsqp(
+    config: dict[str, Any],
+    *,
+    orbit_type: str,
+    apsis_pattern: list[str],
+    candidates: list[dict[str, Any]],
+    started_at: float,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    top_k = min(len(candidates), int(config["optimizer"]["slsqp_top_k"]))
+    multistart_top_k = min(top_k, int(config["optimizer"]["slsqp_multistart_top_k"]))
+    refined = [dict(candidate) for candidate in candidates]
+    tested = 0
+    converged = 0
+    nfev = 0
+    fallback_used = False
+    time_budget = max(0.0, float(config["optimizer"].get("time_budget_sec", 30.0)))
+    for rank, candidate in enumerate(candidates[:top_k]):
+        if time_budget > 0.0 and perf_counter() - started_at >= time_budget:
+            fallback_used = True
+            break
+        result = _optimize_phase_continuous_slsqp(
+            config,
+            orbit_type=orbit_type,
+            apsis_pattern=apsis_pattern,
+            candidate=candidate,
+            seed_count=3 if rank < multistart_top_k else 1,
+            started_at=started_at,
+        )
+        tested += 1
+        nfev += int(result.get("slsqp_nfev", 0)) if result else 0
+        if not result:
+            fallback_used = True
+            continue
+        converged += 1 if bool(result.get("slsqp_success", False)) else 0
+        if result["score"] < refined[rank]["score"]:
+            refined[rank] = result
+        else:
+            fallback_used = True
+    refined.sort(key=lambda item: item["score"])
+    return refined, {
+        "q_tested_slsqp": tested,
+        "optimizer_method": "SLSQP" if tested else "coordinate",
+        "optimizer_converged": converged > 0,
+        "slsqp_converged_candidates": converged,
+        "slsqp_nfev": nfev,
+        "fallback_used": fallback_used or (refined and refined[0].get("method") != "SLSQP"),
+        "elapsed_sec": perf_counter() - started_at,
+    }
+
+
+def _optimize_phase_continuous_slsqp(
+    config: dict[str, Any],
+    *,
+    orbit_type: str,
+    apsis_pattern: list[str],
+    candidate: dict[str, Any],
+    seed_count: int,
+    started_at: float,
+) -> dict[str, Any] | None:
+    if minimize is None or orbit_type != "supersynchronous_transfer" or apsis_pattern[-1] != "P":
+        return None
+    x0 = _continuous_x_from_burns(config, apsis_pattern, candidate.get("burns", []))
+    if x0 is None:
+        return None
+    bounds = _continuous_bounds(config, orbit_type, apsis_pattern, x0)
+    seeds = _continuous_seeds(config, apsis_pattern, x0)[: max(1, seed_count)]
+    best: dict[str, Any] | None = None
+    total_nfev = 0
+    time_budget = max(0.0, float(config["optimizer"].get("time_budget_sec", 30.0)))
+    for seed in seeds:
+        if time_budget > 0.0 and perf_counter() - started_at >= time_budget:
+            break
+        cache: dict[tuple[float, ...], tuple[tuple[float, ...], float, dict[str, float | bool], list[DesignManeuverBurn]]] = {}
+
+        def evaluate(x_values: Any) -> tuple[tuple[float, ...], float, dict[str, float | bool], list[DesignManeuverBurn]]:
+            key = tuple(round(float(value), 7) for value in x_values)
+            cached = cache.get(key)
+            if cached is not None:
+                return cached
+            target_post_a_values, alpha_trial = _continuous_unpack(config, apsis_pattern, [float(v) for v in x_values])
+            warnings: list[str] = []
+            burns = _build_burns(
+                config,
+                apsis_pattern=apsis_pattern,
+                delta_vs=[None] * len(apsis_pattern),
+                alpha_values=alpha_trial,
+                warnings=warnings,
+                q_sequence_override=list(candidate["q_sequence"]),
+                target_post_a_values=target_post_a_values,
+            )
+            score, signed_error, details = _phase_score_from_burns(config, burns, warnings)
+            value = (score, signed_error, details, burns)
+            cache[key] = value
+            return value
+
+        def objective(x_values: Any) -> float:
+            _score, _error, details, _burns = evaluate(x_values)
+            return _scalar_phase_cost(config, details)
+
+        def hard_constraints(x_values: Any) -> list[float]:
+            _score, _error, details, _burns = evaluate(x_values)
+            tolerance = config["terminal_tolerance"]
+            duration_limit = float(config["burn_limit"]["max_total_burn_time_min"])
+            values = [
+                float(tolerance["lon_deg"]) - abs(float(details["terminal_lon_error_deg"])),
+                float(tolerance["i_deg"]) - abs(float(details["terminal_i_error_deg"])),
+                float(tolerance["a_km"]) - abs(float(details["terminal_a_error_km"])),
+                float(tolerance["e"]) - abs(float(details["terminal_e_error"])),
+                duration_limit - float(details["max_burn_duration_min"]),
+            ]
+            values.extend(_post_a_chain_constraints(config, apsis_pattern, [float(v) for v in x_values]))
+            return values
+
+        result = minimize(
+            objective,
+            np.asarray(seed, dtype=float),
+            method="SLSQP",
+            bounds=bounds,
+            constraints=[{"type": "ineq", "fun": hard_constraints}],
+            options={
+                "maxiter": int(config["optimizer"]["slsqp_maxiter"]),
+                "ftol": 1.0e-7,
+                "disp": False,
+            },
+        )
+        total_nfev += int(getattr(result, "nfev", 0) or 0)
+        score, signed_error, _details, burns = evaluate(result.x)
+        if not burns:
+            continue
+        refined = {
+            "q_sequence": list(candidate["q_sequence"]),
+            "delta_vs": [burn.delta_v_mps for burn in burns],
+            "alpha_values": [burn.alpha_deg for burn in burns],
+            "error_deg": signed_error,
+            "score": score,
+            "burns": burns,
+            "method": "SLSQP",
+            "slsqp_success": bool(getattr(result, "success", False)),
+            "slsqp_message": str(getattr(result, "message", "")),
+            "slsqp_nfev": total_nfev,
+        }
+        if best is None or refined["score"] < best["score"]:
+            best = refined
+    if best is not None:
+        best["slsqp_nfev"] = total_nfev
+    return best
+
+
+def _continuous_x_from_burns(
+    config: dict[str, Any],
+    apsis_pattern: list[str],
+    burns: list[DesignManeuverBurn],
+) -> list[float] | None:
+    front_count = max(0, len(apsis_pattern) - 2)
+    alpha_count = max(0, len(apsis_pattern) - 1)
+    if len(burns) < len(apsis_pattern) or front_count <= 0 or alpha_count <= 0:
+        return None
+    post_a = [float(burns[index].post_a_km) for index in range(front_count)]
+    alpha = [float(burns[index].alpha_deg) for index in range(alpha_count)]
+    return post_a + alpha
+
+
+def _continuous_unpack(
+    config: dict[str, Any],
+    apsis_pattern: list[str],
+    x_values: list[float],
+) -> tuple[list[float | None], list[float]]:
+    front_count = max(0, len(apsis_pattern) - 2)
+    post_a_front = [float(value) for value in x_values[:front_count]]
+    supersync = config["supersynchronous_transfer"]
+    target_post_a_values: list[float | None] = post_a_front + [
+        float(supersync["a_tail_apogee_plus_fixed_km"]),
+        float(supersync["a_tail_perigee_plus_fixed_km"]),
+    ]
+    alpha_values = [float(value) for value in x_values[front_count:]] + [-180.0]
+    return target_post_a_values[: len(apsis_pattern)], alpha_values[: len(apsis_pattern)]
+
+
+def _continuous_bounds(
+    config: dict[str, Any],
+    orbit_type: str,
+    apsis_pattern: list[str],
+    x0: list[float],
+) -> list[tuple[float, float]]:
+    front_count = max(0, len(apsis_pattern) - 2)
+    initial_a = float(config["initial"]["a_km"])
+    tail_a = float(config["supersynchronous_transfer"]["a_tail_apogee_plus_fixed_km"])
+    manual_first_control = _first_post_a_control_km(config)
+    bounds: list[tuple[float, float]] = []
+    for index in range(front_count):
+        current = float(x0[index])
+        if index == 0 and manual_first_control is not None:
+            bounds.append((current, current))
+            continue
+        low = max(initial_a + 1.0, current - 15000.0)
+        high = min(tail_a - 1.0, current + 15000.0)
+        low = min(low, current)
+        high = max(high, current)
+        bounds.append((low, high))
+    alpha_bounds = _alpha_search_bounds(config, orbit_type, apsis_pattern)
+    for index in range(max(0, len(apsis_pattern) - 1)):
+        bounds.append(alpha_bounds[index])
+    return bounds
+
+
+def _continuous_seeds(config: dict[str, Any], apsis_pattern: list[str], x0: list[float]) -> list[list[float]]:
+    front_count = max(0, len(apsis_pattern) - 2)
+    alpha_count = max(0, len(apsis_pattern) - 1)
+    seeds = [list(x0)]
+    if front_count <= 0:
+        return seeds
+    initial_a = float(config["initial"]["a_km"])
+    tail_a = float(config["supersynchronous_transfer"]["a_tail_apogee_plus_fixed_km"])
+    linear = [initial_a + (tail_a - initial_a) * (index + 1) / (front_count + 1) for index in range(front_count)]
+    alpha_base = list(x0[front_count : front_count + alpha_count])
+    seeds.append(linear + alpha_base)
+    small_alpha = [min(20.0, max(-20.0, value * 0.5)) for value in alpha_base]
+    seeds.append(linear + small_alpha)
+    return seeds
+
+
+def _post_a_chain_constraints(config: dict[str, Any], apsis_pattern: list[str], x_values: list[float]) -> list[float]:
+    front_count = max(0, len(apsis_pattern) - 2)
+    if front_count <= 0:
+        return []
+    values: list[float] = []
+    initial_a = float(config["initial"]["a_km"])
+    tail_a = float(config["supersynchronous_transfer"]["a_tail_apogee_plus_fixed_km"])
+    post_a = [float(value) for value in x_values[:front_count]]
+    values.append(post_a[0] - initial_a - 1.0)
+    for previous, current in zip(post_a, post_a[1:]):
+        values.append(current - previous - 1.0)
+    values.append(tail_a - post_a[-1] - 1.0)
+    return values
+
+
+def _scalar_phase_cost(config: dict[str, Any], details: dict[str, float | bool]) -> float:
+    optimizer = config["optimizer"]
+    invalid_penalty = 1.0e12 if bool(details.get("invalid", False)) else 0.0
+    def finite(value: object, fallback: float = 1.0e6) -> float:
+        number = float(value)
+        return number if math.isfinite(number) else fallback
+
+    return (
+        invalid_penalty
+        + finite(details["total_propellant_kg"])
+        + float(optimizer["longitude_weight"]) * finite(details["terminal_lon_excess"]) ** 2
+        + float(optimizer["inclination_weight"]) * finite(details["terminal_i_excess"]) ** 2
+        + float(optimizer["semi_major_axis_weight"]) * finite(details["terminal_a_excess"]) ** 2
+        + float(optimizer["eccentricity_weight"]) * finite(details["terminal_e_excess"]) ** 2
+        + float(optimizer["duration_weight"]) * finite(details["max_burn_duration_excess_min"]) ** 2
+    )
 
 
 def _coordinate_search_phase_controls(
@@ -1068,6 +1436,100 @@ def _first_post_a_control_km(config: dict[str, Any]) -> float | None:
     return _optional_float(config.get("distribution", {}).get("first_post_a_control_km"))
 
 
+def _build_phase_diagnostics(
+    config: dict[str, Any],
+    candidates: list[dict[str, Any]],
+    *,
+    optimizer_method: str,
+) -> dict[str, Any]:
+    feasible = 0
+    top_candidates: list[dict[str, Any]] = []
+    for item in candidates:
+        burns = item.get("burns", [])
+        score, _error, details = _phase_score_from_burns(config, burns, [])
+        is_feasible = (
+            float(item.get("score", score)[0]) <= 0.0
+            and not bool(details["invalid"])
+            and float(details["terminal_lon_excess"]) <= 0.0
+            and float(details["terminal_i_excess"]) <= 0.0
+            and float(details["terminal_a_excess"]) <= 0.0
+            and float(details["terminal_e_excess"]) <= 0.0
+            and float(details["max_burn_duration_excess_min"]) <= 0.0
+        )
+        feasible += 1 if is_feasible else 0
+        if len(top_candidates) < 5:
+            top_candidates.append(
+                {
+                    "q_sequence": list(item.get("q_sequence", [])),
+                    "method": str(item.get("method", "")),
+                    "score": list(score),
+                    "propellant_kg": float(details["total_propellant_kg"]),
+                    "lon_error_deg": float(details["terminal_lon_error_deg"]),
+                    "i_error_deg": float(details["terminal_i_error_deg"]),
+                    "a_error_km": float(details["terminal_a_error_km"]),
+                    "e_error": float(details["terminal_e_error"]),
+                    "max_burn_duration_min": float(details["max_burn_duration_min"]),
+                }
+            )
+    best = candidates[0] if candidates else {}
+    best_burns = best.get("burns", [])
+    _score, _error, best_details = _phase_score_from_burns(config, best_burns, [])
+    tolerance = config["terminal_tolerance"]
+    duration_limit = float(config["burn_limit"]["max_total_burn_time_min"])
+    return {
+        "q_total_candidates": len(candidates),
+        "q_tested_fast": len(candidates),
+        "feasible_solutions": feasible,
+        "best_q_sequence": list(best.get("q_sequence", [])),
+        "optimizer_method": optimizer_method,
+        "optimizer_converged": str(best.get("method", "")) == "SLSQP" and bool(best.get("slsqp_success", False)),
+        "active_constraints": _active_phase_constraints(config, best_details),
+        "alpha_at_bounds": _detect_alpha_at_bounds(config, best_burns),
+        "terminal_error_margins": {
+            "lon_deg": float(tolerance["lon_deg"]) - abs(float(best_details["terminal_lon_error_deg"])),
+            "i_deg": float(tolerance["i_deg"]) - abs(float(best_details["terminal_i_error_deg"])),
+            "a_km": float(tolerance["a_km"]) - abs(float(best_details["terminal_a_error_km"])),
+            "e": float(tolerance["e"]) - abs(float(best_details["terminal_e_error"])),
+        },
+        "max_burn_duration_margin_min": duration_limit - float(best_details["max_burn_duration_min"]),
+        "top_candidates": top_candidates,
+    }
+
+
+def _active_phase_constraints(config: dict[str, Any], details: dict[str, float | bool]) -> list[str]:
+    tolerance = config["terminal_tolerance"]
+    duration_limit = float(config["burn_limit"]["max_total_burn_time_min"])
+    active: list[str] = []
+    if abs(float(details["terminal_lon_error_deg"])) >= 0.8 * float(tolerance["lon_deg"]):
+        active.append("terminal_lon")
+    if abs(float(details["terminal_i_error_deg"])) >= 0.8 * float(tolerance["i_deg"]):
+        active.append("terminal_i")
+    if abs(float(details["terminal_a_error_km"])) >= 0.8 * float(tolerance["a_km"]):
+        active.append("terminal_a")
+    if abs(float(details["terminal_e_error"])) >= 0.8 * float(tolerance["e"]):
+        active.append("terminal_e")
+    if duration_limit - float(details["max_burn_duration_min"]) <= 1.0:
+        active.append("burn_duration")
+    return active
+
+
+def _detect_alpha_at_bounds(config: dict[str, Any], burns: list[DesignManeuverBurn]) -> list[dict[str, float | int]]:
+    if not burns:
+        return []
+    orbit_type = _classify_orbit(
+        config,
+        float(config["initial"]["a_km"]) * (1.0 + float(config["initial"]["e"])),
+        float(config["target"]["a_km"]),
+    )
+    bounds = _alpha_search_bounds(config, orbit_type, [burn.apsis for burn in burns])
+    hits: list[dict[str, float | int]] = []
+    for index, burn in enumerate(burns):
+        low, high = bounds[index]
+        if abs(burn.alpha_deg - low) <= 1.0e-6 or abs(burn.alpha_deg - high) <= 1.0e-6:
+            hits.append({"index": index + 1, "alpha_deg": burn.alpha_deg, "low": low, "high": high})
+    return hits
+
+
 def _phase_score(
     config: dict[str, Any],
     apsis_pattern: list[str],
@@ -1086,42 +1548,98 @@ def _phase_score(
         q_sequence_override=q_sequence,
         target_post_a_values=target_post_a_values,
     )
+    score, signed_error, _details = _phase_score_from_burns(config, burns, warnings)
+    return score, signed_error, burns
+
+
+def _phase_score_from_burns(
+    config: dict[str, Any],
+    burns: list[DesignManeuverBurn],
+    warnings: list[str],
+) -> tuple[tuple[float, ...], float, dict[str, float | bool]]:
     if not burns:
-        return (
-            1.0,
-            float("inf"),
-            float("inf"),
-            float("inf"),
-            float("inf"),
-            float("inf"),
-            float("inf"),
-            float("inf"),
-        ), float("inf"), []
-    signed_error = _wrap180(burns[-1].longitude_deg_e - float(config["target"]["lon_degE"]))
-    error = abs(signed_error)
+        details: dict[str, float | bool] = {
+            "invalid": True,
+            "terminal_lon_error_deg": float("inf"),
+            "terminal_i_error_deg": float("inf"),
+            "terminal_a_error_km": float("inf"),
+            "terminal_e_error": float("inf"),
+            "terminal_lon_excess": float("inf"),
+            "terminal_i_excess": float("inf"),
+            "terminal_a_excess": float("inf"),
+            "terminal_e_excess": float("inf"),
+            "total_propellant_kg": float("inf"),
+            "max_burn_duration_min": float("inf"),
+            "max_burn_duration_excess_min": float("inf"),
+            "uniform_spread_mps": float("inf"),
+            "duration_penalty": float("inf"),
+            "warning_penalty": float("inf"),
+        }
+        return (1.0, float("inf"), float("inf"), float("inf"), float("inf"), float("inf"), float("inf"), float("inf"), float("inf"), float("inf")), float("inf"), details
+    signed_lon_error = _wrap180(burns[-1].longitude_deg_e - float(config["target"]["lon_degE"]))
+    lon_error = abs(signed_lon_error)
+    target = config["target"]
+    tolerance = config["terminal_tolerance"]
+    terminal_i_signed = burns[-1].post_i_deg - float(target["i_deg"])
+    terminal_a_signed = burns[-1].post_a_km - float(target["a_km"])
+    terminal_e_signed = burns[-1].post_e - float(target["e"])
+    terminal_i_error = abs(terminal_i_signed)
+    terminal_a_error = abs(terminal_a_signed)
+    terminal_e_error = abs(terminal_e_signed)
+    terminal_lon_excess = max(0.0, lon_error - float(tolerance["lon_deg"]))
+    terminal_i_excess = max(0.0, terminal_i_error - float(tolerance["i_deg"]))
+    terminal_a_excess = max(0.0, terminal_a_error - float(tolerance["a_km"]))
+    terminal_e_excess = max(0.0, terminal_e_error - float(tolerance["e"]))
     max_duration = max(burn.total_burn_time_min for burn in burns)
     duration_limit = float(config["burn_limit"]["max_total_burn_time_min"])
-    duration_penalty = max(0.0, max_duration - duration_limit) * 1000.0
-    invalid = 1 if warnings or duration_penalty > 0.0 else 0
-    tolerance = float(config["terminal_tolerance"]["lon_deg"])
-    terminal_excess = max(0.0, error - tolerance)
-    target = config["target"]
-    terminal_i_error = abs(burns[-1].post_i_deg - float(target["i_deg"]))
-    terminal_i_excess = max(0.0, terminal_i_error - float(config["terminal_tolerance"]["i_deg"]))
-    terminal_a_error = abs(burns[-1].post_a_km - float(target["a_km"]))
-    terminal_a_excess = max(0.0, terminal_a_error - float(config["terminal_tolerance"]["a_km"]))
+    duration_excess = max(0.0, max_duration - duration_limit)
+    duration_penalty = duration_excess * 1000.0
+    warning_penalty = 1000.0 if warnings else 0.0
+    invalid = bool(warnings) or duration_excess > 0.0 or not all(
+        math.isfinite(value)
+        for burn in burns
+        for value in (
+            burn.delta_v_mps,
+            burn.alpha_deg,
+            burn.post_a_km,
+            burn.post_e,
+            burn.post_i_deg,
+            burn.total_burn_time_min,
+            burn.propellant_kg,
+        )
+    )
     propellant = sum(burn.propellant_kg for burn in burns)
     spread = _uniform_spread([burn.delta_v_mps for burn in burns if burn.burn_type != "tail_fixed"])
-    return (
-        float(invalid),
-        terminal_excess + duration_penalty + (1000.0 if warnings else 0.0),
+    details = {
+        "invalid": invalid,
+        "terminal_lon_error_deg": signed_lon_error,
+        "terminal_i_error_deg": terminal_i_signed,
+        "terminal_a_error_km": terminal_a_signed,
+        "terminal_e_error": terminal_e_signed,
+        "terminal_lon_excess": terminal_lon_excess,
+        "terminal_i_excess": terminal_i_excess,
+        "terminal_a_excess": terminal_a_excess,
+        "terminal_e_excess": terminal_e_excess,
+        "total_propellant_kg": propellant,
+        "max_burn_duration_min": max_duration,
+        "max_burn_duration_excess_min": duration_excess,
+        "uniform_spread_mps": spread,
+        "duration_penalty": duration_penalty,
+        "warning_penalty": warning_penalty,
+    }
+    score = (
+        1.0 if invalid else 0.0,
+        terminal_lon_excess,
         terminal_i_excess,
         terminal_a_excess,
+        terminal_e_excess,
+        duration_excess,
         propellant,
-        error,
+        lon_error,
         max_duration,
         spread,
-    ), signed_error, burns
+    )
+    return score, signed_lon_error, details
 
 
 def _initial_state_km(config: dict[str, Any]) -> tuple[np.ndarray, np.ndarray]:
