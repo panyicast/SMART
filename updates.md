@@ -222,6 +222,10 @@
 - 提交：`9d70370`
 - 影响文件：`projects/F4/config/design_maneuver_strategy.json`、`projects/F4/smart_project.json`。
 
-## 2026-05-15T14:14:29+08:00 | move design maneuver summary left
-- 提交：`本次提交`
+## 2026-05-15T14:14:31+08:00 | move design maneuver summary left
+- 提交：`32198d8`
 - 影响文件：`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-15T16:12:25+08:00 | archive design maneuver results
+- 提交：`本次提交`
+- 影响文件：`src/smart/services/design_maneuver_strategy.py`、`src/smart/services/project_workspace.py`、`src/smart/ui/i18n.py`、`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`tests/test_project_workspace.py`、`HANDOFF.md`。

@@ -487,7 +487,11 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._set_controls_enabled(True)
         self._refresh_config_path_label()
         self._clear_results()
-        self._set_status("statusReady", self._i18n.t("design_maneuver.status.loaded"))
+        archived_loaded = self._load_archived_result()
+        if archived_loaded is True:
+            self._set_status("statusReady", self._i18n.t("design_maneuver.status.loaded_with_result"))
+        elif archived_loaded is False:
+            self._set_status("statusReady", self._i18n.t("design_maneuver.status.loaded"))
 
     def save_config(self) -> Path | None:
         if self._workspace.current_project is None:
@@ -515,7 +519,15 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             self._set_status("statusDisconnected", self._i18n.t("design_maneuver.status.plan_failed", error=str(exc)))
             return
         self._set_result(result)
-        self._set_status("statusReady", self._i18n.t("design_maneuver.status.plan_done"))
+        try:
+            path = self._workspace.save_design_maneuver_results(result)
+        except Exception as exc:
+            self._set_status(
+                "statusDisconnected",
+                self._i18n.t("design_maneuver.status.result_save_failed", error=str(exc)),
+            )
+            return
+        self._set_status("statusReady", self._i18n.t("design_maneuver.status.plan_done", path=str(path)))
 
     def config(self) -> dict[str, Any]:
         config = normalize_design_maneuver_strategy_payload(self._config)
@@ -547,6 +559,22 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._apply_config_to_fields(self._config)
         self._emit_config_changed()
         self._set_status("statusReady", self._i18n.t("design_maneuver.status.baseline_loaded"))
+
+    def _load_archived_result(self) -> bool | None:
+        if self._workspace.current_project is None:
+            return False
+        try:
+            result = self._workspace.load_design_maneuver_results()
+        except Exception as exc:
+            self._set_status(
+                "statusDisconnected",
+                self._i18n.t("design_maneuver.status.result_load_failed", error=str(exc)),
+            )
+            return None
+        if result is None:
+            return False
+        self._set_result(result)
+        return True
 
     def _apply_config_to_fields(self, config: dict[str, Any]) -> None:
         normalized = normalize_design_maneuver_strategy_payload(config)

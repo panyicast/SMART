@@ -88,6 +88,12 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path) -> None
     assert page._summary_table.rowCount() > 0
     assert page._burn_table.rowCount() == 2
     assert page._check_table.rowCount() > 0
+    assert workspace.design_maneuver_results_path().exists()
+
+    reloaded_page = DesignManeuverStrategyPage(I18nManager("zh"), workspace)
+    assert reloaded_page._summary_table.rowCount() > 0
+    assert reloaded_page._burn_table.rowCount() == 2
+    assert reloaded_page._check_table.rowCount() > 0
 
     beijing_tz = QtCore.QTimeZone(b"Asia/Shanghai")
     parameter_dialog = _DesignManeuverSettingsDialog(

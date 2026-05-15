@@ -17,6 +17,9 @@ from smart.domain.models import (
 )
 from smart.services.earth_orientation import format_utc, parse_utc, utc_now_iso_z
 from smart.services.design_maneuver_strategy import (
+    DesignManeuverResult,
+    design_maneuver_result_from_payload,
+    design_maneuver_result_to_payload,
     default_design_maneuver_strategy_payload,
     normalize_design_maneuver_strategy_payload,
 )
@@ -36,6 +39,7 @@ SATELLITE_SETTINGS_FILE = "satellite_status.json"
 ORBIT_INITIALIZATION_FILE = "orbit_initialization.json"
 MANEUVER_STRATEGY_FILE = "maneuver_strategy.json"
 DESIGN_MANEUVER_STRATEGY_FILE = "design_maneuver_strategy.json"
+DESIGN_MANEUVER_RESULTS_FILE = "design_maneuver_results.json"
 LAUNCH_WINDOW_FILE = "launch_window.json"
 TRACKING_ARC_FILE = "tracking_arc.json"
 TRACKING_ARC_RESULTS_FILE = "tracking_arc_results.json"
@@ -178,6 +182,9 @@ class ProjectWorkspace:
     def design_maneuver_strategy_path(self) -> Path:
         return self.config_dir() / DESIGN_MANEUVER_STRATEGY_FILE
 
+    def design_maneuver_results_path(self) -> Path:
+        return self.data_dir() / DESIGN_MANEUVER_RESULTS_FILE
+
     def launch_window_path(self) -> Path:
         return self.config_dir() / LAUNCH_WINDOW_FILE
 
@@ -279,6 +286,18 @@ class ProjectWorkspace:
             return None
         payload = _read_json(file_path)
         return normalize_design_maneuver_strategy_payload(payload)
+
+    def save_design_maneuver_results(self, result: DesignManeuverResult) -> Path:
+        file_path = self.design_maneuver_results_path()
+        _write_json(file_path, design_maneuver_result_to_payload(result))
+        self._touch_updated_time()
+        return file_path
+
+    def load_design_maneuver_results(self) -> DesignManeuverResult | None:
+        file_path = self.design_maneuver_results_path()
+        if not file_path.exists():
+            return None
+        return design_maneuver_result_from_payload(_read_json(file_path))
 
     def save_launch_window_config(self, config: dict[str, Any]) -> Path:
         payload = normalize_launch_window_config(config)

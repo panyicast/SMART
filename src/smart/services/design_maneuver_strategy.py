@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 import math
 from typing import Any
@@ -45,6 +45,37 @@ class DesignManeuverResult:
     burns: list[DesignManeuverBurn]
     checks: list[dict[str, Any]]
     warnings: list[str]
+
+
+def design_maneuver_result_to_payload(result: DesignManeuverResult) -> dict[str, Any]:
+    return {
+        "config": normalize_design_maneuver_strategy_payload(result.config),
+        "summary": dict(result.summary),
+        "burns": [asdict(burn) for burn in result.burns],
+        "checks": [dict(check) for check in result.checks],
+        "warnings": list(result.warnings),
+    }
+
+
+def design_maneuver_result_from_payload(payload: dict[str, Any] | None) -> DesignManeuverResult:
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid design maneuver result payload.")
+    burns_payload = payload.get("burns", [])
+    checks_payload = payload.get("checks", [])
+    warnings_payload = payload.get("warnings", [])
+    if not isinstance(burns_payload, list):
+        raise ValueError("Invalid design maneuver result payload: 'burns' must be a list.")
+    if not isinstance(checks_payload, list):
+        raise ValueError("Invalid design maneuver result payload: 'checks' must be a list.")
+    if not isinstance(warnings_payload, list):
+        raise ValueError("Invalid design maneuver result payload: 'warnings' must be a list.")
+    return DesignManeuverResult(
+        config=normalize_design_maneuver_strategy_payload(payload.get("config")),
+        summary=dict(payload.get("summary", {})) if isinstance(payload.get("summary", {}), dict) else {},
+        burns=[DesignManeuverBurn(**dict(item)) for item in burns_payload if isinstance(item, dict)],
+        checks=[dict(item) for item in checks_payload if isinstance(item, dict)],
+        warnings=[str(item) for item in warnings_payload],
+    )
 
 
 def default_design_maneuver_strategy_payload() -> dict[str, Any]:

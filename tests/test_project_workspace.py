@@ -13,6 +13,10 @@ from smart.domain.models import (
     SatelliteStructureConfig,
 )
 from smart.services.project_workspace import ProjectWorkspace
+from smart.services.design_maneuver_strategy import (
+    default_design_maneuver_strategy_payload,
+    plan_design_maneuver_strategy,
+)
 
 
 def test_create_project_creates_expected_structure(tmp_path: Path) -> None:
@@ -285,6 +289,21 @@ def test_save_and_load_flight_program_reference_results(tmp_path: Path) -> None:
 
     assert file_path == workspace.root_dir / "data" / "flight_program_reference_results.json"
     assert workspace.load_flight_program_reference_results() == payload
+
+
+def test_save_and_load_design_maneuver_results(tmp_path: Path) -> None:
+    workspace = ProjectWorkspace()
+    workspace.create_project("design-maneuver-results", tmp_path)
+    result = plan_design_maneuver_strategy(default_design_maneuver_strategy_payload())
+
+    file_path = workspace.save_design_maneuver_results(result)
+    loaded = workspace.load_design_maneuver_results()
+
+    assert file_path == workspace.root_dir / "data" / "design_maneuver_results.json"
+    assert loaded is not None
+    assert loaded.summary["actual_count"] == result.summary["actual_count"]
+    assert len(loaded.burns) == len(result.burns)
+    assert loaded.burns[0].delta_v_mps == pytest.approx(result.burns[0].delta_v_mps)
 
 
 def test_open_project_requires_metadata_file(tmp_path: Path) -> None:
