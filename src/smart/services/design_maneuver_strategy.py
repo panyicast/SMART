@@ -412,6 +412,7 @@ def plan_design_maneuver_strategy(payload: dict[str, Any] | None) -> DesignManeu
         alpha_values=alpha_values,
     )
     delta_vs = phase_plan["delta_vs"]
+    alpha_values = phase_plan["alpha_values"]
     if phase_plan["burns"]:
         burns = phase_plan["burns"]
     else:
@@ -459,6 +460,8 @@ def plan_design_maneuver_strategy(payload: dict[str, Any] | None) -> DesignManeu
         "q_sequence": ",".join(str(value) for value in phase_plan["q_sequence"]),
         "phase_optimized": bool(phase_plan["optimized"]),
         "phase_delta_v_optimized": bool(phase_plan["delta_v_optimized"]),
+        "phase_alpha_optimized": bool(phase_plan["alpha_optimized"]),
+        "optimized_propellant_kg": sum(burn.propellant_kg for burn in burns),
         "phase_lon_error_before_deg": phase_plan["initial_error_deg"],
         "duration_ok": duration_ok,
         "longitude_ok": longitude_ok,
@@ -743,8 +746,10 @@ def _select_phase_plan(
         return {
             "q_sequence": list(base_sequence),
             "delta_vs": list(delta_vs),
+            "alpha_values": list(alpha_values),
             "optimized": False,
             "delta_v_optimized": False,
+            "alpha_optimized": False,
             "initial_error_deg": None,
             "burns": [],
         }
@@ -755,10 +760,11 @@ def _select_phase_plan(
     best_sequence = list(base_sequence)
     best_error = base_error
     best_delta_vs = list(delta_vs)
-    tolerance = float(config["terminal_tolerance"]["lon_deg"])
+    best_alpha_values = list(alpha_values)
     for candidate in _phase_q_candidates(config, apsis_pattern, base_sequence):
-        optimized = _optimize_phase_delta_vs(
+        optimized = _optimize_phase_controls(
             config,
+            orbit_type=orbit_type,
             apsis_pattern=apsis_pattern,
             delta_vs=delta_vs,
             alpha_values=alpha_values,
@@ -770,15 +776,18 @@ def _select_phase_plan(
             best_sequence = list(candidate)
             best_error = error
             best_delta_vs = list(optimized["delta_vs"])
+            best_alpha_values = list(optimized["alpha_values"])
             best_score = score
             best_burns = optimized["burns"]
-            if score[0] == 0 and abs(best_error) <= tolerance:
-                break
     return {
         "q_sequence": best_sequence,
         "delta_vs": best_delta_vs,
-        "optimized": best_sequence != base_sequence or best_delta_vs != list(delta_vs),
+        "alpha_values": best_alpha_values,
+        "optimized": best_sequence != base_sequence
+        or best_delta_vs != list(delta_vs)
+        or best_alpha_values != list(alpha_values),
         "delta_v_optimized": best_delta_vs != list(delta_vs),
+        "alpha_optimized": best_alpha_values != list(alpha_values),
         "initial_error_deg": base_error,
         "burns": best_burns,
     }
@@ -829,9 +838,10 @@ def _phase_q_candidates(
     return candidates
 
 
-def _optimize_phase_delta_vs(
+def _optimize_phase_controls(
     config: dict[str, Any],
     *,
+    orbit_type: str,
     apsis_pattern: list[str],
     delta_vs: list[float | None],
     alpha_values: list[float],
@@ -842,6 +852,7 @@ def _optimize_phase_delta_vs(
         score, error, _burns = _phase_score(config, apsis_pattern, delta_vs, alpha_values, q_sequence)
         return {
             "delta_vs": list(delta_vs),
+            "alpha_values": list(alpha_values),
             "error_deg": error,
             "score": score,
             "burns": _burns,
@@ -852,47 +863,99 @@ def _optimize_phase_delta_vs(
         [front_base[0] * 0.55, front_base[1] * 0.55, front_base[2] * 1.18],
     ]
     best_delta_vs = list(delta_vs)
+    best_alpha_values = list(alpha_values)
     best_score, best_error, best_burns = _phase_score(
-        config, apsis_pattern, best_delta_vs, alpha_values, q_sequence
+        config, apsis_pattern, best_delta_vs, best_alpha_values, q_sequence
     )
     for seed in seeds:
-        optimized_delta_vs, error, score, opt_burns = _coordinate_search_front_delta_vs(
+        optimized_delta_vs, optimized_alpha_values, error, score, opt_burns = _coordinate_search_phase_controls(
             config,
+            orbit_type=orbit_type,
             apsis_pattern=apsis_pattern,
             delta_vs=delta_vs,
             alpha_values=alpha_values,
             q_sequence=q_sequence,
             seed_front=seed,
+            search_alpha=False,
         )
         if score < best_score:
             best_delta_vs = optimized_delta_vs
+            best_alpha_values = optimized_alpha_values
             best_error = error
             best_score = score
             best_burns = opt_burns
-    return {"delta_vs": best_delta_vs, "error_deg": best_error, "score": best_score, "burns": best_burns}
+    if bool(config["alpha"]["optimize_alpha"]):
+        target_post_a_values = [burn.post_a_km for burn in best_burns] if best_burns else None
+        alpha_seed = (
+            _inclination_weighted_alpha_seed(config, apsis_pattern, best_burns, best_alpha_values)
+            if target_post_a_values is not None
+            else best_alpha_values
+        )
+        refined_delta_vs, refined_alpha_values, refined_error, refined_score, refined_burns = (
+            _coordinate_search_phase_controls(
+                config,
+                orbit_type=orbit_type,
+                apsis_pattern=apsis_pattern,
+                delta_vs=[None] * len(delta_vs),
+                alpha_values=alpha_seed,
+                q_sequence=q_sequence,
+                seed_front=[float(value or 0.0) for value in best_delta_vs[:front_count]],
+                search_alpha=True,
+                target_post_a_values=target_post_a_values,
+            )
+        )
+        if refined_score < best_score:
+            best_delta_vs = refined_delta_vs
+            best_alpha_values = refined_alpha_values
+            best_error = refined_error
+            best_score = refined_score
+            best_burns = refined_burns
+    return {
+        "delta_vs": best_delta_vs,
+        "alpha_values": best_alpha_values,
+        "error_deg": best_error,
+        "score": best_score,
+        "burns": best_burns,
+    }
 
 
-def _coordinate_search_front_delta_vs(
+def _coordinate_search_phase_controls(
     config: dict[str, Any],
     *,
+    orbit_type: str,
     apsis_pattern: list[str],
     delta_vs: list[float | None],
     alpha_values: list[float],
     q_sequence: list[int],
     seed_front: list[float],
-) -> tuple[list[float | None], float, tuple[int, float, float, float], list[DesignManeuverBurn]]:
+    search_alpha: bool,
+    target_post_a_values: list[float | None] | None = None,
+) -> tuple[list[float | None], list[float], float, tuple[float, ...], list[DesignManeuverBurn]]:
     front_count = len(seed_front)
     current = [float(value) for value in seed_front]
-    candidate_delta_vs: list[float | None] = current + list(delta_vs[front_count:])
+    current_alpha = list(alpha_values)
+    candidate_delta_vs: list[float | None] = (
+        [None] * len(delta_vs) if target_post_a_values is not None else current + list(delta_vs[front_count:])
+    )
     best_score, best_error, best_burns = _phase_score(
-        config, apsis_pattern, candidate_delta_vs, alpha_values, q_sequence
+        config,
+        apsis_pattern,
+        candidate_delta_vs,
+        current_alpha,
+        q_sequence,
+        target_post_a_values=target_post_a_values,
     )
     min_dv = float(config["distribution"]["dv_min_per_burn_mps"])
     max_dv = max(700.0, max(current, default=0.0) + 100.0)
-    search_indices = range(1, front_count) if _first_post_a_control_km(config) is not None else range(front_count)
+    if target_post_a_values is not None:
+        search_indices = range(0)
+    else:
+        search_indices = range(1, front_count) if _first_post_a_control_km(config) is not None else range(front_count)
+    alpha_bounds = _alpha_search_bounds(config, orbit_type, apsis_pattern)
     eval_count = 1
-    eval_limit = min(80, max(1, int(config["optimizer"]["maxfev"])))
-    for step in (80.0, 40.0, 20.0, 10.0, 5.0, 2.0, 1.0, 0.5, 0.2, 0.1, 0.05):
+    eval_cap = 80 if search_alpha else 25
+    eval_limit = min(eval_cap, max(1, int(config["optimizer"]["maxfev"])))
+    for step in (80.0, 40.0, 20.0, 10.0, 5.0, 2.0, 1.0, 0.5):
         improved = True
         while improved and eval_count < eval_limit:
             improved = False
@@ -904,7 +967,7 @@ def _coordinate_search_front_delta_vs(
                         continue
                     trial_delta_vs: list[float | None] = trial + list(delta_vs[front_count:])
                     score, trial_error, _trial_burns = _phase_score(
-                        config, apsis_pattern, trial_delta_vs, alpha_values, q_sequence
+                        config, apsis_pattern, trial_delta_vs, current_alpha, q_sequence
                     )
                     eval_count += 1
                     if score < best_score:
@@ -917,7 +980,88 @@ def _coordinate_search_front_delta_vs(
                         break
                 if improved:
                     break
-    return candidate_delta_vs, best_error, best_score, best_burns
+            if improved or not search_alpha:
+                continue
+            alpha_step = max(0.1, min(10.0, step))
+            for index, bounds in enumerate(alpha_bounds):
+                for sign in (1.0, -1.0):
+                    trial_alpha = list(current_alpha)
+                    trial_alpha[index] = max(bounds[0], min(bounds[1], trial_alpha[index] + sign * alpha_step))
+                    if trial_alpha[index] == current_alpha[index]:
+                        continue
+                    score, trial_error, _trial_burns = _phase_score(
+                        config,
+                        apsis_pattern,
+                        candidate_delta_vs,
+                        trial_alpha,
+                        q_sequence,
+                        target_post_a_values=target_post_a_values,
+                    )
+                    eval_count += 1
+                    if score < best_score:
+                        current_alpha = trial_alpha
+                        best_score = score
+                        best_error = trial_error
+                        best_burns = _trial_burns
+                        improved = True
+                        break
+                if improved or eval_count >= eval_limit:
+                    break
+    return candidate_delta_vs, current_alpha, best_error, best_score, best_burns
+
+
+def _inclination_weighted_alpha_seed(
+    config: dict[str, Any],
+    apsis_pattern: list[str],
+    burns: list[DesignManeuverBurn],
+    fallback_alpha_values: list[float],
+) -> list[float]:
+    values = list(fallback_alpha_values)
+    if not burns or len(values) < len(apsis_pattern):
+        return values
+    initial_i = float(config["initial"]["i_deg"])
+    target_i = float(config["target"]["i_deg"])
+    direction = 1.0 if initial_i >= target_i else -1.0
+    active = [
+        index
+        for index, apsis in enumerate(apsis_pattern)
+        if apsis == "A" and index < len(burns) and not (index == len(apsis_pattern) - 1)
+    ]
+    if not active:
+        return values
+    weights = [abs(burns[index].semi_major_axis_control_km) for index in active]
+    total = sum(weights)
+    if total <= 1.0e-9:
+        weights = [1.0] * len(active)
+        total = float(len(active))
+    for index, weight in zip(active, weights):
+        fraction = weight / total
+        magnitude = min(40.0, max(2.0, 40.0 * fraction))
+        values[index] = direction * magnitude
+    if apsis_pattern and apsis_pattern[-1] == "P":
+        values[-1] = -180.0
+    return values
+
+
+def _alpha_search_bounds(
+    config: dict[str, Any],
+    orbit_type: str,
+    apsis_pattern: list[str],
+) -> list[tuple[float, float]]:
+    alpha_cfg = config["alpha"]
+    bounds: list[tuple[float, float]] = []
+    for index, apsis in enumerate(apsis_pattern):
+        if orbit_type == "standard_transfer":
+            raw_bounds = alpha_cfg["standard_bounds_deg"]
+        elif index == len(apsis_pattern) - 1 and apsis == "P":
+            raw_bounds = alpha_cfg["tail_perigee_bounds_deg"]
+        elif index >= max(0, len(apsis_pattern) - 2):
+            raw_bounds = alpha_cfg["tail_apogee_bounds_deg"]
+        else:
+            raw_bounds = alpha_cfg["front_bounds_deg"]
+        low, high = float(raw_bounds[0]), float(raw_bounds[1])
+        bounds.append((min(low, high), max(low, high)))
+    return bounds
 
 
 def _first_post_a_control_km(config: dict[str, Any]) -> float | None:
@@ -930,7 +1074,8 @@ def _phase_score(
     delta_vs: list[float | None],
     alpha_values: list[float],
     q_sequence: list[int],
-) -> tuple[tuple[int, float, float, float], float, list[DesignManeuverBurn]]:
+    target_post_a_values: list[float | None] | None = None,
+) -> tuple[tuple[float, ...], float, list[DesignManeuverBurn]]:
     warnings: list[str] = []
     burns = _build_burns(
         config,
@@ -939,17 +1084,44 @@ def _phase_score(
         alpha_values=alpha_values,
         warnings=warnings,
         q_sequence_override=q_sequence,
+        target_post_a_values=target_post_a_values,
     )
     if not burns:
-        return (1, float("inf"), float("inf"), float("inf")), float("inf"), []
+        return (
+            1.0,
+            float("inf"),
+            float("inf"),
+            float("inf"),
+            float("inf"),
+            float("inf"),
+            float("inf"),
+            float("inf"),
+        ), float("inf"), []
     signed_error = _wrap180(burns[-1].longitude_deg_e - float(config["target"]["lon_degE"]))
     error = abs(signed_error)
     max_duration = max(burn.total_burn_time_min for burn in burns)
     duration_limit = float(config["burn_limit"]["max_total_burn_time_min"])
     duration_penalty = max(0.0, max_duration - duration_limit) * 1000.0
     invalid = 1 if warnings or duration_penalty > 0.0 else 0
+    tolerance = float(config["terminal_tolerance"]["lon_deg"])
+    terminal_excess = max(0.0, error - tolerance)
+    target = config["target"]
+    terminal_i_error = abs(burns[-1].post_i_deg - float(target["i_deg"]))
+    terminal_i_excess = max(0.0, terminal_i_error - float(config["terminal_tolerance"]["i_deg"]))
+    terminal_a_error = abs(burns[-1].post_a_km - float(target["a_km"]))
+    terminal_a_excess = max(0.0, terminal_a_error - float(config["terminal_tolerance"]["a_km"]))
+    propellant = sum(burn.propellant_kg for burn in burns)
     spread = _uniform_spread([burn.delta_v_mps for burn in burns if burn.burn_type != "tail_fixed"])
-    return (invalid, error + duration_penalty + (1000.0 if warnings else 0.0), max_duration, spread), signed_error, burns
+    return (
+        float(invalid),
+        terminal_excess + duration_penalty + (1000.0 if warnings else 0.0),
+        terminal_i_excess,
+        terminal_a_excess,
+        propellant,
+        error,
+        max_duration,
+        spread,
+    ), signed_error, burns
 
 
 def _initial_state_km(config: dict[str, Any]) -> tuple[np.ndarray, np.ndarray]:
@@ -1229,6 +1401,7 @@ def _build_burns(
     alpha_values: list[float],
     warnings: list[str],
     q_sequence_override: list[int] | None = None,
+    target_post_a_values: list[float | None] | None = None,
 ) -> list[DesignManeuverBurn]:
     initial = config["initial"]
     longitude_cfg = config["longitude"]
@@ -1271,7 +1444,13 @@ def _build_burns(
             and index >= len(apsis_pattern) - 2
             and apsis_pattern[-1] == "P"
         )
-        if fixed_tail:
+        if target_post_a_values is not None and index < len(target_post_a_values):
+            target_post_a = target_post_a_values[index]
+            if index < max(0, len(apsis_pattern) - 2):
+                burn_type = "front"
+            elif fixed_tail:
+                burn_type = "tail_fixed"
+        elif fixed_tail:
             burn_type = "tail_fixed"
             target_post_a = (
                 float(supersync["a_tail_apogee_plus_fixed_km"])
@@ -1284,7 +1463,7 @@ def _build_burns(
             burn_type = "front"
 
         alpha_deg = float(alpha_values[index])
-        solve_target_a = target_post_a is not None and (delta_vs[index] is None or index == 0)
+        solve_target_a = target_post_a is not None
         if solve_target_a:
             solved_dv = _solve_dv_for_target_a(r, v, alpha_deg, target_post_a)
             if solved_dv is None:
@@ -1300,7 +1479,7 @@ def _build_burns(
         v = v + (dv_mps / 1000.0) * _local_horizontal_direction(r, alpha_deg)
         current_a, current_e, current_i_rad, *_ = _rv_to_coe(r, v)
         current_i = math.degrees(current_i_rad)
-        if index == len(apsis_pattern) - 1:
+        if index == len(apsis_pattern) - 1 and apsis != "P":
             inclination_trim = _terminal_inclination_trim_delta_v_mps(config, v, current_i)
             if inclination_trim > 0.0:
                 dv_mps += inclination_trim

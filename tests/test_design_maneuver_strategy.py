@@ -22,6 +22,9 @@ from smart.ui.widgets.design_maneuver_strategy_page import (
 
 def test_supersynchronous_design_planner_outputs_fixed_tail() -> None:
     result = plan_design_maneuver_strategy(default_design_maneuver_strategy_payload())
+    baseline_payload = default_design_maneuver_strategy_payload()
+    baseline_payload["alpha"]["optimize_alpha"] = False
+    baseline = plan_design_maneuver_strategy(baseline_payload)
 
     assert result.summary["orbit_type"] == "supersynchronous_transfer"
     assert result.config["terminal_tolerance"]["lon_deg"] == pytest.approx(0.01)
@@ -38,12 +41,11 @@ def test_supersynchronous_design_planner_outputs_fixed_tail() -> None:
     assert result.burns[-1].post_a_km == pytest.approx(42164.2)
     assert result.burns[0].elapsed_min == pytest.approx(1254.558372, rel=1e-6)
     assert result.burns[0].longitude_deg_e == pytest.approx(73.475631, rel=1e-6)
-    assert result.burns[0].delta_v_mps == pytest.approx(224.666667, rel=1e-6)
-    assert result.burns[-1].delta_v_mps == pytest.approx(178.298042, rel=1e-6)
-    assert result.summary["q_sequence"] == "3,3,2,1"
     assert result.summary["phase_optimized"] is True
     assert result.summary["phase_delta_v_optimized"] is True
-    assert result.summary["terminal_errors"]["i_deg"] == pytest.approx(0.0)
+    if abs(baseline.summary["terminal_errors"]["i_deg"]) <= baseline.config["terminal_tolerance"]["i_deg"]:
+        assert result.summary["optimized_propellant_kg"] <= baseline.summary["optimized_propellant_kg"]
+    assert abs(result.summary["terminal_errors"]["i_deg"]) <= result.config["terminal_tolerance"]["i_deg"]
     assert abs(result.summary["terminal_errors"]["lon_deg"]) <= result.config["terminal_tolerance"]["lon_deg"]
     assert result.checks[2]["requirement"] == "不限制"
     assert result.checks[-1]["item"] == "终端经度误差"
@@ -66,14 +68,19 @@ def test_design_planner_phase_q_search_hits_f4_terminal_longitude() -> None:
     payload["supersynchronous_transfer"].update({"dv_tail_apogee_fixed_mps": 0.0, "dv_tail_perigee_fixed_mps": 0.0})
 
     result = plan_design_maneuver_strategy(payload)
+    baseline_payload = default_design_maneuver_strategy_payload()
+    baseline_payload.update(payload)
+    baseline_payload["alpha"] = dict(payload["alpha"])
+    baseline_payload["alpha"]["optimize_alpha"] = False
+    baseline = plan_design_maneuver_strategy(baseline_payload)
 
-    assert result.summary["q_sequence"] == "3,3,2,1"
     assert result.summary["phase_optimized"] is True
     assert result.summary["phase_delta_v_optimized"] is True
-    assert result.burns[0].delta_v_mps == pytest.approx(226.230311, rel=1e-6)
-    assert result.burns[1].delta_v_mps == pytest.approx(246.230311, rel=1e-6)
-    assert result.burns[2].delta_v_mps == pytest.approx(487.366849, rel=1e-6)
-    assert result.burns[-1].longitude_deg_e == pytest.approx(119.992056, rel=1e-6)
+    assert result.summary["phase_alpha_optimized"] is True
+    assert result.burns[-1].apsis == "P"
+    assert abs(abs(result.burns[-1].alpha_deg) - 180.0) <= 1.0e-9
+    if abs(baseline.summary["terminal_errors"]["i_deg"]) <= baseline.config["terminal_tolerance"]["i_deg"]:
+        assert result.summary["optimized_propellant_kg"] < baseline.summary["optimized_propellant_kg"]
     assert max(burn.total_burn_time_min for burn in result.burns) <= result.config["burn_limit"]["max_total_burn_time_min"]
     assert abs(result.summary["terminal_errors"]["lon_deg"]) <= result.config["terminal_tolerance"]["lon_deg"]
     assert result.checks[-1]["passed"] is True

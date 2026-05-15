@@ -32,6 +32,7 @@
 - Removed the design-maneuver "带入当前任务基线" button and all baseline-import logic. Satellite-status page configuration is now treated as local to that page only; Dashboard no longer reads or displays `satellite_status.json` details, and MainWindow no longer forwards satellite settings into Dashboard.
 - Restored the design-maneuver initial-orbit reference values to the user-provided table: `a=29478.137 km`, `e=0.77684692`, `i=16.5 deg`, `omega=200 deg`, `Omega=8.53237 deg`, and `M=1.85437 deg`; the F4 design config eccentricity now matches the same value.
 - Updated the design-maneuver pulse table display: headers include units, all displayed burn-table numeric values use two decimals, the separation-point subsatellite longitude is calculated from the initial state, MV1 editable semi-major-axis-control cell has delegate-backed highlight, and a calculated thrust yaw-angle column is shown.
+- Reworked design-maneuver yaw-angle optimization so longitude phasing first establishes the post-burn semi-major-axis chain, then alpha/yaw is optimized with those semi-major axes locked. The score now treats terminal longitude, terminal inclination, terminal semi-major axis, duration, and warnings as constraints before minimizing propellant. For supersynchronous transfers, the final perigee burn is kept tangential and no longer performs hidden inclination trim.
 
 ## Modified / Added Areas
 
@@ -173,8 +174,9 @@ Latest satellite-status isolation runs: py_compile passed; 6 design tests passed
 Latest initial-orbit restore runs: py_compile passed; 18 design/project tests passed.
 Latest pulse-table display runs: py_compile passed; 6 design tests passed; 12 project workspace tests passed.
 Latest merge-readiness fix runs: 13 project workspace tests passed; 6 design maneuver tests passed.
+Latest yaw-angle optimization runs: py_compile passed; 19 design/project tests passed.
 
-Next minimum task: merge the design-maneuver commits only after confirming the F4 design config net diff keeps `initial.e=0.77684692` and no pure project timestamp diff remains.
+Next minimum task: visually inspect the design-maneuver result table with the new yaw-angle optimizer and confirm the displayed alpha values match the locked semi-major-axis / apogee-inclination allocation strategy.
 
 ## Working Rule
 
