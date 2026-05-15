@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from functools import lru_cache
 import math
 from typing import SupportsFloat
 
@@ -47,6 +48,12 @@ def format_utc(value: str | datetime, *, timespec: str = "seconds") -> str:
 
 
 def greenwich_angle_at_utc(epoch_utc: str | datetime) -> float:
+    epoch = parse_utc(epoch_utc)
+    return _greenwich_angle_at_utc_cached(format_utc(epoch, timespec="microseconds"))
+
+
+@lru_cache(maxsize=32768)
+def _greenwich_angle_at_utc_cached(epoch_utc: str) -> float:
     epoch = parse_utc(epoch_utc)
     manager = _build_spice_manager()
     return _greenwich_angle_at(epoch, manager=manager)
@@ -219,6 +226,11 @@ def _greenwich_angle_gmst(epoch_utc: datetime) -> float:
 
 
 def _build_spice_manager() -> SpiceKernelManager | None:
+    return _cached_spice_manager()
+
+
+@lru_cache(maxsize=1)
+def _cached_spice_manager() -> SpiceKernelManager | None:
     try:
         manager = SpiceKernelManager(local_kernel_roots=default_local_kernel_roots())
         manager.ensure_local_kernels_loaded()
