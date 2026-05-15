@@ -33,11 +33,13 @@ def test_supersynchronous_design_planner_outputs_fixed_tail() -> None:
     assert result.burns[-1].post_a_km == pytest.approx(42164.2)
     assert result.burns[0].elapsed_min == pytest.approx(1254.557603, rel=1e-6)
     assert result.burns[0].longitude_deg_e == pytest.approx(73.475824, rel=1e-6)
-    assert result.burns[0].delta_v_mps == pytest.approx(304.666667, rel=1e-6)
-    assert result.burns[-1].delta_v_mps == pytest.approx(161.958805, rel=1e-6)
-    assert result.summary["q_sequence"] == "3,6,3,1"
+    assert result.burns[0].delta_v_mps == pytest.approx(224.666667, rel=1e-6)
+    assert result.burns[-1].delta_v_mps == pytest.approx(161.939496, rel=1e-6)
+    assert result.summary["q_sequence"] == "3,3,2,1"
     assert result.summary["phase_optimized"] is True
-    assert abs(result.summary["terminal_errors"]["lon_deg"]) < 0.02
+    assert result.summary["phase_delta_v_optimized"] is True
+    assert abs(result.summary["terminal_errors"]["lon_deg"]) <= result.config["terminal_tolerance"]["lon_deg"]
+    assert result.checks[2]["requirement"] == "不限制"
     assert result.checks[-1]["item"] == "终端经度误差"
     assert all(0.0 <= burn.longitude_deg_e < 360.0 for burn in result.burns)
     assert result.checks
@@ -59,9 +61,14 @@ def test_design_planner_phase_q_search_hits_f4_terminal_longitude() -> None:
 
     result = plan_design_maneuver_strategy(payload)
 
-    assert result.summary["q_sequence"] == "3,6,3,1"
+    assert result.summary["q_sequence"] == "3,3,2,1"
     assert result.summary["phase_optimized"] is True
-    assert result.burns[-1].longitude_deg_e == pytest.approx(120.004414, rel=1e-6)
+    assert result.summary["phase_delta_v_optimized"] is True
+    assert result.burns[0].delta_v_mps == pytest.approx(226.229837, rel=1e-6)
+    assert result.burns[1].delta_v_mps == pytest.approx(246.229837, rel=1e-6)
+    assert result.burns[2].delta_v_mps == pytest.approx(487.365831, rel=1e-6)
+    assert result.burns[-1].longitude_deg_e == pytest.approx(119.993441, rel=1e-6)
+    assert max(burn.total_burn_time_min for burn in result.burns) <= result.config["burn_limit"]["max_total_burn_time_min"]
     assert abs(result.summary["terminal_errors"]["lon_deg"]) <= result.config["terminal_tolerance"]["lon_deg"]
     assert result.checks[-1]["passed"] is True
 
