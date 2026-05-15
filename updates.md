@@ -262,6 +262,10 @@
 - 提交：`d6e4a6e`
 - 影响文件：`src/smart/ui/i18n.py`、`src/smart/ui/main_window.py`、`src/smart/ui/widgets/dashboard_page.py`、`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
 
-## 2026-05-15T20:06:45+08:00 | restore design maneuver initial orbit defaults
-- 提交：`本次提交`
+## 2026-05-15T20:06:47+08:00 | restore design maneuver initial orbit defaults
+- 提交：`024d5ea`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`tests/test_project_workspace.py`、`HANDOFF.md`、`projects/F4/config/design_maneuver_strategy.json`。
+
+## 2026-05-15T20:24:20+08:00 | polish design maneuver pulse table display
+- 提交：`本次提交`
+- 影响文件：`src/smart/services/design_maneuver_strategy.py`、`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`、`projects/F4/config/design_maneuver_strategy.json`、`projects/F4/smart_project.json`。

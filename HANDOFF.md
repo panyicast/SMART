@@ -31,6 +31,7 @@
 - Optimized design-maneuver planning performance without changing the calculation path by caching Earth-orientation SPICE manager construction and Greenwich angle evaluations. F4 single-plan profiling dropped from about 64 s to about 2 s cold / 4 s profiled hot in the local run; focused tests dropped from ~110 s to ~8 s.
 - Removed the design-maneuver "带入当前任务基线" button and all baseline-import logic. Satellite-status page configuration is now treated as local to that page only; Dashboard no longer reads or displays `satellite_status.json` details, and MainWindow no longer forwards satellite settings into Dashboard.
 - Restored the design-maneuver initial-orbit reference values to the user-provided table: `a=29478.137 km`, `e=0.77684692`, `i=16.5 deg`, `omega=200 deg`, `Omega=8.53237 deg`, and `M=1.85437 deg`; the F4 design config eccentricity now matches the same value.
+- Updated the design-maneuver pulse table display: headers include units, all displayed burn-table numeric values use two decimals, the separation-point subsatellite longitude is calculated from the initial state, MV1 editable semi-major-axis-control cell has delegate-backed highlight, and a calculated thrust yaw-angle column is shown.
 
 ## Modified / Added Areas
 
@@ -170,8 +171,9 @@ Latest busy-UI runs: py_compile passed; 6 design tests passed; 12 project worksp
 Latest performance runs: py_compile passed; 6 design tests passed in 7.97 s; 12 project workspace tests passed in 3.19 s.
 Latest satellite-status isolation runs: py_compile passed; 6 design tests passed; 6 sidebar/navigation tests passed.
 Latest initial-orbit restore runs: py_compile passed; 18 design/project tests passed.
+Latest pulse-table display runs: py_compile passed; 6 design tests passed; 12 project workspace tests passed.
 
-Next minimum task: visually smoke-test the design-maneuver page parameter dialog and result archive reload with the restored orbit initials.
+Next minimum task: visually smoke-test the design-maneuver page pulse table to confirm the delegate-backed editable-cell highlight is visible under the global Qt table stylesheet.
 
 ## Working Rule
 

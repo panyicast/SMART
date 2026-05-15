@@ -80,6 +80,7 @@
     "max_uniform_dv_spread_mps": 70.0,
     "dv_min_per_burn_mps": 20.0,
     "front_dv_total_user_mps": 0.0,
+    "first_post_a_control_km": 1966.0,
     "tail_dv_est_user_mps": 625.0,
     "standard_terminal_reserve_mps": 0.0,
     "allow_small_dv_correction": true,

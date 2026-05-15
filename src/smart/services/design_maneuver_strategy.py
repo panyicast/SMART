@@ -466,6 +466,12 @@ def plan_design_maneuver_strategy(payload: dict[str, Any] | None) -> DesignManeu
     return DesignManeuverResult(config=config, summary=summary, burns=burns, checks=checks, warnings=warnings)
 
 
+def initial_design_maneuver_subsatellite_longitude_deg_e(payload: dict[str, Any] | None) -> float:
+    config = normalize_design_maneuver_strategy_payload(payload)
+    r, _v = _initial_state_km(config)
+    return _longitude_deg(config, r, 0.0)
+
+
 def _merge_dict(defaults: dict[str, Any], source: dict[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, default_value in defaults.items():

@@ -12,7 +12,12 @@ from smart.services.design_maneuver_strategy import (
 from smart.services.project_workspace import ProjectWorkspace
 from smart.ui.i18n import I18nManager
 from smart.ui.nav_icons import has_icon
-from smart.ui.widgets.design_maneuver_strategy_page import DesignManeuverStrategyPage, _DesignManeuverSettingsDialog
+from smart.ui.widgets.design_maneuver_strategy_page import (
+    DesignManeuverStrategyPage,
+    _BURN_TABLE_CONTROL_COLUMN,
+    _EDITABLE_CELL_ROLE,
+    _DesignManeuverSettingsDialog,
+)
 
 
 def test_supersynchronous_design_planner_outputs_fixed_tail() -> None:
@@ -132,10 +137,21 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path) -> None
     page.run_planner()
     assert page._summary_table.rowCount() > 0
     assert page._burn_table.rowCount() == 3
+    assert page._burn_table.columnCount() == 14
+    assert page._burn_table.horizontalHeaderItem(4).text() == "星下点经度/degE"
+    assert page._burn_table.horizontalHeaderItem(9).text() == "计算的变轨推力偏航角/deg"
+    assert page._burn_table.horizontalHeaderItem(13).text() == "半长轴控制量/km"
     assert page._burn_table.item(0, 0).text() == "分离点"
+    assert page._burn_table.item(0, 1).text() == "0.00"
+    assert page._burn_table.item(0, 4).text()
+    assert page._burn_table.item(0, 4).text().count(".") == 1
+    assert len(page._burn_table.item(0, 4).text().split(".")[1]) == 2
     assert page._burn_table.item(1, 0).text() == "MV1"
-    assert page._burn_table.item(1, 12).flags() & QtCore.Qt.ItemFlag.ItemIsEditable
-    assert page._burn_table.item(1, 12).background().color().name() == "#173d45"
+    assert len(page._burn_table.item(1, 1).text().split(".")[1]) == 2
+    assert len(page._burn_table.item(1, 9).text().split(".")[1]) == 2
+    assert page._burn_table.item(1, _BURN_TABLE_CONTROL_COLUMN).flags() & QtCore.Qt.ItemFlag.ItemIsEditable
+    assert page._burn_table.item(1, _BURN_TABLE_CONTROL_COLUMN).data(_EDITABLE_CELL_ROLE) == "first-control"
+    assert page._burn_table.item(1, _BURN_TABLE_CONTROL_COLUMN).background().color().name() == "#245d69"
     assert page._check_table.rowCount() > 0
     assert workspace.design_maneuver_results_path().exists()
 

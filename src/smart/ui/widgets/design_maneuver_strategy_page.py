@@ -11,6 +11,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from smart.services.design_maneuver_strategy import (
     DesignManeuverResult,
     default_design_maneuver_strategy_payload,
+    initial_design_maneuver_subsatellite_longitude_deg_e,
     normalize_design_maneuver_strategy_payload,
     plan_design_maneuver_strategy,
 )
@@ -20,6 +21,31 @@ from smart.ui.i18n import I18nManager
 from smart.ui.widgets.spinboxes import NoWheelComboBox, NoWheelDateTimeEdit, NoWheelDoubleSpinBox, NoWheelSpinBox
 
 BEIJING_QT_TIMEZONE_ID = b"Asia/Shanghai"
+_BURN_TABLE_CONTROL_COLUMN = 13
+_EDITABLE_CELL_ROLE = int(QtCore.Qt.ItemDataRole.UserRole) + 24
+
+
+class _BurnTableDelegate(QtWidgets.QStyledItemDelegate):
+    def paint(
+        self,
+        painter: QtGui.QPainter,
+        option: QtWidgets.QStyleOptionViewItem,
+        index: QtCore.QModelIndex,
+    ) -> None:
+        if index.data(_EDITABLE_CELL_ROLE) != "first-control":
+            super().paint(painter, option, index)
+            return
+        highlighted = QtWidgets.QStyleOptionViewItem(option)
+        self.initStyleOption(highlighted, index)
+        highlighted.backgroundBrush = QtGui.QBrush(QtGui.QColor("#245d69"))
+        highlighted.palette.setColor(QtGui.QPalette.ColorRole.Text, QtGui.QColor("#ffd85a"))
+        highlighted.palette.setColor(QtGui.QPalette.ColorRole.HighlightedText, QtGui.QColor("#fff4b0"))
+        highlighted.palette.setColor(QtGui.QPalette.ColorRole.Highlight, QtGui.QColor("#2f7482"))
+        super().paint(painter, highlighted, index)
+        painter.save()
+        painter.setPen(QtGui.QPen(QtGui.QColor("#ffd85a"), 1))
+        painter.drawRect(option.rect.adjusted(1, 1, -2, -2))
+        painter.restore()
 
 
 @dataclass(frozen=True, slots=True)
@@ -265,8 +291,9 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._burn_header_label = QtWidgets.QLabel()
         self._burn_header_label.setProperty("role", "cardTitle")
         burn_layout.addWidget(self._burn_header_label)
-        self._burn_table = QtWidgets.QTableWidget(0, 13)
+        self._burn_table = QtWidgets.QTableWidget(0, 14)
         self._setup_readonly_table(self._burn_table)
+        self._burn_table.setItemDelegate(_BurnTableDelegate(self._burn_table))
         self._burn_table.setEditTriggers(
             QtWidgets.QAbstractItemView.EditTrigger.DoubleClicked
             | QtWidgets.QAbstractItemView.EditTrigger.EditKeyPressed
@@ -589,6 +616,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._burn_table.setRowCount(0)
         self._burn_table.insertRow(0)
         initial = normalize_design_maneuver_strategy_payload(result.config)["initial"]
+        separation_longitude = initial_design_maneuver_subsatellite_longitude_deg_e(result.config)
         period_min = 2.0 * math.pi * math.sqrt(
             max(1.0, float(initial["a_km"]) ** 3 / float(result.config["earth"]["mu_km3_s2"]))
         ) / 60.0
@@ -597,18 +625,19 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             0,
             (
                 "分离点",
-                "0.000",
+                "0.00",
                 "1",
                 "近地点",
-                "",
-                f"{float(initial['a_km']):.6f}",
-                f"{period_min:.6f}",
-                f"{float(initial['i_deg']):.6f}",
-                "0.000",
-                "0.000",
-                "0.000000",
-                f"{float(initial['m0_kg']):.6f}",
-                "0.000000",
+                f"{separation_longitude:.2f}",
+                f"{float(initial['a_km']):.2f}",
+                f"{period_min:.2f}",
+                f"{float(initial['i_deg']):.2f}",
+                "0.00",
+                "0.00",
+                "0.00",
+                "0.00",
+                f"{float(initial['m0_kg']):.2f}",
+                "0.00",
             ),
         )
         for burn in result.burns:
@@ -616,18 +645,19 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             self._burn_table.insertRow(row)
             values = (
                 f"MV{burn.index}",
-                f"{burn.elapsed_min:.3f}",
+                f"{burn.elapsed_min:.2f}",
                 str(burn.flight_revolution),
                 burn.position_label or ("远地点" if burn.apsis == "A" else "近地点"),
-                f"{burn.longitude_deg_e:.6f}",
-                f"{burn.post_a_km:.6f}",
-                f"{burn.orbit_period_min:.6f}",
-                f"{burn.post_i_deg:.6f}",
-                f"{burn.delta_v_mps:.6f}",
-                f"{burn.total_burn_time_min:.6f}",
-                f"{burn.propellant_kg:.6f}",
-                f"{burn.post_mass_kg:.6f}",
-                f"{burn.semi_major_axis_control_km:.6f}",
+                f"{burn.longitude_deg_e:.2f}",
+                f"{burn.post_a_km:.2f}",
+                f"{burn.orbit_period_min:.2f}",
+                f"{burn.post_i_deg:.2f}",
+                f"{burn.delta_v_mps:.2f}",
+                f"{burn.alpha_deg:.2f}",
+                f"{burn.total_burn_time_min:.2f}",
+                f"{burn.propellant_kg:.2f}",
+                f"{burn.post_mass_kg:.2f}",
+                f"{burn.semi_major_axis_control_km:.2f}",
             )
             self._set_row_values(self._burn_table, row, values)
             for column in range(self._burn_table.columnCount()):
@@ -635,10 +665,11 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                 if item is not None:
                     item.setFlags(item.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable)
             if burn.index == 1:
-                item = self._burn_table.item(row, 12)
+                item = self._burn_table.item(row, _BURN_TABLE_CONTROL_COLUMN)
                 if item is not None:
                     item.setFlags(item.flags() | QtCore.Qt.ItemFlag.ItemIsEditable)
-                    item.setBackground(QtGui.QColor("#173d45"))
+                    item.setData(_EDITABLE_CELL_ROLE, "first-control")
+                    item.setBackground(QtGui.QColor("#245d69"))
                     item.setForeground(QtGui.QColor("#ffd85a"))
                     item.setToolTip("可编辑：修改后自动按该第一次半长轴控制量重新优化")
         for column in range(self._burn_table.columnCount()):
@@ -666,7 +697,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
     def _on_burn_table_item_changed(self, item: QtWidgets.QTableWidgetItem) -> None:
         if self._updating_burn_table:
             return
-        if item.row() != 1 or item.column() != 12:
+        if item.row() != 1 or item.column() != _BURN_TABLE_CONTROL_COLUMN:
             return
         try:
             first_control_km = float(item.text())
@@ -798,15 +829,16 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                 "航时",
                 "飞行圈次",
                 "位置",
-                "星下点经度",
-                "控后半长轴",
-                "轨道周期",
-                "轨道倾角",
-                "速度增量",
-                "点火时长(min)",
-                "推进剂消耗",
-                "控后卫星质量",
-                "半长轴控制量(km)",
+                "星下点经度/degE",
+                "控后半长轴/km",
+                "轨道周期/min",
+                "轨道倾角/deg",
+                "速度增量/(m/s)",
+                "计算的变轨推力偏航角/deg",
+                "点火时长/min",
+                "推进剂消耗/kg",
+                "控后卫星质量/kg",
+                "半长轴控制量/km",
             ]
         )
         self._check_table.setHorizontalHeaderLabels(["检查项", "要求", "结果", "通过"])
