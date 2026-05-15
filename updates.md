@@ -298,6 +298,10 @@
 - 提交：`fcb9bd1`
 - 影响文件：`pyproject.toml`、`HANDOFF.md`。
 
-## 2026-05-16T00:20:16+08:00 | optimize design maneuver phase planning
-- 提交：`本次提交`
+## 2026-05-16T00:20:18+08:00 | optimize design maneuver phase planning
+- 提交：`fc3dbeb`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-16T00:28:34+08:00 | fix final perigee yaw constraint
+- 提交：`本次提交`
+- 影响文件：`src/smart/services/design_maneuver_strategy.py`、`HANDOFF.md`。

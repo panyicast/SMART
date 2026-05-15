@@ -732,6 +732,8 @@ def _alpha_values(config: dict[str, Any], orbit_type: str, apsis_pattern: list[s
         values = [float(value) for value in template[: len(apsis_pattern)]]
         if len(values) < len(apsis_pattern):
             values.extend([alpha_default] * (len(apsis_pattern) - len(values)))
+        if orbit_type == "supersynchronous_transfer" and apsis_pattern and apsis_pattern[-1] == "P":
+            values[-1] = -180.0
         return values
     values: list[float] = []
     for index, apsis in enumerate(apsis_pattern):
@@ -1422,7 +1424,8 @@ def _alpha_search_bounds(
         if orbit_type == "standard_transfer":
             raw_bounds = alpha_cfg["standard_bounds_deg"]
         elif index == len(apsis_pattern) - 1 and apsis == "P":
-            raw_bounds = alpha_cfg["tail_perigee_bounds_deg"]
+            bounds.append((-180.0, -180.0))
+            continue
         elif index >= max(0, len(apsis_pattern) - 2):
             raw_bounds = alpha_cfg["tail_apogee_bounds_deg"]
         else:

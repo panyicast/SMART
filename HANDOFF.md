@@ -36,6 +36,7 @@
 - Added `doc/design_maneuver_pulse_planning_algorithm.md`, a full Markdown description of the current design-maneuver pulse planning algorithm, including inputs, q sequence, longitude phasing, fixed semi-major-axis chain, yaw/inclination optimization, scoring, propellant calculation, UI output, archive behavior, and limitations.
 - Added SciPy as a runtime dependency and installed it in the project venv so future design-maneuver SLSQP continuous optimization can use `scipy.optimize.minimize(method="SLSQP")`.
 - Implemented the design-maneuver hybrid phase optimizer: q sequences are fully enumerated up to the q limit, quick-screened, optimized by coordinate search for the top candidates, refined with SciPy SLSQP for the best candidates, and finally ranked with hard-constraint-first tuple scoring. Summary diagnostics now report q candidate counts, SLSQP attempts, feasibility counts, active constraints, terminal margins, and fallback state.
+- Fixed the hybrid optimizer evaluation path so the final supersynchronous perigee burn is always fixed at `alpha=-180 deg`, including template initialization and coordinate-search bounds.
 
 ## Modified / Added Areas
 
@@ -181,6 +182,7 @@ Latest yaw-angle optimization runs: py_compile passed; 19 design/project tests p
 Latest algorithm-documentation task: documentation-only change; no code tests required.
 Latest SciPy dependency task: SciPy 1.17.1 installed; SLSQP smoke test passed; 19 design/project tests passed.
 Latest hybrid optimizer task: py_compile passed; default and F4-like planning smoke runs completed in about 18-20 s with terminal longitude/inclination inside 0.01 deg; 6 design tests passed; 13 project workspace tests passed; 19 combined design/project tests passed.
+Latest runtime/result evaluation: default SLSQP run took about 18.8 s, selected q `1,1,1,1`, terminal lon error `-0.000367 deg`, terminal i error `0.003748 deg`, propellant `2599.177443 kg`, max burn `75.900735 min`; F4-like SLSQP run took about 18.5 s, selected q `1,3,2,1`, terminal lon error `0.007849 deg`, terminal i error `-0.009279 deg`, propellant `2097.137869 kg`, max burn `72.942825 min`; final P alpha fixed at `-180 deg`; 19 combined design/project tests passed.
 
 Next minimum task: tune the hybrid optimizer UI/runtime defaults if real project runs show the 30 s time budget or Top-K values need adjustment.
 
