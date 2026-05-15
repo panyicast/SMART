@@ -242,6 +242,10 @@
 - 提交：`a81dacb`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
 
-## 2026-05-15T18:47:23+08:00 | support editable maneuver control table
-- 提交：`本次提交`
+## 2026-05-15T18:47:25+08:00 | support editable maneuver control table
+- 提交：`8f3fe64`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-15T19:32:03+08:00 | enforce terminal maneuver inclination
+- 提交：`本次提交`
+- 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。

@@ -34,10 +34,11 @@ def test_supersynchronous_design_planner_outputs_fixed_tail() -> None:
     assert result.burns[0].elapsed_min == pytest.approx(1254.557603, rel=1e-6)
     assert result.burns[0].longitude_deg_e == pytest.approx(73.475824, rel=1e-6)
     assert result.burns[0].delta_v_mps == pytest.approx(224.666667, rel=1e-6)
-    assert result.burns[-1].delta_v_mps == pytest.approx(161.939496, rel=1e-6)
+    assert result.burns[-1].delta_v_mps == pytest.approx(178.298039, rel=1e-6)
     assert result.summary["q_sequence"] == "3,3,2,1"
     assert result.summary["phase_optimized"] is True
     assert result.summary["phase_delta_v_optimized"] is True
+    assert result.summary["terminal_errors"]["i_deg"] == pytest.approx(0.0)
     assert abs(result.summary["terminal_errors"]["lon_deg"]) <= result.config["terminal_tolerance"]["lon_deg"]
     assert result.checks[2]["requirement"] == "不限制"
     assert result.checks[-1]["item"] == "终端经度误差"

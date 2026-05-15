@@ -1327,6 +1327,13 @@ def _build_burns(
         v = v + (dv_mps / 1000.0) * _local_horizontal_direction(r, alpha_deg)
         current_a, current_e, current_i_rad, *_ = _rv_to_coe(r, v)
         current_i = math.degrees(current_i_rad)
+        if index == len(apsis_pattern) - 1:
+            inclination_trim = _terminal_inclination_trim_delta_v_mps(config, v, current_i)
+            if inclination_trim > 0.0:
+                dv_mps += inclination_trim
+                burn_time = _burn_time_for_delta_v(config, mass, dv_mps)
+                mass_after = max(1.0, mass - burn_time["propellant_kg"])
+                current_i = float(config["target"]["i_deg"])
         timestamp = t0 + timedelta(seconds=elapsed_s)
         beijing_time = (timestamp + BEIJING_OFFSET).strftime("%Y-%m-%d %H:%M:%S.%f")
         duration_ok = burn_time["total_burn_time_min"] <= float(config["burn_limit"]["max_total_burn_time_min"]) + 1.0e-9
@@ -1453,6 +1460,16 @@ def _burn_time_for_delta_v(config: dict[str, Any], mass_kg: float, dv_mps: float
 def _orbit_period_min(config: dict[str, Any], a_km: float) -> float:
     mu = float(config["earth"]["mu_km3_s2"])
     return 2.0 * math.pi * math.sqrt(max(1.0, a_km**3 / mu)) / 60.0
+
+
+def _terminal_inclination_trim_delta_v_mps(config: dict[str, Any], v: np.ndarray, current_i_deg: float) -> float:
+    target_i = float(config["target"]["i_deg"])
+    tolerance = float(config["terminal_tolerance"]["i_deg"])
+    error_deg = current_i_deg - target_i
+    if abs(error_deg) <= tolerance:
+        return 0.0
+    speed_mps = float(np.linalg.norm(v)) * 1000.0
+    return 2.0 * speed_mps * math.sin(math.radians(abs(error_deg)) / 2.0)
 
 
 def _post_burn_elements(
