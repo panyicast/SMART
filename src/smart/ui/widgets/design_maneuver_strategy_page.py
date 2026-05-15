@@ -143,6 +143,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._workspace = workspace
         self._config = default_design_maneuver_strategy_payload()
         self._updating_burn_table = False
+        self._planning_busy = False
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(24, 24, 24, 24)
         root.setSpacing(18)
@@ -227,6 +228,12 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._plan_button.setProperty("variant", "primaryAction")
         self._plan_button.clicked.connect(self.run_planner)
         button_layout.addWidget(self._plan_button)
+        self._progress_bar = QtWidgets.QProgressBar()
+        self._progress_bar.setRange(0, 0)
+        self._progress_bar.setTextVisible(True)
+        self._progress_bar.setFormat("等待计算")
+        self._progress_bar.hide()
+        button_layout.addWidget(self._progress_bar)
         layout.addWidget(button_card)
         layout.addStretch(1)
         layout.addWidget(self._build_summary_card())
@@ -518,23 +525,27 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         return path
 
     def run_planner(self) -> None:
-        if self.save_config() is None:
+        if self._planning_busy:
             return
+        self._set_planning_busy(True, "正在计算脉冲规划...")
         try:
+            if self.save_config() is None:
+                return
             result = plan_design_maneuver_strategy(self._config)
+            self._set_result(result)
+            try:
+                path = self._workspace.save_design_maneuver_results(result)
+            except Exception as exc:
+                self._set_status(
+                    "statusDisconnected",
+                    self._i18n.t("design_maneuver.status.result_save_failed", error=str(exc)),
+                )
+                return
+            self._set_status("statusReady", self._i18n.t("design_maneuver.status.plan_done", path=str(path)))
         except Exception as exc:
             self._set_status("statusDisconnected", self._i18n.t("design_maneuver.status.plan_failed", error=str(exc)))
-            return
-        self._set_result(result)
-        try:
-            path = self._workspace.save_design_maneuver_results(result)
-        except Exception as exc:
-            self._set_status(
-                "statusDisconnected",
-                self._i18n.t("design_maneuver.status.result_save_failed", error=str(exc)),
-            )
-            return
-        self._set_status("statusReady", self._i18n.t("design_maneuver.status.plan_done", path=str(path)))
+        finally:
+            self._set_planning_busy(False)
 
     def config(self) -> dict[str, Any]:
         config = normalize_design_maneuver_strategy_payload(self._config)
@@ -658,7 +669,9 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                 item = self._burn_table.item(row, 12)
                 if item is not None:
                     item.setFlags(item.flags() | QtCore.Qt.ItemFlag.ItemIsEditable)
-                    item.setToolTip("修改后自动按该第一次半长轴控制量重新优化")
+                    item.setBackground(QtGui.QColor("#173d45"))
+                    item.setForeground(QtGui.QColor("#ffd85a"))
+                    item.setToolTip("可编辑：修改后自动按该第一次半长轴控制量重新优化")
         for column in range(self._burn_table.columnCount()):
             item = self._burn_table.item(0, column)
             if item is not None:
@@ -696,7 +709,38 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._config = normalize_design_maneuver_strategy_payload(config)
         self._refresh_config_overview()
         self.config_changed.emit(self._config)
+        self._set_status("statusReady", "第一次半长轴控制量已修改，正在重新计算...")
         self.run_planner()
+
+    def _set_planning_busy(self, busy: bool, message: str = "") -> None:
+        self._planning_busy = busy
+        self._progress_bar.setVisible(busy)
+        if busy:
+            self._progress_bar.setRange(0, 0)
+            self._progress_bar.setFormat(message or "正在计算...")
+            self._set_status("statusReady", message or "正在计算...")
+        else:
+            self._progress_bar.setRange(0, 100)
+            self._progress_bar.setValue(100)
+            self._progress_bar.setFormat("计算完成")
+            self._progress_bar.hide()
+        for widget in (
+            self._parameter_config_button,
+            self._advanced_settings_button,
+            self._reload_button,
+            self._import_baseline_button,
+            self._save_button,
+            self._plan_button,
+            self._burn_table,
+            self._check_table,
+            self._summary_table,
+        ):
+            widget.setEnabled(not busy)
+        if busy:
+            QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CursorShape.WaitCursor)
+        else:
+            QtWidgets.QApplication.restoreOverrideCursor()
+        QtWidgets.QApplication.processEvents(QtCore.QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents)
 
     def _clear_results(self) -> None:
         self._updating_burn_table = True

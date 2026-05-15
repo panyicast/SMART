@@ -108,6 +108,7 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path) -> None
     assert page._parameter_config_button.text() == "参数配置"
     assert page._advanced_settings_button.text() == "高级设置"
     assert page._plan_button.property("variant") == "primaryAction"
+    assert page._progress_bar.isHidden()
     assert page._summary_card.parent() is page._config_panel
     assert page._config_panel_layout.indexOf(page._summary_card) == page._config_panel_layout.count() - 1
     assert page._result_panel.layout().indexOf(page._summary_card) == -1
@@ -133,6 +134,7 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path) -> None
     assert page._burn_table.item(0, 0).text() == "分离点"
     assert page._burn_table.item(1, 0).text() == "MV1"
     assert page._burn_table.item(1, 12).flags() & QtCore.Qt.ItemFlag.ItemIsEditable
+    assert page._burn_table.item(1, 12).background().color().name() == "#173d45"
     assert page._check_table.rowCount() > 0
     assert workspace.design_maneuver_results_path().exists()
 

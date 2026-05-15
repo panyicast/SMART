@@ -27,6 +27,7 @@
 - Revised design-maneuver phase-chain optimization to enforce per-leg q <= `q_AA_default` (3 by default) and optimize early Δv/period continuously under the max burn-time constraint. For the local F4 design config, the planner now uses `3,3,2,1`, final longitude ~119.9934 degE, and terminal longitude error ~-0.00656 deg.
 - Updated design-maneuver result output to match the requested table shape: separation point plus MV rows with flight time, flight revolution, apsis position, subsatellite longitude, post-burn semi-major axis, orbit period, inclination, Δv, burn time, propellant, post-burn mass, and semi-major-axis control amount. MV1 semi-major-axis control amount is editable in the UI and triggers replanning.
 - Added terminal inclination trim for design-maneuver planning. The last burn now includes an equivalent inclination-correction Δv when needed so final inclination is locked to `target.i_deg` and the terminal inclination check passes the `0.01 deg` tolerance.
+- Added design-maneuver calculation busy UI. Clicking "生成脉冲规划" or editing MV1 semi-major-axis control now shows an indeterminate progress bar/status, disables controls and result tables during calculation, and restores interaction after results are saved. MV1 editable cell is highlighted with a distinct background/foreground and tooltip.
 
 ## Modified / Added Areas
 
@@ -76,6 +77,8 @@
 - `tests/test_design_maneuver_strategy.py`: covers manual MV1 semi-major-axis control and the new table row/editability behavior.
 - `src/smart/services/design_maneuver_strategy.py`: adds `_terminal_inclination_trim_delta_v_mps()` and applies it on the final burn before burn-time/propellant output is finalized.
 - `tests/test_design_maneuver_strategy.py`: verifies terminal inclination error is zero after planning.
+- `src/smart/ui/widgets/design_maneuver_strategy_page.py`: adds a planning busy guard, progress bar, control/table disabling during calculation, and highlighted editable MV1 control cell.
+- `tests/test_design_maneuver_strategy.py`: verifies the progress bar starts hidden and the editable MV1 cell has the expected visual highlight.
 - `.planning/2026-05-15-design-maneuver-longitude-optimization/`: local research notes, not intended for commit, record the phase-chain optimization findings.
 
 ## Risks
@@ -109,6 +112,7 @@ Current phase-chain q optimization step is complete but superseded by q-limited 
 Current q-limited continuous phasing step is complete. q is capped at 3; for the F4-like design config the selected sequence is `3,3,2,1`, final longitude is `119.993441 degE`, terminal longitude error is `-0.006559 deg`, and max burn time is `71.950448 min`.
 Current result-table/manual-control step is complete. The UI output table now follows the requested columns, includes a separation point row, and replans when the user edits MV1 semi-major-axis control amount. Service verification with `first_post_a_control_km=1000.0` keeps q `3,3,2,1`, MV1 control at 1000 km, and terminal longitude within tolerance.
 Current terminal inclination-control step is complete. F4 verification shows final inclination error `0.000000 deg`, final longitude error remains within `0.01 deg`, and max burn time remains below limit.
+Current design-maneuver busy UI step is complete. Generate and MV1-edit replanning paths both show a busy progress bar and disable controls/tables while synchronous planning runs; MV1 editable control cell is visibly highlighted.
 
 Verified:
 
@@ -137,6 +141,9 @@ D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_design_maneuver_str
 D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_project_workspace.py -q
 D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_design_maneuver_strategy.py -q
 D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_project_workspace.py -q
+D:\Spark\SMART\.venv\Scripts\python.exe -m py_compile src\smart\ui\widgets\design_maneuver_strategy_page.py src\smart\services\design_maneuver_strategy.py
+D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests\test_design_maneuver_strategy.py -q
+D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests\test_project_workspace.py -q
 ```
 
 Result: 63 passed for the previous playhead checkpoint; 41 passed for STK/launch-window focused tests; 26 passed for project/tracking/page regression tests; 13 passed for STK annotation tests; 54 passed for STK/flight-program regression tests; 14 passed for the STK label regex fix; 14 passed for the attitude-mode Pixel annotation test; 55 passed for STK/flight-program regression tests; 16 passed for design maneuver focused tests; 182 passed for full suite; after reference alignment, 16 focused tests passed and 183 full tests passed; after dialog split, 16 focused project/design tests passed; after geometry fix, 58 focused UI/project tests passed; after summary-card move, 11 focused design/sidebar tests passed; after archive save/load, 23 focused tests passed; after target-longitude final-burn fix, 17 focused tests passed.
@@ -144,6 +151,7 @@ Latest phase-chain q optimization focused run: 18 passed.
 Latest q-limited continuous phasing runs: 6 design tests passed; 12 project workspace tests passed.
 Latest result-table/manual-control runs: 6 design tests passed; 12 project workspace tests passed.
 Latest terminal inclination-control runs: 6 design tests passed; 12 project workspace tests passed.
+Latest busy-UI runs: py_compile passed; 6 design tests passed; 12 project workspace tests passed.
 
 Next minimum task: visually smoke-test the design-maneuver page result table/archive reload with the new q sequence, then add continuous early-Δv/period correction only if future mission cases cannot meet terminal longitude tolerance by q selection alone.
 
