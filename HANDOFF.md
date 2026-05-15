@@ -172,8 +172,9 @@ Latest performance runs: py_compile passed; 6 design tests passed in 7.97 s; 12 
 Latest satellite-status isolation runs: py_compile passed; 6 design tests passed; 6 sidebar/navigation tests passed.
 Latest initial-orbit restore runs: py_compile passed; 18 design/project tests passed.
 Latest pulse-table display runs: py_compile passed; 6 design tests passed; 12 project workspace tests passed.
+Latest merge-readiness fix runs: 13 project workspace tests passed; 6 design maneuver tests passed.
 
-Next minimum task: visually smoke-test the design-maneuver page pulse table to confirm the delegate-backed editable-cell highlight is visible under the global Qt table stylesheet.
+Next minimum task: merge the design-maneuver commits only after confirming the F4 design config net diff keeps `initial.e=0.77684692` and no pure project timestamp diff remains.
 
 ## Working Rule
 

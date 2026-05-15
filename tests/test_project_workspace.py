@@ -93,6 +93,20 @@ def test_create_project_creates_expected_structure(tmp_path: Path) -> None:
     assert tracking_payload["ground_station_min_elevation_deg"] == launch_payload["ground_station_min_elevation_deg"]
 
 
+def test_f4_design_maneuver_config_keeps_reference_initial_orbit() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    payload = json.loads(
+        (repo_root / "projects" / "F4" / "config" / "design_maneuver_strategy.json").read_text(encoding="utf-8")
+    )
+
+    assert payload["initial"]["a_km"] == pytest.approx(29478.137)
+    assert payload["initial"]["e"] == pytest.approx(0.77684692)
+    assert payload["initial"]["i_deg"] == pytest.approx(16.5)
+    assert payload["initial"]["lon_node_deg"] == pytest.approx(8.53237)
+    assert payload["initial"]["argp_deg"] == pytest.approx(200.0)
+    assert payload["initial"]["mean_anomaly_deg"] == pytest.approx(1.85437)
+
+
 def test_save_project_as_copies_current_project_and_closes(tmp_path: Path) -> None:
     workspace = ProjectWorkspace()
     info = workspace.create_project("mission_alpha", parent_dir=tmp_path)

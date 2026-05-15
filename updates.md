@@ -278,6 +278,10 @@
 - 提交：`93b0f1c`
 - 影响文件：`projects/F4/config/design_maneuver_strategy.json`、`projects/F4/smart_project.json`。
 
-## 2026-05-15T21:41:27+08:00 | remove dead code and fix inconsistent return shape in phase plan
-- 提交：`本次提交`
+## 2026-05-15T21:41:29+08:00 | remove dead code and fix inconsistent return shape in phase plan
+- 提交：`59869bc`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`。
+
+## 2026-05-15T21:50:55+08:00 | fix F4 design maneuver merge readiness
+- 提交：`本次提交`
+- 影响文件：`tests/test_project_workspace.py`、`HANDOFF.md`、`projects/F4/config/design_maneuver_strategy.json`、`projects/F4/smart_project.json`。
