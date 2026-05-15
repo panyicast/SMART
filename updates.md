@@ -286,6 +286,10 @@
 - 提交：`ee229c8`
 - 影响文件：`tests/test_project_workspace.py`、`HANDOFF.md`、`projects/F4/config/design_maneuver_strategy.json`、`projects/F4/smart_project.json`。
 
-## 2026-05-15T23:33:28+08:00 | optimize maneuver yaw with fixed phasing chain
-- 提交：`本次提交`
+## 2026-05-15T23:33:31+08:00 | optimize maneuver yaw with fixed phasing chain
+- 提交：`faaa94a`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-15T23:38:13+08:00 | document design maneuver pulse planning algorithm
+- 提交：`本次提交`
+- 影响文件：`doc/design_maneuver_pulse_planning_algorithm.md`、`HANDOFF.md`。
