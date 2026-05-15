@@ -302,6 +302,10 @@
 - 提交：`fc3dbeb`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
 
-## 2026-05-16T00:28:34+08:00 | fix final perigee yaw constraint
-- 提交：`本次提交`
+## 2026-05-16T00:28:37+08:00 | fix final perigee yaw constraint
+- 提交：`2fcc793`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-16T00:41:12+08:00 | compute final perigee yaw from velocity
+- 提交：`本次提交`
+- 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。

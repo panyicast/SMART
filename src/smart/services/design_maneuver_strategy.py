@@ -732,8 +732,6 @@ def _alpha_values(config: dict[str, Any], orbit_type: str, apsis_pattern: list[s
         values = [float(value) for value in template[: len(apsis_pattern)]]
         if len(values) < len(apsis_pattern):
             values.extend([alpha_default] * (len(apsis_pattern) - len(values)))
-        if orbit_type == "supersynchronous_transfer" and apsis_pattern and apsis_pattern[-1] == "P":
-            values[-1] = -180.0
         return values
     values: list[float] = []
     for index, apsis in enumerate(apsis_pattern):
@@ -1209,7 +1207,7 @@ def _continuous_unpack(
         float(supersync["a_tail_apogee_plus_fixed_km"]),
         float(supersync["a_tail_perigee_plus_fixed_km"]),
     ]
-    alpha_values = [float(value) for value in x_values[front_count:]] + [-180.0]
+    alpha_values = [float(value) for value in x_values[front_count:]] + [0.0]
     return target_post_a_values[: len(apsis_pattern)], alpha_values[: len(apsis_pattern)]
 
 
@@ -1408,8 +1406,6 @@ def _inclination_weighted_alpha_seed(
         fraction = weight / total
         magnitude = min(40.0, max(2.0, 40.0 * fraction))
         values[index] = direction * magnitude
-    if apsis_pattern and apsis_pattern[-1] == "P":
-        values[-1] = -180.0
     return values
 
 
@@ -1424,8 +1420,7 @@ def _alpha_search_bounds(
         if orbit_type == "standard_transfer":
             raw_bounds = alpha_cfg["standard_bounds_deg"]
         elif index == len(apsis_pattern) - 1 and apsis == "P":
-            bounds.append((-180.0, -180.0))
-            continue
+            raw_bounds = alpha_cfg["tail_perigee_bounds_deg"]
         elif index >= max(0, len(apsis_pattern) - 2):
             raw_bounds = alpha_cfg["tail_apogee_bounds_deg"]
         else:
@@ -1829,15 +1824,43 @@ def _longitude_deg(config: dict[str, Any], r: np.ndarray, elapsed_s: float) -> f
 
 
 def _local_horizontal_direction(r: np.ndarray, alpha_deg: float) -> np.ndarray:
+    east, _north, south = _local_horizontal_basis(r)
+    alpha = math.radians(alpha_deg)
+    return math.cos(alpha) * east + math.sin(alpha) * south
+
+
+def _local_horizontal_basis(r: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     r_hat = r / np.linalg.norm(r)
     k_hat = np.asarray([0.0, 0.0, 1.0], dtype=float)
     east = np.cross(k_hat, r_hat)
-    east = east / np.linalg.norm(east)
+    east_norm = float(np.linalg.norm(east))
+    if east_norm <= 1.0e-12:
+        east = np.asarray([0.0, 1.0, 0.0], dtype=float)
+    else:
+        east = east / east_norm
     north = k_hat - np.dot(k_hat, r_hat) * r_hat
-    north = north / np.linalg.norm(north)
+    north_norm = float(np.linalg.norm(north))
+    if north_norm <= 1.0e-12:
+        north = np.cross(r_hat, east)
+        north = north / np.linalg.norm(north)
+    else:
+        north = north / north_norm
     south = -north
-    alpha = math.radians(alpha_deg)
-    return math.cos(alpha) * east + math.sin(alpha) * south
+    return east, north, south
+
+
+def _alpha_from_local_horizontal_vector(r: np.ndarray, vector: np.ndarray) -> float:
+    r_hat = r / np.linalg.norm(r)
+    east, _north, south = _local_horizontal_basis(r)
+    horizontal = vector - np.dot(vector, r_hat) * r_hat
+    norm = float(np.linalg.norm(horizontal))
+    if norm <= 1.0e-12:
+        horizontal = vector
+        norm = float(np.linalg.norm(horizontal))
+    if norm <= 1.0e-12:
+        return 0.0
+    horizontal = horizontal / norm
+    return math.degrees(math.atan2(float(np.dot(horizontal, south)), float(np.dot(horizontal, east))))
 
 
 def _solve_dv_for_target_a(r: np.ndarray, v: np.ndarray, alpha_deg: float, target_a_km: float) -> float | None:
@@ -1984,6 +2007,8 @@ def _build_burns(
             burn_type = "front"
 
         alpha_deg = float(alpha_values[index])
+        if index == len(apsis_pattern) - 1 and apsis == "P":
+            alpha_deg = _alpha_from_local_horizontal_vector(r, -v)
         solve_target_a = target_post_a is not None
         if solve_target_a:
             solved_dv = _solve_dv_for_target_a(r, v, alpha_deg, target_post_a)
