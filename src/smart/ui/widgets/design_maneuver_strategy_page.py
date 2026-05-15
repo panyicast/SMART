@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import timedelta, timezone
+import math
 from pathlib import Path
 from typing import Any
 
@@ -141,6 +142,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._i18n = i18n
         self._workspace = workspace
         self._config = default_design_maneuver_strategy_payload()
+        self._updating_burn_table = False
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(24, 24, 24, 24)
         root.setSpacing(18)
@@ -263,6 +265,11 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         burn_layout.addWidget(self._burn_header_label)
         self._burn_table = QtWidgets.QTableWidget(0, 13)
         self._setup_readonly_table(self._burn_table)
+        self._burn_table.setEditTriggers(
+            QtWidgets.QAbstractItemView.EditTrigger.DoubleClicked
+            | QtWidgets.QAbstractItemView.EditTrigger.EditKeyPressed
+        )
+        self._burn_table.itemChanged.connect(self._on_burn_table_item_changed)
         self._burn_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
         self._burn_table.setMinimumHeight(180)
         burn_layout.addWidget(self._burn_table)
@@ -598,26 +605,65 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         ]
         self._set_two_column_rows(self._summary_table, summary_rows)
 
+        self._updating_burn_table = True
         self._burn_table.setRowCount(0)
+        self._burn_table.insertRow(0)
+        initial = normalize_design_maneuver_strategy_payload(result.config)["initial"]
+        period_min = 2.0 * math.pi * math.sqrt(
+            max(1.0, float(initial["a_km"]) ** 3 / float(result.config["earth"]["mu_km3_s2"]))
+        ) / 60.0
+        self._set_row_values(
+            self._burn_table,
+            0,
+            (
+                "分离点",
+                "0.000",
+                "1",
+                "近地点",
+                "",
+                f"{float(initial['a_km']):.6f}",
+                f"{period_min:.6f}",
+                f"{float(initial['i_deg']):.6f}",
+                "0.000",
+                "0.000",
+                "0.000000",
+                f"{float(initial['m0_kg']):.6f}",
+                "0.000000",
+            ),
+        )
         for burn in result.burns:
             row = self._burn_table.rowCount()
             self._burn_table.insertRow(row)
             values = (
-                str(burn.index),
-                burn.burn_type,
-                burn.apsis,
+                f"MV{burn.index}",
                 f"{burn.elapsed_min:.3f}",
-                burn.beijing_time,
+                str(burn.flight_revolution),
+                burn.position_label or ("远地点" if burn.apsis == "A" else "近地点"),
                 f"{burn.longitude_deg_e:.6f}",
-                f"{burn.delta_v_mps:.3f}",
-                f"{burn.alpha_deg:.3f}",
-                "--" if burn.target_post_a_km is None else f"{burn.target_post_a_km:.6f}",
-                f"{burn.total_burn_time_min:.3f}",
-                f"{burn.propellant_kg:.6f}",
                 f"{burn.post_a_km:.6f}",
+                f"{burn.orbit_period_min:.6f}",
                 f"{burn.post_i_deg:.6f}",
+                f"{burn.delta_v_mps:.6f}",
+                f"{burn.total_burn_time_min:.6f}",
+                f"{burn.propellant_kg:.6f}",
+                f"{burn.post_mass_kg:.6f}",
+                f"{burn.semi_major_axis_control_km:.6f}",
             )
             self._set_row_values(self._burn_table, row, values)
+            for column in range(self._burn_table.columnCount()):
+                item = self._burn_table.item(row, column)
+                if item is not None:
+                    item.setFlags(item.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable)
+            if burn.index == 1:
+                item = self._burn_table.item(row, 12)
+                if item is not None:
+                    item.setFlags(item.flags() | QtCore.Qt.ItemFlag.ItemIsEditable)
+                    item.setToolTip("修改后自动按该第一次半长轴控制量重新优化")
+        for column in range(self._burn_table.columnCount()):
+            item = self._burn_table.item(0, column)
+            if item is not None:
+                item.setFlags(item.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable)
+        self._updating_burn_table = False
 
         self._check_table.setRowCount(0)
         for check in result.checks:
@@ -635,10 +681,29 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             )
         self._warning_label.setText("\n".join(result.warnings) if result.warnings else "无警告")
 
+    def _on_burn_table_item_changed(self, item: QtWidgets.QTableWidgetItem) -> None:
+        if self._updating_burn_table:
+            return
+        if item.row() != 1 or item.column() != 12:
+            return
+        try:
+            first_control_km = float(item.text())
+        except ValueError:
+            self._set_status("statusDisconnected", "第一次半长轴控制量必须为数字。")
+            return
+        config = self.config()
+        config["distribution"]["first_post_a_control_km"] = first_control_km
+        self._config = normalize_design_maneuver_strategy_payload(config)
+        self._refresh_config_overview()
+        self.config_changed.emit(self._config)
+        self.run_planner()
+
     def _clear_results(self) -> None:
+        self._updating_burn_table = True
         self._summary_table.setRowCount(0)
         self._burn_table.setRowCount(0)
         self._check_table.setRowCount(0)
+        self._updating_burn_table = False
         self._warning_label.setText("--")
 
     def _refresh_config_overview(self) -> None:
@@ -719,19 +784,19 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._summary_table.setHorizontalHeaderLabels(["项目", "数值"])
         self._burn_table.setHorizontalHeaderLabels(
             [
-                "次数",
-                "类型",
-                "拱点",
-                "航时/min",
-                "北京时间",
-                "经度/degE",
-                "Δv/m/s",
-                "alpha/deg",
-                "目标a+/km",
-                "总时长/min",
-                "推进剂/kg",
-                "后a/km",
-                "后i/deg",
+                "",
+                "航时",
+                "飞行圈次",
+                "位置",
+                "星下点经度",
+                "控后半长轴",
+                "轨道周期",
+                "轨道倾角",
+                "速度增量",
+                "点火时长(min)",
+                "推进剂消耗",
+                "控后卫星质量",
+                "半长轴控制量(km)",
             ]
         )
         self._check_table.setHorizontalHeaderLabels(["检查项", "要求", "结果", "通过"])

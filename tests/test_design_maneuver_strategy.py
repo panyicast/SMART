@@ -72,6 +72,13 @@ def test_design_planner_phase_q_search_hits_f4_terminal_longitude() -> None:
     assert abs(result.summary["terminal_errors"]["lon_deg"]) <= result.config["terminal_tolerance"]["lon_deg"]
     assert result.checks[-1]["passed"] is True
 
+    payload["distribution"]["first_post_a_control_km"] = 1000.0
+    manual_result = plan_design_maneuver_strategy(payload)
+
+    assert manual_result.burns[0].semi_major_axis_control_km == pytest.approx(1000.0, abs=1.0e-6)
+    assert manual_result.burns[0].post_a_km == pytest.approx(payload["initial"]["a_km"] + 1000.0, rel=1.0e-9)
+    assert abs(manual_result.summary["terminal_errors"]["lon_deg"]) <= manual_result.config["terminal_tolerance"]["lon_deg"]
+
 
 def test_standard_design_planner_honors_user_count() -> None:
     payload = default_design_maneuver_strategy_payload()
@@ -121,13 +128,16 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path) -> None
 
     page.run_planner()
     assert page._summary_table.rowCount() > 0
-    assert page._burn_table.rowCount() == 2
+    assert page._burn_table.rowCount() == 3
+    assert page._burn_table.item(0, 0).text() == "分离点"
+    assert page._burn_table.item(1, 0).text() == "MV1"
+    assert page._burn_table.item(1, 12).flags() & QtCore.Qt.ItemFlag.ItemIsEditable
     assert page._check_table.rowCount() > 0
     assert workspace.design_maneuver_results_path().exists()
 
     reloaded_page = DesignManeuverStrategyPage(I18nManager("zh"), workspace)
     assert reloaded_page._summary_table.rowCount() > 0
-    assert reloaded_page._burn_table.rowCount() == 2
+    assert reloaded_page._burn_table.rowCount() == 3
     assert reloaded_page._check_table.rowCount() > 0
 
     beijing_tz = QtCore.QTimeZone(b"Asia/Shanghai")

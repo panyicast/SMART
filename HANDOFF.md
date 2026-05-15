@@ -25,6 +25,7 @@
 - Tightened design-maneuver terminal longitude tolerance from `0.05 deg` to `0.01 deg` in defaults, F4 config, and local algorithm docs. Optimization research shows target longitude is a phasing/period-chain problem controlled mainly by q/event choices and early-burn Δv/period, not by alpha alone.
 - Added automatic design-maneuver phase-chain q selection. The first implementation used q sequence `3,6,3,1` to move the F4 final longitude near 120 degE; this was superseded by the q-limited continuous phasing step below.
 - Revised design-maneuver phase-chain optimization to enforce per-leg q <= `q_AA_default` (3 by default) and optimize early Δv/period continuously under the max burn-time constraint. For the local F4 design config, the planner now uses `3,3,2,1`, final longitude ~119.9934 degE, and terminal longitude error ~-0.00656 deg.
+- Updated design-maneuver result output to match the requested table shape: separation point plus MV rows with flight time, flight revolution, apsis position, subsatellite longitude, post-burn semi-major axis, orbit period, inclination, Δv, burn time, propellant, post-burn mass, and semi-major-axis control amount. MV1 semi-major-axis control amount is editable in the UI and triggers replanning.
 
 ## Modified / Added Areas
 
@@ -69,6 +70,9 @@
 - `tests/test_design_maneuver_strategy.py`: covers the F4-like terminal longitude case, requiring final longitude error within `0.01 deg`.
 - `src/smart/services/design_maneuver_strategy.py`: q sequences are capped by `q_AA_default`; user-provided q sequences are capped too. Phase optimization now adjusts front Δv values and ignores old uniform-Δv spread checks when this continuous phasing is active.
 - `tests/test_design_maneuver_strategy.py`: updates expected F4-like solution to q `3,3,2,1` with optimized front Δv and max-burn-time feasibility.
+- `src/smart/services/design_maneuver_strategy.py`: adds result fields for flight revolution, position label, post-burn period, post-burn mass, and semi-major-axis control amount; supports `distribution.first_post_a_control_km` to fix MV1 post-burn semi-major-axis change before re-optimizing later pulses.
+- `src/smart/ui/widgets/design_maneuver_strategy_page.py`: replaces the pulse table columns with the requested table format, adds a separation-point row, and makes MV1 semi-major-axis control amount editable.
+- `tests/test_design_maneuver_strategy.py`: covers manual MV1 semi-major-axis control and the new table row/editability behavior.
 - `.planning/2026-05-15-design-maneuver-longitude-optimization/`: local research notes, not intended for commit, record the phase-chain optimization findings.
 
 ## Risks
@@ -100,6 +104,7 @@ Current final-burn longitude candidate-selection fix is complete. For the F4 con
 Current longitude optimization research step is complete. User-provided phase-chain logic is accepted as the right method: first-burn longitude, post-burn orbital periods, integer regression counts, and Earth rotation close the longitude chain.
 Current phase-chain q optimization step is complete but superseded by q-limited continuous phasing. The earlier unconstrained q sequence `3,6,3,1` is no longer accepted because per-leg q must be <= 3.
 Current q-limited continuous phasing step is complete. q is capped at 3; for the F4-like design config the selected sequence is `3,3,2,1`, final longitude is `119.993441 degE`, terminal longitude error is `-0.006559 deg`, and max burn time is `71.950448 min`.
+Current result-table/manual-control step is complete. The UI output table now follows the requested columns, includes a separation point row, and replans when the user edits MV1 semi-major-axis control amount. Service verification with `first_post_a_control_km=1000.0` keeps q `3,3,2,1`, MV1 control at 1000 km, and terminal longitude within tolerance.
 
 Verified:
 
@@ -124,11 +129,14 @@ D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_design_maneuver_str
 D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_design_maneuver_strategy.py tests/test_project_workspace.py -q
 D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_design_maneuver_strategy.py -q
 D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_project_workspace.py -q
+D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_design_maneuver_strategy.py -q
+D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_project_workspace.py -q
 ```
 
 Result: 63 passed for the previous playhead checkpoint; 41 passed for STK/launch-window focused tests; 26 passed for project/tracking/page regression tests; 13 passed for STK annotation tests; 54 passed for STK/flight-program regression tests; 14 passed for the STK label regex fix; 14 passed for the attitude-mode Pixel annotation test; 55 passed for STK/flight-program regression tests; 16 passed for design maneuver focused tests; 182 passed for full suite; after reference alignment, 16 focused tests passed and 183 full tests passed; after dialog split, 16 focused project/design tests passed; after geometry fix, 58 focused UI/project tests passed; after summary-card move, 11 focused design/sidebar tests passed; after archive save/load, 23 focused tests passed; after target-longitude final-burn fix, 17 focused tests passed.
 Latest phase-chain q optimization focused run: 18 passed.
 Latest q-limited continuous phasing runs: 6 design tests passed; 12 project workspace tests passed.
+Latest result-table/manual-control runs: 6 design tests passed; 12 project workspace tests passed.
 
 Next minimum task: visually smoke-test the design-maneuver page result table/archive reload with the new q sequence, then add continuous early-Δv/period correction only if future mission cases cannot meet terminal longitude tolerance by q selection alone.
 

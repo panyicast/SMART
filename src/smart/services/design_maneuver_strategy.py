@@ -36,6 +36,11 @@ class DesignManeuverBurn:
     post_i_deg: float
     duration_ok: bool
     longitude_ok: bool
+    flight_revolution: int = 0
+    position_label: str = ""
+    orbit_period_min: float = 0.0
+    post_mass_kg: float = 0.0
+    semi_major_axis_control_km: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,6 +157,7 @@ def default_design_maneuver_strategy_payload() -> dict[str, Any]:
             "max_uniform_dv_spread_mps": 70.0,
             "dv_min_per_burn_mps": 20.0,
             "front_dv_total_user_mps": 0.0,
+            "first_post_a_control_km": None,
             "tail_dv_est_user_mps": 625.0,
             "standard_terminal_reserve_mps": 0.0,
             "allow_small_dv_correction": True,
@@ -333,6 +339,9 @@ def normalize_design_maneuver_strategy_payload(payload: dict[str, Any] | None) -
     for key in ("user_dv_template_mps", "weights"):
         values = result["distribution"].get(key, [])
         result["distribution"][key] = [float(value) for value in values] if isinstance(values, list) else []
+    result["distribution"]["first_post_a_control_km"] = _optional_float(
+        result["distribution"].get("first_post_a_control_km")
+    )
     return result
 
 
@@ -886,13 +895,14 @@ def _coordinate_search_front_delta_vs(
     best_score = _phase_score(config, apsis_pattern, candidate_delta_vs, alpha_values, q_sequence)
     min_dv = float(config["distribution"]["dv_min_per_burn_mps"])
     max_dv = max(700.0, max(current, default=0.0) + 100.0)
+    search_indices = range(1, front_count) if _first_post_a_control_km(config) is not None else range(front_count)
     eval_count = 1
     eval_limit = min(80, max(1, int(config["optimizer"]["maxfev"])))
     for step in (80.0, 40.0, 20.0, 10.0, 5.0, 2.0, 1.0, 0.5, 0.2, 0.1, 0.05):
         improved = True
         while improved and eval_count < eval_limit:
             improved = False
-            for index in range(front_count):
+            for index in search_indices:
                 for sign in (1.0, -1.0):
                     trial = list(current)
                     trial[index] += sign * step
@@ -917,6 +927,10 @@ def _coordinate_search_front_delta_vs(
                 if improved:
                     break
     return candidate_delta_vs, best_error, best_score
+
+
+def _first_post_a_control_km(config: dict[str, Any]) -> float | None:
+    return _optional_float(config.get("distribution", {}).get("first_post_a_control_km"))
 
 
 def _phase_score(
@@ -1253,6 +1267,7 @@ def _build_burns(
     mass = float(initial["m0_kg"])
     planning_window = longitude_cfg["planning_window_degE"]
     raw_window = longitude_cfg["raw_window_degE"]
+    manual_first_control_km = _first_post_a_control_km(config)
     burns: list[DesignManeuverBurn] = []
     r, v = _initial_state_km(config)
     elapsed_s, r, v, longitude = _find_initial_burn_event(config, r, v, apsis_pattern[0])
@@ -1265,6 +1280,7 @@ def _build_burns(
             float(config["target"]["a_km"]),
         ),
     )
+    flight_revolution = 2
 
     for index, apsis in enumerate(apsis_pattern):
         longitude_ok = _in_window(longitude, planning_window)
@@ -1273,6 +1289,7 @@ def _build_burns(
         elif not longitude_ok:
             warnings.append(f"第 {index + 1} 次点火经度未满足规划窗口。")
 
+        pre_a, pre_e, pre_i, *_ = _rv_to_coe(r, v)
         target_post_a = None
         burn_type = "normal"
         fixed_tail = (
@@ -1288,11 +1305,14 @@ def _build_burns(
                 if index == len(apsis_pattern) - 2
                 else float(supersync["a_tail_perigee_plus_fixed_km"])
             )
+        elif index == 0 and manual_first_control_km is not None:
+            target_post_a = pre_a + manual_first_control_km
         elif index < max(0, len(apsis_pattern) - 2):
             burn_type = "front"
 
         alpha_deg = float(alpha_values[index])
-        if target_post_a is not None and delta_vs[index] is None:
+        solve_target_a = target_post_a is not None and (delta_vs[index] is None or index == 0)
+        if solve_target_a:
             solved_dv = _solve_dv_for_target_a(r, v, alpha_deg, target_post_a)
             if solved_dv is None:
                 warnings.append(f"第 {index + 1} 次固定尾段半长轴反解 Δv 失败，已置为 0。")
@@ -1304,7 +1324,6 @@ def _build_burns(
             dv_mps = 0.0 if raw_dv is None else max(0.0, float(raw_dv))
         burn_time = _burn_time_for_delta_v(config, mass, dv_mps)
         mass_after = max(1.0, mass - burn_time["propellant_kg"])
-        pre_a, pre_e, pre_i, *_ = _rv_to_coe(r, v)
         v = v + (dv_mps / 1000.0) * _local_horizontal_direction(r, alpha_deg)
         current_a, current_e, current_i_rad, *_ = _rv_to_coe(r, v)
         current_i = math.degrees(current_i_rad)
@@ -1329,6 +1348,11 @@ def _build_burns(
                 post_i_deg=current_i,
                 duration_ok=duration_ok,
                 longitude_ok=longitude_ok,
+                flight_revolution=flight_revolution,
+                position_label="远地点" if apsis == "A" else "近地点",
+                orbit_period_min=_orbit_period_min(config, current_a),
+                post_mass_kg=mass_after,
+                semi_major_axis_control_km=current_a - pre_a,
             )
         )
         mass = mass_after
@@ -1340,6 +1364,7 @@ def _build_burns(
                 q = 1
             if index == len(apsis_pattern) - 2:
                 target_longitude = float(config["target"]["lon_degE"])
+            next_flight_revolution = flight_revolution + q
             elapsed_s, r, v, longitude = _find_next_burn_event(
                 config,
                 r,
@@ -1349,6 +1374,7 @@ def _build_burns(
                 q,
                 target_longitude_deg_e=target_longitude,
             )
+            flight_revolution = next_flight_revolution
     return burns
 
 
@@ -1422,6 +1448,11 @@ def _burn_time_for_delta_v(config: dict[str, Any], mass_kg: float, dv_mps: float
         "total_burn_time_min": total_s / 60.0,
         "propellant_kg": mp_set + mp_main,
     }
+
+
+def _orbit_period_min(config: dict[str, Any], a_km: float) -> float:
+    mu = float(config["earth"]["mu_km3_s2"])
+    return 2.0 * math.pi * math.sqrt(max(1.0, a_km**3 / mu)) / 60.0
 
 
 def _post_burn_elements(
