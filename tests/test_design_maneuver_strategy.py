@@ -12,7 +12,7 @@ from smart.services.design_maneuver_strategy import (
 from smart.services.project_workspace import ProjectWorkspace
 from smart.ui.i18n import I18nManager
 from smart.ui.nav_icons import has_icon
-from smart.ui.widgets.design_maneuver_strategy_page import DesignManeuverStrategyPage
+from smart.ui.widgets.design_maneuver_strategy_page import DesignManeuverStrategyPage, _DesignManeuverSettingsDialog
 
 
 def test_supersynchronous_design_planner_outputs_fixed_tail() -> None:
@@ -62,12 +62,19 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path) -> None
 
     page = DesignManeuverStrategyPage(I18nManager("zh"), workspace)
     assert page._title_label.text() == "设计变轨策略"
+    assert page._parameter_config_button.text() == "参数配置"
+    assert page._advanced_settings_button.text() == "高级设置"
     assert page._plan_button.property("variant") == "primaryAction"
-    assert page._t0_epoch_field.displayFormat() == "yyyy-MM-dd HH:mm:ss"
-    assert page._t0_epoch_field.dateTime().timeZone().id().data().decode() == "Asia/Shanghai"
     assert has_icon("nav.design_maneuver_strategy")
 
-    page._number_fields[("maneuver_count", "user")].setValue(2)
+    advanced_dialog = _DesignManeuverSettingsDialog(
+        "高级设置",
+        page.config(),
+        page._advanced_dialog_cards(),
+        page,
+    )
+    advanced_dialog._number_fields[("maneuver_count", "user")].setValue(2)
+    page._accept_dialog_config(advanced_dialog.config())
     saved = page.save_config()
     assert saved == workspace.design_maneuver_strategy_path()
     assert workspace.design_maneuver_strategy_path().name == "design_maneuver_strategy.json"
@@ -80,10 +87,19 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path) -> None
     assert page._check_table.rowCount() > 0
 
     beijing_tz = QtCore.QTimeZone(b"Asia/Shanghai")
-    page._t0_epoch_field.setDateTime(
+    parameter_dialog = _DesignManeuverSettingsDialog(
+        "参数配置",
+        page.config(),
+        page._basic_dialog_cards(),
+        page,
+    )
+    assert parameter_dialog._t0_epoch_field is not None
+    assert parameter_dialog._t0_epoch_field.displayFormat() == "yyyy-MM-dd HH:mm:ss"
+    assert parameter_dialog._t0_epoch_field.dateTime().timeZone().id().data().decode() == "Asia/Shanghai"
+    parameter_dialog._t0_epoch_field.setDateTime(
         QtCore.QDateTime(QtCore.QDate(2024, 1, 1), QtCore.QTime(8, 0, 0), beijing_tz)
     )
-    assert page.config()["initial"]["t0_epoch"] == "2024-01-01T00:00:00Z"
+    assert parameter_dialog.config()["initial"]["t0_epoch"] == "2024-01-01T00:00:00Z"
 
 
 def test_design_maneuver_config_normalizes_booleans_and_windows() -> None:

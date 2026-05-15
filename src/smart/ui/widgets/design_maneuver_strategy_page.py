@@ -5,7 +5,7 @@ from datetime import timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from smart.services.design_maneuver_strategy import (
     DesignManeuverResult,
@@ -38,6 +38,24 @@ class _CheckSpec:
     section: str
     key: str
     label: str
+
+
+@dataclass(frozen=True, slots=True)
+class _ComboSpec:
+    section: str
+    key: str
+    label: str
+    items: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _DialogCardSpec:
+    title: str
+    number_specs: tuple[_NumberSpec, ...] = ()
+    pair_specs: tuple[tuple[str, str, str], ...] = ()
+    check_specs: tuple[_CheckSpec, ...] = ()
+    combo_specs: tuple[_ComboSpec, ...] = ()
+    include_epoch: bool = False
 
 
 class DesignManeuverStrategyPage(QtWidgets.QWidget):
@@ -123,12 +141,6 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._i18n = i18n
         self._workspace = workspace
         self._config = default_design_maneuver_strategy_payload()
-        self._suppress_emit = False
-        self._number_fields: dict[tuple[str, str], QtWidgets.QAbstractSpinBox] = {}
-        self._pair_fields: dict[tuple[str, str], tuple[NoWheelDoubleSpinBox, NoWheelDoubleSpinBox]] = {}
-        self._check_fields: dict[tuple[str, str], QtWidgets.QCheckBox] = {}
-        self._combo_fields: dict[tuple[str, str], NoWheelComboBox] = {}
-
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(24, 24, 24, 24)
         root.setSpacing(18)
@@ -165,21 +177,12 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self.refresh_from_workspace()
 
     def _build_config_panel(self) -> QtWidgets.QWidget:
-        scroll = QtWidgets.QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
-        canvas = QtWidgets.QWidget()
-        scroll.setWidget(canvas)
-        layout = QtWidgets.QVBoxLayout(canvas)
+        panel = QtWidgets.QWidget()
+        layout = QtWidgets.QVBoxLayout(panel)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(14)
 
-        layout.addWidget(self._build_card("初始轨道", self._initial_grid()))
-        layout.addWidget(self._build_card("目标轨道", self._grid_for_specs("target")))
-        layout.addWidget(self._build_card("发动机与点火约束", self._grid_for_specs("engine", "burn_limit")))
-        layout.addWidget(self._build_card("轨道类型与变轨次数", self._count_grid()))
-        layout.addWidget(self._build_card("经度窗口与分配", self._distribution_grid()))
-        layout.addWidget(self._build_card("超同步尾段与方向角", self._tail_alpha_grid()))
+        layout.addWidget(self._build_config_overview_card())
 
         button_card = QtWidgets.QFrame()
         button_card.setProperty("role", "card")
@@ -190,6 +193,17 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._config_path_label.setProperty("role", "cardCaption")
         self._config_path_label.setWordWrap(True)
         button_layout.addWidget(self._config_path_label)
+
+        self._parameter_config_button = QtWidgets.QPushButton()
+        self._parameter_config_button.setProperty("variant", "primaryAction")
+        self._parameter_config_button.clicked.connect(self._open_parameter_config_dialog)
+        button_layout.addWidget(self._parameter_config_button)
+
+        self._advanced_settings_button = QtWidgets.QPushButton()
+        self._advanced_settings_button.setProperty("variant", "secondary")
+        self._advanced_settings_button.clicked.connect(self._open_advanced_settings_dialog)
+        button_layout.addWidget(self._advanced_settings_button)
+
         row = QtWidgets.QHBoxLayout()
         row.setSpacing(10)
         self._reload_button = QtWidgets.QPushButton()
@@ -211,7 +225,23 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         button_layout.addWidget(self._plan_button)
         layout.addWidget(button_card)
         layout.addStretch(1)
-        return scroll
+        return panel
+
+    def _build_config_overview_card(self) -> QtWidgets.QFrame:
+        card = QtWidgets.QFrame()
+        card.setProperty("role", "card")
+        layout = QtWidgets.QVBoxLayout(card)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(10)
+        self._config_overview_header_label = QtWidgets.QLabel("当前配置")
+        self._config_overview_header_label.setProperty("role", "cardTitle")
+        layout.addWidget(self._config_overview_header_label)
+        self._config_overview_table = QtWidgets.QTableWidget(0, 2)
+        self._setup_readonly_table(self._config_overview_table)
+        self._config_overview_table.horizontalHeader().setStretchLastSection(True)
+        self._config_overview_table.setMinimumHeight(300)
+        layout.addWidget(self._config_overview_table)
+        return card
 
     def _build_result_panel(self) -> QtWidgets.QWidget:
         panel = QtWidgets.QWidget()
@@ -287,164 +317,148 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         layout.addLayout(bottom_row, 1)
         return panel
 
-    def _initial_grid(self) -> QtWidgets.QGridLayout:
-        grid = self._new_form_grid()
-        label = QtWidgets.QLabel("初始历元 (北京时间)")
-        label.setProperty("role", "cardCaption")
-        self._t0_epoch_field = NoWheelDateTimeEdit()
-        self._t0_epoch_field.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
-        self._t0_epoch_field.setTimeZone(QtCore.QTimeZone(BEIJING_QT_TIMEZONE_ID))
-        self._t0_epoch_field.setCalendarPopup(True)
-        self._t0_epoch_field.dateTimeChanged.connect(lambda _value: self._emit_config_changed())
-        grid.addWidget(label, 0, 0)
-        grid.addWidget(self._t0_epoch_field, 0, 1)
-        self._add_specs_to_grid(grid, [spec for spec in self._NUMBER_SPECS if spec.section == "initial"], start_row=1)
-        return grid
+    @classmethod
+    def _engine_burn_specs(cls) -> tuple[_NumberSpec, ...]:
+        return tuple(spec for spec in cls._NUMBER_SPECS if spec.section in {"engine", "burn_limit"})
 
-    def _count_grid(self) -> QtWidgets.QGridLayout:
-        grid = self._new_form_grid()
-        self._add_combo(grid, 0, "orbit_type", "mode", "轨道类型模式", (
-            ("auto", "auto"),
-            ("supersynchronous_transfer", "supersynchronous_transfer"),
-            ("standard_transfer", "standard_transfer"),
-            ("general_transfer", "general_transfer"),
-        ))
-        self._add_specs_to_grid(
-            grid,
-            [spec for spec in self._NUMBER_SPECS if spec.section in {"orbit_type", "maneuver_count"}],
-            start_row=1,
+    @classmethod
+    def _basic_dialog_cards(cls) -> tuple[_DialogCardSpec, ...]:
+        engine_burn = cls._engine_burn_specs()
+        return (
+            _DialogCardSpec(
+                "初始轨道",
+                number_specs=tuple(spec for spec in cls._NUMBER_SPECS if spec.section == "initial"),
+                include_epoch=True,
+            ),
+            _DialogCardSpec(
+                "目标轨道",
+                number_specs=tuple(spec for spec in cls._NUMBER_SPECS if spec.section == "target"),
+            ),
+            _DialogCardSpec("发动机与点火约束", number_specs=engine_burn[:7]),
         )
-        return grid
 
-    def _distribution_grid(self) -> QtWidgets.QGridLayout:
-        grid = self._new_form_grid()
-        self._add_combo(grid, 0, "distribution", "mode", "分配模式", (
-            ("auto", "auto"),
-            ("uniform_all", "uniform_all"),
-            ("uniform_front_fixed_tail", "uniform_front_fixed_tail"),
-            ("weighted_uniform", "weighted_uniform"),
-        ))
-        self._add_specs_to_grid(
-            grid,
-            [spec for spec in self._NUMBER_SPECS if spec.section == "distribution"],
-            start_row=1,
+    @classmethod
+    def _advanced_dialog_cards(cls) -> tuple[_DialogCardSpec, ...]:
+        engine_burn = cls._engine_burn_specs()
+        return (
+            _DialogCardSpec(
+                "发动机与点火约束高级项",
+                number_specs=engine_burn[7:],
+                check_specs=tuple(
+                    spec for spec in cls._CHECK_SPECS if (spec.section, spec.key) in {
+                        ("engine", "use_settling"),
+                        ("burn_limit", "include_settling_in_burn_time"),
+                    }
+                ),
+            ),
+            _DialogCardSpec(
+                "地球模型",
+                number_specs=tuple(spec for spec in cls._NUMBER_SPECS if spec.section == "earth"),
+                check_specs=tuple(spec for spec in cls._CHECK_SPECS if (spec.section, spec.key) == ("earth", "use_J2")),
+            ),
+            _DialogCardSpec(
+                "轨道类型与变轨次数",
+                number_specs=tuple(
+                    spec for spec in cls._NUMBER_SPECS if spec.section in {"orbit_type", "maneuver_count"}
+                ),
+                check_specs=tuple(
+                    spec for spec in cls._CHECK_SPECS if spec.section == "planner"
+                ),
+                combo_specs=(
+                    _ComboSpec(
+                        "orbit_type",
+                        "mode",
+                        "轨道类型模式",
+                        (
+                            ("auto", "auto"),
+                            ("supersynchronous_transfer", "supersynchronous_transfer"),
+                            ("standard_transfer", "standard_transfer"),
+                            ("general_transfer", "general_transfer"),
+                        ),
+                    ),
+                ),
+            ),
+            _DialogCardSpec(
+                "经度窗口与分配",
+                number_specs=tuple(spec for spec in cls._NUMBER_SPECS if spec.section == "distribution"),
+                pair_specs=cls._PAIR_SPECS[:3],
+                check_specs=tuple(spec for spec in cls._CHECK_SPECS if spec.section == "distribution"),
+                combo_specs=(
+                    _ComboSpec(
+                        "distribution",
+                        "mode",
+                        "分配模式",
+                        (
+                            ("auto", "auto"),
+                            ("uniform_all", "uniform_all"),
+                            ("uniform_front_fixed_tail", "uniform_front_fixed_tail"),
+                            ("weighted_uniform", "weighted_uniform"),
+                        ),
+                    ),
+                ),
+            ),
+            _DialogCardSpec(
+                "超同步尾段与方向角",
+                number_specs=tuple(
+                    spec
+                    for spec in cls._NUMBER_SPECS
+                    if spec.section in {"supersynchronous_transfer", "apsis", "alpha", "terminal_tolerance"}
+                ),
+                pair_specs=cls._PAIR_SPECS[3:],
+                check_specs=tuple(
+                    spec for spec in cls._CHECK_SPECS if spec.section in {"supersynchronous_transfer", "alpha"}
+                ),
+                combo_specs=(
+                    _ComboSpec(
+                        "supersynchronous_transfer",
+                        "tail_control_mode",
+                        "尾段控制模式",
+                        (
+                            ("fixed_post_a", "fixed_post_a"),
+                            ("fixed_delta_v", "fixed_delta_v"),
+                        ),
+                    ),
+                    _ComboSpec(
+                        "apsis",
+                        "pattern_mode",
+                        "拱点序列模式",
+                        (
+                            ("auto", "auto"),
+                            ("user", "user"),
+                        ),
+                    ),
+                ),
+            ),
         )
-        next_row = grid.rowCount()
-        for offset, (section, key, label) in enumerate(self._PAIR_SPECS[:3]):
-            self._add_pair(grid, next_row + offset, section, key, label)
-        return grid
 
-    def _tail_alpha_grid(self) -> QtWidgets.QGridLayout:
-        grid = self._new_form_grid()
-        self._add_combo(grid, 0, "supersynchronous_transfer", "tail_control_mode", "尾段控制模式", (
-            ("fixed_post_a", "fixed_post_a"),
-            ("fixed_delta_v", "fixed_delta_v"),
-        ))
-        self._add_combo(grid, 1, "apsis", "pattern_mode", "拱点序列模式", (
-            ("auto", "auto"),
-            ("user", "user"),
-        ))
-        self._add_specs_to_grid(
-            grid,
-            [
-                spec
-                for spec in self._NUMBER_SPECS
-                if spec.section in {"supersynchronous_transfer", "apsis", "alpha", "terminal_tolerance"}
-            ],
-            start_row=2,
+    def _open_parameter_config_dialog(self) -> None:
+        dialog = _DesignManeuverSettingsDialog(
+            self._i18n.t("design_maneuver.parameter_config_dialog.title"),
+            self.config(),
+            self._basic_dialog_cards(),
+            self,
         )
-        next_row = grid.rowCount()
-        for offset, (section, key, label) in enumerate(self._PAIR_SPECS[3:]):
-            self._add_pair(grid, next_row + offset, section, key, label)
-        for offset, spec in enumerate(self._CHECK_SPECS):
-            checkbox = QtWidgets.QCheckBox(spec.label)
-            checkbox.stateChanged.connect(lambda _value: self._emit_config_changed())
-            self._check_fields[(spec.section, spec.key)] = checkbox
-            grid.addWidget(checkbox, next_row + len(self._PAIR_SPECS[3:]) + offset, 0, 1, 2)
-        return grid
+        if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+            return
+        self._accept_dialog_config(dialog.config())
 
-    def _grid_for_specs(self, *sections: str) -> QtWidgets.QGridLayout:
-        grid = self._new_form_grid()
-        self._add_specs_to_grid(grid, [spec for spec in self._NUMBER_SPECS if spec.section in sections])
-        return grid
+    def _open_advanced_settings_dialog(self) -> None:
+        dialog = _DesignManeuverSettingsDialog(
+            self._i18n.t("design_maneuver.advanced_settings_dialog.title"),
+            self.config(),
+            self._advanced_dialog_cards(),
+            self,
+        )
+        if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+            return
+        self._accept_dialog_config(dialog.config())
 
-    def _build_card(self, title: str, content: QtWidgets.QLayout) -> QtWidgets.QFrame:
-        card = QtWidgets.QFrame()
-        card.setProperty("role", "card")
-        layout = QtWidgets.QVBoxLayout(card)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(12)
-        label = QtWidgets.QLabel(title)
-        label.setProperty("role", "cardTitle")
-        layout.addWidget(label)
-        layout.addLayout(content)
-        return card
-
-    def _add_specs_to_grid(
-        self,
-        grid: QtWidgets.QGridLayout,
-        specs: list[_NumberSpec],
-        *,
-        start_row: int = 0,
-    ) -> None:
-        for row_offset, spec in enumerate(specs):
-            row = start_row + row_offset
-            label = QtWidgets.QLabel(spec.label)
-            label.setProperty("role", "cardCaption")
-            if spec.decimals == 0:
-                field: QtWidgets.QAbstractSpinBox = NoWheelSpinBox()
-                assert isinstance(field, QtWidgets.QSpinBox)
-                field.setRange(int(spec.minimum), int(spec.maximum))
-                field.setSingleStep(int(spec.step))
-            else:
-                field = NoWheelDoubleSpinBox()
-                assert isinstance(field, QtWidgets.QDoubleSpinBox)
-                field.setRange(spec.minimum, spec.maximum)
-                field.setDecimals(spec.decimals)
-                field.setSingleStep(spec.step)
-            field.setButtonSymbols(QtWidgets.QAbstractSpinBox.ButtonSymbols.NoButtons)
-            field.valueChanged.connect(lambda _value: self._emit_config_changed())
-            field.setMinimumWidth(160)
-            self._number_fields[(spec.section, spec.key)] = field
-            grid.addWidget(label, row, 0)
-            grid.addWidget(field, row, 1)
-
-    def _add_pair(self, grid: QtWidgets.QGridLayout, row: int, section: str, key: str, label: str) -> None:
-        caption = QtWidgets.QLabel(label)
-        caption.setProperty("role", "cardCaption")
-        low = self._double_spin(-360.0, 360.0, 0.1, 6)
-        high = self._double_spin(-360.0, 360.0, 0.1, 6)
-        low.valueChanged.connect(lambda _value: self._emit_config_changed())
-        high.valueChanged.connect(lambda _value: self._emit_config_changed())
-        row_widget = QtWidgets.QWidget()
-        row_layout = QtWidgets.QHBoxLayout(row_widget)
-        row_layout.setContentsMargins(0, 0, 0, 0)
-        row_layout.setSpacing(8)
-        row_layout.addWidget(low)
-        row_layout.addWidget(high)
-        self._pair_fields[(section, key)] = (low, high)
-        grid.addWidget(caption, row, 0)
-        grid.addWidget(row_widget, row, 1)
-
-    def _add_combo(
-        self,
-        grid: QtWidgets.QGridLayout,
-        row: int,
-        section: str,
-        key: str,
-        label: str,
-        items: tuple[tuple[str, str], ...],
-    ) -> None:
-        caption = QtWidgets.QLabel(label)
-        caption.setProperty("role", "cardCaption")
-        combo = NoWheelComboBox()
-        for text, data in items:
-            combo.addItem(text, data)
-        combo.currentIndexChanged.connect(lambda _value: self._emit_config_changed())
-        combo.setMinimumWidth(160)
-        self._combo_fields[(section, key)] = combo
-        grid.addWidget(caption, row, 0)
-        grid.addWidget(combo, row, 1)
+    def _accept_dialog_config(self, config: dict[str, Any]) -> None:
+        self._config = normalize_design_maneuver_strategy_payload(config)
+        self._refresh_config_overview()
+        self._clear_results()
+        self.config_changed.emit(self._config)
+        self._set_status("statusReady", self._i18n.t("design_maneuver.status.config_updated"))
 
     def refresh_from_workspace(self) -> None:
         if self._workspace.current_project is None:
@@ -500,16 +514,6 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
 
     def config(self) -> dict[str, Any]:
         config = normalize_design_maneuver_strategy_payload(self._config)
-        config["initial"]["t0_epoch"] = self._datetime_edit_to_utc(self._t0_epoch_field)
-        for (section, key), field in self._number_fields.items():
-            value = field.value()
-            config[section][key] = int(value) if isinstance(field, QtWidgets.QSpinBox) else float(value)
-        for (section, key), (low, high) in self._pair_fields.items():
-            config[section][key] = [float(low.value()), float(high.value())]
-        for (section, key), checkbox in self._check_fields.items():
-            config[section][key] = checkbox.isChecked()
-        for (section, key), combo in self._combo_fields.items():
-            config[section][key] = str(combo.currentData())
         config["planner"]["maneuver_count_user"] = int(config["maneuver_count"]["user"])
         return normalize_design_maneuver_strategy_payload(config)
 
@@ -541,27 +545,8 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
 
     def _apply_config_to_fields(self, config: dict[str, Any]) -> None:
         normalized = normalize_design_maneuver_strategy_payload(config)
-        self._suppress_emit = True
-        try:
-            self._t0_epoch_field.setDateTime(self._utc_to_qdatetime(str(normalized["initial"]["t0_epoch"])))
-            for (section, key), field in self._number_fields.items():
-                value = normalized[section][key]
-                if value is None:
-                    value = 0
-                if isinstance(field, QtWidgets.QSpinBox):
-                    field.setValue(int(value))
-                else:
-                    field.setValue(float(value))
-            for (section, key), (low, high) in self._pair_fields.items():
-                values = normalized[section][key]
-                low.setValue(float(values[0]))
-                high.setValue(float(values[1]))
-            for (section, key), checkbox in self._check_fields.items():
-                checkbox.setChecked(bool(normalized[section][key]))
-            for (section, key), combo in self._combo_fields.items():
-                self._set_combo_value(combo, str(normalized[section][key]))
-        finally:
-            self._suppress_emit = False
+        self._config = normalized
+        self._refresh_config_overview()
 
     def _set_result(self, result: DesignManeuverResult) -> None:
         self._config = result.config
@@ -622,6 +607,20 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._check_table.setRowCount(0)
         self._warning_label.setText("--")
 
+    def _refresh_config_overview(self) -> None:
+        config = normalize_design_maneuver_strategy_payload(self._config)
+        rows = [
+            ("初始历元", self._utc_to_qdatetime(str(config["initial"]["t0_epoch"])).toString("yyyy-MM-dd HH:mm:ss")),
+            ("初始轨道", f"a {config['initial']['a_km']:.3f} km, e {config['initial']['e']:.6f}, i {config['initial']['i_deg']:.3f} deg"),
+            ("目标轨道", f"a {config['target']['a_km']:.3f} km, e {config['target']['e']:.6f}, i {config['target']['i_deg']:.3f} deg"),
+            ("目标经度", f"{config['target']['lon_degE']:.3f} degE"),
+            ("发动机", f"{config['engine']['F_main_N']:.3f} N / {config['engine']['Isp_main_s']:.3f} s"),
+            ("点火上限", f"{config['burn_limit']['max_total_burn_time_min']:.3f} min"),
+            ("次数设置", f"min {config['maneuver_count']['min']}, max {config['maneuver_count']['max']}, user {config['maneuver_count']['user']}"),
+            ("经度窗口", f"{config['longitude']['planning_window_degE'][0]:.3f} - {config['longitude']['planning_window_degE'][1]:.3f} degE"),
+        ]
+        self._set_two_column_rows(self._config_overview_table, rows)
+
     def _set_two_column_rows(self, table: QtWidgets.QTableWidget, rows: list[tuple[str, str]]) -> None:
         table.setRowCount(0)
         for row_index, values in enumerate(rows):
@@ -636,28 +635,19 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             table.setItem(row, column, item)
 
     def _emit_config_changed(self) -> None:
-        if self._suppress_emit:
-            return
         self._config = self.config()
         self.config_changed.emit(self._config)
 
     def _set_controls_enabled(self, enabled: bool) -> None:
         for widget in (
+            self._parameter_config_button,
+            self._advanced_settings_button,
             self._reload_button,
             self._import_baseline_button,
             self._save_button,
             self._plan_button,
         ):
             widget.setEnabled(enabled)
-        for field in list(self._number_fields.values()) + [self._t0_epoch_field]:
-            field.setEnabled(enabled)
-        for low, high in self._pair_fields.values():
-            low.setEnabled(enabled)
-            high.setEnabled(enabled)
-        for checkbox in self._check_fields.values():
-            checkbox.setEnabled(enabled)
-        for combo in self._combo_fields.values():
-            combo.setEnabled(enabled)
 
     def _refresh_config_path_label(self) -> None:
         if self._workspace.current_project is None:
@@ -679,6 +669,9 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
     def retranslate(self, _language: str | None = None) -> None:
         t = self._i18n.t
         self._title_label.setText(t("design_maneuver.title"))
+        self._config_overview_header_label.setText(t("design_maneuver.config_overview_header"))
+        self._parameter_config_button.setText(t("design_maneuver.parameter_config_button"))
+        self._advanced_settings_button.setText(t("design_maneuver.advanced_settings_button"))
         self._reload_button.setText(f"+  {t('design_maneuver.reload_button')}")
         self._import_baseline_button.setText(t("design_maneuver.load_baseline_button"))
         self._save_button.setText(t("design_maneuver.save_button"))
@@ -688,6 +681,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._check_header_label.setText(t("design_maneuver.check_header"))
         self._future_header_label.setText(t("design_maneuver.future_header"))
         self._future_slot_label.setText(t("design_maneuver.future_placeholder"))
+        self._config_overview_table.setHorizontalHeaderLabels(["项目", "数值"])
         self._summary_table.setHorizontalHeaderLabels(["项目", "数值"])
         self._burn_table.setHorizontalHeaderLabels(
             [
@@ -759,3 +753,371 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         if epoch.tzinfo is None:
             epoch = epoch.replace(tzinfo=timezone.utc)
         return format_utc(epoch.astimezone(timezone.utc))
+
+
+class _DesignManeuverSettingsDialog(QtWidgets.QDialog):
+    def __init__(
+        self,
+        title: str,
+        config: dict[str, Any],
+        cards: tuple[_DialogCardSpec, ...],
+        parent: QtWidgets.QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._config = normalize_design_maneuver_strategy_payload(config)
+        self._cards = cards
+        self._number_fields: dict[tuple[str, str], QtWidgets.QAbstractSpinBox] = {}
+        self._pair_fields: dict[tuple[str, str], tuple[NoWheelDoubleSpinBox, NoWheelDoubleSpinBox]] = {}
+        self._check_fields: dict[tuple[str, str], QtWidgets.QCheckBox] = {}
+        self._combo_fields: dict[tuple[str, str], NoWheelComboBox] = {}
+        self._t0_epoch_field: NoWheelDateTimeEdit | None = None
+        self._drag_position: QtCore.QPoint | None = None
+
+        self.setObjectName("designManeuverSettingsDialog")
+        self.setWindowTitle(title)
+        self.setWindowFlag(QtCore.Qt.WindowType.FramelessWindowHint, True)
+        self.resize(940, 760)
+        self.setMinimumSize(760, 620)
+        self._apply_dialog_style()
+
+        root = QtWidgets.QVBoxLayout(self)
+        root.setContentsMargins(24, 20, 24, 24)
+        root.setSpacing(14)
+        root.addWidget(self._title_bar(title))
+
+        scroll = QtWidgets.QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+        canvas = QtWidgets.QWidget()
+        scroll.setWidget(canvas)
+        body = QtWidgets.QVBoxLayout(canvas)
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(14)
+        for card in cards:
+            body.addWidget(self._build_card(card))
+        body.addStretch(1)
+        root.addWidget(scroll, 1)
+
+        buttons = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.StandardButton.Save | QtWidgets.QDialogButtonBox.StandardButton.Cancel
+        )
+        save_button = buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Save)
+        cancel_button = buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Cancel)
+        save_button.setText("▣  保存配置")
+        cancel_button.setText("取消")
+        save_button.setProperty("variant", "primaryAction")
+        cancel_button.setProperty("variant", "secondary")
+        save_button.setMinimumHeight(48)
+        cancel_button.setMinimumHeight(48)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        root.addWidget(buttons, 0, QtCore.Qt.AlignmentFlag.AlignRight)
+
+        self._apply_config_to_fields()
+
+    def eventFilter(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:
+        if watched in {self._dialog_title_bar, *self._dialog_title_bar.findChildren(QtWidgets.QLabel)}:
+            if self._handle_drag_event(event):
+                return True
+        return super().eventFilter(watched, event)
+
+    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
+        if self._handle_drag_event(event):
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
+        if self._handle_drag_event(event):
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
+        if self._handle_drag_event(event):
+            return
+        super().mouseReleaseEvent(event)
+
+    def _handle_drag_event(self, event: QtCore.QEvent) -> bool:
+        if not isinstance(event, QtGui.QMouseEvent):
+            return False
+        if event.type() == QtCore.QEvent.Type.MouseButtonPress:
+            if event.button() != QtCore.Qt.MouseButton.LeftButton:
+                return False
+            self._drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            event.accept()
+            return True
+        if event.type() == QtCore.QEvent.Type.MouseMove and self._drag_position is not None:
+            if not event.buttons() & QtCore.Qt.MouseButton.LeftButton:
+                return False
+            self.move(event.globalPosition().toPoint() - self._drag_position)
+            event.accept()
+            return True
+        if event.type() == QtCore.QEvent.Type.MouseButtonRelease and self._drag_position is not None:
+            self._drag_position = None
+            event.accept()
+            return True
+        return False
+
+    def config(self) -> dict[str, Any]:
+        config = normalize_design_maneuver_strategy_payload(self._config)
+        if self._t0_epoch_field is not None:
+            config["initial"]["t0_epoch"] = DesignManeuverStrategyPage._datetime_edit_to_utc(self._t0_epoch_field)
+        for (section, key), field in self._number_fields.items():
+            value = field.value()
+            config[section][key] = int(value) if isinstance(field, QtWidgets.QSpinBox) else float(value)
+        for (section, key), (low, high) in self._pair_fields.items():
+            config[section][key] = [float(low.value()), float(high.value())]
+        for (section, key), checkbox in self._check_fields.items():
+            config[section][key] = checkbox.isChecked()
+        for (section, key), combo in self._combo_fields.items():
+            config[section][key] = str(combo.currentData())
+        config["planner"]["maneuver_count_user"] = int(config["maneuver_count"]["user"])
+        return normalize_design_maneuver_strategy_payload(config)
+
+    def _title_bar(self, title: str) -> QtWidgets.QWidget:
+        self._dialog_title_bar = QtWidgets.QWidget()
+        self._dialog_title_bar.setObjectName("dialogTitleBar")
+        self._dialog_title_bar.setCursor(QtCore.Qt.CursorShape.SizeAllCursor)
+        row = QtWidgets.QHBoxLayout(self._dialog_title_bar)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(12)
+        icon = QtWidgets.QLabel("⌬")
+        icon.setObjectName("dialogTitleIcon")
+        icon.setFixedSize(28, 28)
+        icon.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        row.addWidget(icon, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
+        label = QtWidgets.QLabel(title)
+        label.setProperty("role", "pageTitle")
+        row.addWidget(label, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
+        row.addStretch(1)
+        close_button = QtWidgets.QToolButton()
+        close_button.setObjectName("dialogCloseButton")
+        close_button.setText("X")
+        close_button.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        close_button.clicked.connect(self.reject)
+        row.addWidget(close_button, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
+        for drag_widget in (self._dialog_title_bar, icon, label):
+            drag_widget.installEventFilter(self)
+        return self._dialog_title_bar
+
+    def _build_card(self, spec: _DialogCardSpec) -> QtWidgets.QFrame:
+        card = QtWidgets.QFrame()
+        card.setProperty("role", "card")
+        layout = QtWidgets.QVBoxLayout(card)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(12)
+        header = QtWidgets.QLabel(spec.title)
+        header.setProperty("role", "cardTitle")
+        layout.addWidget(header)
+        grid = DesignManeuverStrategyPage._new_form_grid()
+        row = 0
+        for combo_spec in spec.combo_specs:
+            self._add_combo(grid, row, combo_spec)
+            row += 1
+        if spec.include_epoch:
+            label = QtWidgets.QLabel("初始历元 (北京时间)")
+            label.setProperty("role", "cardCaption")
+            self._t0_epoch_field = NoWheelDateTimeEdit()
+            self._t0_epoch_field.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
+            self._t0_epoch_field.setTimeZone(DesignManeuverStrategyPage._beijing_qtimezone())
+            self._t0_epoch_field.setCalendarPopup(True)
+            self._t0_epoch_field.setMinimumHeight(40)
+            grid.addWidget(label, row, 0)
+            grid.addWidget(self._t0_epoch_field, row, 1)
+            row += 1
+        for number_spec in spec.number_specs:
+            self._add_number(grid, row, number_spec)
+            row += 1
+        for section, key, label in spec.pair_specs:
+            self._add_pair(grid, row, section, key, label)
+            row += 1
+        for check_spec in spec.check_specs:
+            checkbox = QtWidgets.QCheckBox(check_spec.label)
+            checkbox.setMinimumHeight(32)
+            self._check_fields[(check_spec.section, check_spec.key)] = checkbox
+            grid.addWidget(checkbox, row, 0, 1, 2)
+            row += 1
+        layout.addLayout(grid)
+        return card
+
+    def _add_number(self, grid: QtWidgets.QGridLayout, row: int, spec: _NumberSpec) -> None:
+        label = QtWidgets.QLabel(spec.label)
+        label.setProperty("role", "cardCaption")
+        if spec.decimals == 0:
+            field: QtWidgets.QAbstractSpinBox = NoWheelSpinBox()
+            assert isinstance(field, QtWidgets.QSpinBox)
+            field.setRange(int(spec.minimum), int(spec.maximum))
+            field.setSingleStep(int(spec.step))
+        else:
+            field = NoWheelDoubleSpinBox()
+            assert isinstance(field, QtWidgets.QDoubleSpinBox)
+            field.setRange(spec.minimum, spec.maximum)
+            field.setDecimals(spec.decimals)
+            field.setSingleStep(spec.step)
+        field.setButtonSymbols(QtWidgets.QAbstractSpinBox.ButtonSymbols.NoButtons)
+        field.setMinimumHeight(40)
+        field.setMinimumWidth(190)
+        self._number_fields[(spec.section, spec.key)] = field
+        grid.addWidget(label, row, 0)
+        grid.addWidget(field, row, 1)
+
+    def _add_pair(self, grid: QtWidgets.QGridLayout, row: int, section: str, key: str, label_text: str) -> None:
+        label = QtWidgets.QLabel(label_text)
+        label.setProperty("role", "cardCaption")
+        low = DesignManeuverStrategyPage._double_spin(-360.0, 360.0, 0.1, 6)
+        high = DesignManeuverStrategyPage._double_spin(-360.0, 360.0, 0.1, 6)
+        low.setMinimumHeight(40)
+        high.setMinimumHeight(40)
+        holder = QtWidgets.QWidget()
+        row_layout = QtWidgets.QHBoxLayout(holder)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(8)
+        row_layout.addWidget(low)
+        row_layout.addWidget(high)
+        self._pair_fields[(section, key)] = (low, high)
+        grid.addWidget(label, row, 0)
+        grid.addWidget(holder, row, 1)
+
+    def _add_combo(self, grid: QtWidgets.QGridLayout, row: int, spec: _ComboSpec) -> None:
+        label = QtWidgets.QLabel(spec.label)
+        label.setProperty("role", "cardCaption")
+        combo = NoWheelComboBox()
+        for text, data in spec.items:
+            combo.addItem(text, data)
+        combo.setMinimumHeight(40)
+        combo.setMinimumWidth(190)
+        combo.setMaxVisibleItems(max(2, len(spec.items)))
+        self._combo_fields[(spec.section, spec.key)] = combo
+        grid.addWidget(label, row, 0)
+        grid.addWidget(combo, row, 1)
+
+    def _apply_config_to_fields(self) -> None:
+        config = self._config
+        if self._t0_epoch_field is not None:
+            self._t0_epoch_field.setDateTime(
+                DesignManeuverStrategyPage._utc_to_qdatetime(str(config["initial"]["t0_epoch"]))
+            )
+        for (section, key), field in self._number_fields.items():
+            value = config[section].get(key)
+            if value is None:
+                value = 0
+            if isinstance(field, QtWidgets.QSpinBox):
+                field.setValue(int(value))
+            else:
+                field.setValue(float(value))
+        for (section, key), (low, high) in self._pair_fields.items():
+            values = config[section][key]
+            low.setValue(float(values[0]))
+            high.setValue(float(values[1]))
+        for (section, key), checkbox in self._check_fields.items():
+            checkbox.setChecked(bool(config[section][key]))
+        for (section, key), combo in self._combo_fields.items():
+            DesignManeuverStrategyPage._set_combo_value(combo, str(config[section][key]))
+
+    def _apply_dialog_style(self) -> None:
+        self.setStyleSheet(
+            """
+            QDialog#designManeuverSettingsDialog {
+                background: qradialgradient(cx:0.50, cy:0.10, radius:1.15, fx:0.50, fy:0.10, stop:0 #0c2230, stop:0.50 #07131c, stop:1 #03090f);
+                border: 1px solid #1c7d9a;
+                border-radius: 22px;
+            }
+            QDialog#designManeuverSettingsDialog QWidget {
+                background: transparent;
+            }
+            QDialog#designManeuverSettingsDialog QFrame[role="card"] {
+                background: rgba(5, 17, 25, 0.62);
+                border: 1px solid #1e7892;
+                border-radius: 14px;
+            }
+            QDialog#designManeuverSettingsDialog QLabel[role="pageTitle"] {
+                color: #f4fbff;
+                font-size: 17pt;
+                font-weight: 800;
+            }
+            QDialog#designManeuverSettingsDialog QLabel#dialogTitleIcon {
+                background: rgba(19, 48, 63, 0.9);
+                border: 1px solid #27677d;
+                border-radius: 14px;
+                color: #3bdcff;
+                font-size: 13pt;
+                font-weight: 700;
+            }
+            QDialog#designManeuverSettingsDialog QToolButton#dialogCloseButton {
+                background: transparent;
+                color: #c4d4dc;
+                border: none;
+                font-size: 18pt;
+                font-weight: 300;
+                padding: 2px 8px;
+            }
+            QDialog#designManeuverSettingsDialog QToolButton#dialogCloseButton:hover {
+                color: #ffffff;
+                background: rgba(59, 169, 198, 0.18);
+                border-radius: 8px;
+            }
+            QDialog#designManeuverSettingsDialog QLabel[role="cardTitle"] {
+                color: #f2fbff;
+                font-size: 14pt;
+                font-weight: 800;
+            }
+            QDialog#designManeuverSettingsDialog QLabel[role="cardCaption"] {
+                color: #8fb0bb;
+            }
+            QDialog#designManeuverSettingsDialog QDoubleSpinBox,
+            QDialog#designManeuverSettingsDialog QSpinBox,
+            QDialog#designManeuverSettingsDialog QDateTimeEdit,
+            QDialog#designManeuverSettingsDialog QComboBox {
+                background: rgba(7, 19, 28, 0.98);
+                border: 1px solid #2b6075;
+                border-radius: 6px;
+                padding: 8px 10px;
+                color: #e6f6fb;
+            }
+            QDialog#designManeuverSettingsDialog QDoubleSpinBox:focus,
+            QDialog#designManeuverSettingsDialog QSpinBox:focus,
+            QDialog#designManeuverSettingsDialog QDateTimeEdit:focus,
+            QDialog#designManeuverSettingsDialog QComboBox:focus {
+                border: 1px solid #62d8ea;
+            }
+            QDialog#designManeuverSettingsDialog QComboBox::drop-down {
+                subcontrol-origin: padding;
+                subcontrol-position: top right;
+                width: 24px;
+                border-left: 1px solid #25586a;
+            }
+            QDialog#designManeuverSettingsDialog QComboBox QAbstractItemView {
+                background: #07141d;
+                color: #f3fbff;
+                border: 1px solid #1e7892;
+                selection-background-color: #153e4d;
+                outline: none;
+            }
+            QDialog#designManeuverSettingsDialog QCheckBox {
+                color: #d7edf5;
+                font-weight: 600;
+            }
+            QDialog#designManeuverSettingsDialog QPushButton[variant="secondary"] {
+                min-width: 116px;
+                border-radius: 7px;
+                padding: 11px 18px;
+            }
+            QDialog#designManeuverSettingsDialog QPushButton[variant="primaryAction"] {
+                min-width: 152px;
+                border-radius: 7px;
+                padding-left: 24px;
+                padding-right: 24px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ff9b35, stop:1 #ff5a22);
+                border: 1px solid #ffbd6a;
+                color: #ffffff;
+                font-size: 12pt;
+                font-weight: 800;
+            }
+            QDialog#designManeuverSettingsDialog QPushButton[variant="primaryAction"]:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ffae53, stop:1 #ff6d35);
+                border: 1px solid #ffd196;
+            }
+            QDialog#designManeuverSettingsDialog QPushButton[variant="primaryAction"]:pressed {
+                background: #df4b1f;
+            }
+            """
+        )
