@@ -412,7 +412,7 @@ def plan_design_maneuver_strategy(payload: dict[str, Any] | None) -> DesignManeu
         alpha_values=alpha_values,
     )
     delta_vs = phase_plan["delta_vs"]
-    if "burns" in phase_plan and phase_plan["burns"]:
+    if phase_plan["burns"]:
         burns = phase_plan["burns"]
     else:
         burns = _build_burns(
@@ -746,6 +746,7 @@ def _select_phase_plan(
             "optimized": False,
             "delta_v_optimized": False,
             "initial_error_deg": None,
+            "burns": [],
         }
 
     best_score, base_error, best_burns = _phase_score(
@@ -949,27 +950,6 @@ def _phase_score(
     invalid = 1 if warnings or duration_penalty > 0.0 else 0
     spread = _uniform_spread([burn.delta_v_mps for burn in burns if burn.burn_type != "tail_fixed"])
     return (invalid, error + duration_penalty + (1000.0 if warnings else 0.0), max_duration, spread), signed_error, burns
-
-
-def _phase_terminal_longitude_error(
-    config: dict[str, Any],
-    *,
-    apsis_pattern: list[str],
-    delta_vs: list[float | None],
-    alpha_values: list[float],
-    q_sequence: list[int],
-) -> float:
-    burns = _build_burns(
-        config,
-        apsis_pattern=apsis_pattern,
-        delta_vs=delta_vs,
-        alpha_values=alpha_values,
-        warnings=[],
-        q_sequence_override=q_sequence,
-    )
-    if not burns:
-        return float("inf")
-    return _wrap180(burns[-1].longitude_deg_e - float(config["target"]["lon_degE"]))
 
 
 def _initial_state_km(config: dict[str, Any]) -> tuple[np.ndarray, np.ndarray]:
