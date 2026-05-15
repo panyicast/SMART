@@ -10,7 +10,6 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from smart.services.design_maneuver_strategy import (
     DesignManeuverResult,
-    config_from_orbital_elements,
     default_design_maneuver_strategy_payload,
     normalize_design_maneuver_strategy_payload,
     plan_design_maneuver_strategy,
@@ -215,10 +214,6 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._reload_button.setProperty("variant", "secondary")
         self._reload_button.clicked.connect(self.refresh_from_workspace)
         row.addWidget(self._reload_button)
-        self._import_baseline_button = QtWidgets.QPushButton()
-        self._import_baseline_button.setProperty("variant", "secondary")
-        self._import_baseline_button.clicked.connect(self._load_project_baseline)
-        row.addWidget(self._import_baseline_button)
         self._save_button = QtWidgets.QPushButton()
         self._save_button.setProperty("variant", "secondary")
         self._save_button.clicked.connect(self.save_config)
@@ -552,32 +547,6 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         config["planner"]["maneuver_count_user"] = int(config["maneuver_count"]["user"])
         return normalize_design_maneuver_strategy_payload(config)
 
-    def _load_project_baseline(self) -> None:
-        if self._workspace.current_project is None:
-            return
-        try:
-            orbit_init = self._workspace.load_orbit_initialization()
-            satellite = self._workspace.load_satellite_status()
-        except Exception as exc:
-            self._set_status(
-                "statusDisconnected",
-                self._i18n.t("design_maneuver.status.baseline_failed", error=str(exc)),
-            )
-            return
-        if orbit_init is None:
-            self._set_status("statusDisconnected", self._i18n.t("design_maneuver.status.baseline_missing"))
-            return
-        mass = satellite.launch_mass_kg if satellite is not None else None
-        self._config = config_from_orbital_elements(
-            self.config(),
-            orbit_init.elements,
-            epoch_utc=orbit_init.epoch_utc,
-            mass_kg=mass,
-        )
-        self._apply_config_to_fields(self._config)
-        self._emit_config_changed()
-        self._set_status("statusReady", self._i18n.t("design_maneuver.status.baseline_loaded"))
-
     def _load_archived_result(self) -> bool | None:
         if self._workspace.current_project is None:
             return False
@@ -728,7 +697,6 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             self._parameter_config_button,
             self._advanced_settings_button,
             self._reload_button,
-            self._import_baseline_button,
             self._save_button,
             self._plan_button,
             self._burn_table,
@@ -786,7 +754,6 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             self._parameter_config_button,
             self._advanced_settings_button,
             self._reload_button,
-            self._import_baseline_button,
             self._save_button,
             self._plan_button,
         ):
@@ -816,7 +783,6 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._parameter_config_button.setText(t("design_maneuver.parameter_config_button"))
         self._advanced_settings_button.setText(t("design_maneuver.advanced_settings_button"))
         self._reload_button.setText(f"+  {t('design_maneuver.reload_button')}")
-        self._import_baseline_button.setText(t("design_maneuver.load_baseline_button"))
         self._save_button.setText(t("design_maneuver.save_button"))
         self._plan_button.setText(t("design_maneuver.plan_button"))
         self._summary_header_label.setText(t("design_maneuver.summary_header"))

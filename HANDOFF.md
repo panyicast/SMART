@@ -29,6 +29,7 @@
 - Added terminal inclination trim for design-maneuver planning. The last burn now includes an equivalent inclination-correction Δv when needed so final inclination is locked to `target.i_deg` and the terminal inclination check passes the `0.01 deg` tolerance.
 - Added design-maneuver calculation busy UI. Clicking "生成脉冲规划" or editing MV1 semi-major-axis control now shows an indeterminate progress bar/status, disables controls and result tables during calculation, and restores interaction after results are saved. MV1 editable cell is highlighted with a distinct background/foreground and tooltip.
 - Optimized design-maneuver planning performance without changing the calculation path by caching Earth-orientation SPICE manager construction and Greenwich angle evaluations. F4 single-plan profiling dropped from about 64 s to about 2 s cold / 4 s profiled hot in the local run; focused tests dropped from ~110 s to ~8 s.
+- Removed the design-maneuver "带入当前任务基线" button and all baseline-import logic. Satellite-status page configuration is now treated as local to that page only; Dashboard no longer reads or displays `satellite_status.json` details, and MainWindow no longer forwards satellite settings into Dashboard.
 
 ## Modified / Added Areas
 
@@ -81,6 +82,9 @@
 - `src/smart/ui/widgets/design_maneuver_strategy_page.py`: adds a planning busy guard, progress bar, control/table disabling during calculation, and highlighted editable MV1 control cell.
 - `tests/test_design_maneuver_strategy.py`: verifies the progress bar starts hidden and the editable MV1 cell has the expected visual highlight.
 - `src/smart/services/earth_orientation.py`: adds bounded `lru_cache` layers for `_build_spice_manager()` and Greenwich angle lookups so repeated design-maneuver longitude calculations do not repeatedly scan/load SPICE kernels.
+- `src/smart/ui/widgets/design_maneuver_strategy_page.py`: removes the baseline import button and `_load_project_baseline()` flow that previously read orbit initialization and satellite mass.
+- `src/smart/ui/widgets/dashboard_page.py`, `src/smart/ui/main_window.py`, `src/smart/ui/i18n.py`: remove Dashboard dependencies on satellite-status config and replace the satellite card body with a note that satellite-status settings are not a cross-page baseline.
+- `tests/test_design_maneuver_strategy.py`: asserts the design-maneuver baseline button is absent.
 - `.planning/2026-05-15-design-maneuver-longitude-optimization/`: local research notes, not intended for commit, record the phase-chain optimization findings.
 
 ## Risks
@@ -116,6 +120,7 @@ Current result-table/manual-control step is complete. The UI output table now fo
 Current terminal inclination-control step is complete. F4 verification shows final inclination error `0.000000 deg`, final longitude error remains within `0.01 deg`, and max burn time remains below limit.
 Current design-maneuver busy UI step is complete. Generate and MV1-edit replanning paths both show a busy progress bar and disable controls/tables while synchronous planning runs; MV1 editable control cell is visibly highlighted.
 Current design-maneuver performance step is complete. The major bottleneck was repeated SPICE kernel manager construction inside `greenwich_angle_at_utc()` during thousands of longitude evaluations; cached Earth-orientation calls preserve outputs while reducing runtime.
+Current satellite-status isolation step is complete. The design-maneuver page no longer imports current-task baseline from satellite-status data, and Dashboard no longer reads satellite-status configuration.
 
 Verified:
 
@@ -150,6 +155,9 @@ D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests\test_project_workspace.p
 D:\Spark\SMART\.venv\Scripts\python.exe -m py_compile src\smart\services\earth_orientation.py src\smart\services\design_maneuver_strategy.py
 D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests\test_design_maneuver_strategy.py -q
 D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests\test_project_workspace.py -q
+D:\Spark\SMART\.venv\Scripts\python.exe -m py_compile src\smart\ui\widgets\design_maneuver_strategy_page.py src\smart\ui\widgets\dashboard_page.py src\smart\ui\main_window.py src\smart\ui\i18n.py
+D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests\test_design_maneuver_strategy.py -q
+D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests\test_sidebar_navigation.py -q
 ```
 
 Result: 63 passed for the previous playhead checkpoint; 41 passed for STK/launch-window focused tests; 26 passed for project/tracking/page regression tests; 13 passed for STK annotation tests; 54 passed for STK/flight-program regression tests; 14 passed for the STK label regex fix; 14 passed for the attitude-mode Pixel annotation test; 55 passed for STK/flight-program regression tests; 16 passed for design maneuver focused tests; 182 passed for full suite; after reference alignment, 16 focused tests passed and 183 full tests passed; after dialog split, 16 focused project/design tests passed; after geometry fix, 58 focused UI/project tests passed; after summary-card move, 11 focused design/sidebar tests passed; after archive save/load, 23 focused tests passed; after target-longitude final-burn fix, 17 focused tests passed.
@@ -159,6 +167,7 @@ Latest result-table/manual-control runs: 6 design tests passed; 12 project works
 Latest terminal inclination-control runs: 6 design tests passed; 12 project workspace tests passed.
 Latest busy-UI runs: py_compile passed; 6 design tests passed; 12 project workspace tests passed.
 Latest performance runs: py_compile passed; 6 design tests passed in 7.97 s; 12 project workspace tests passed in 3.19 s.
+Latest satellite-status isolation runs: py_compile passed; 6 design tests passed; 6 sidebar/navigation tests passed.
 
 Next minimum task: visually smoke-test the design-maneuver page result table/archive reload with the new q sequence, then add continuous early-Δv/period correction only if future mission cases cannot meet terminal longitude tolerance by q selection alone.
 

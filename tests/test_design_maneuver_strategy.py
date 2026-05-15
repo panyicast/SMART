@@ -107,6 +107,7 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path) -> None
     assert page._title_label.text() == "设计变轨策略"
     assert page._parameter_config_button.text() == "参数配置"
     assert page._advanced_settings_button.text() == "高级设置"
+    assert not hasattr(page, "_import_baseline_button")
     assert page._plan_button.property("variant") == "primaryAction"
     assert page._progress_bar.isHidden()
     assert page._summary_card.parent() is page._config_panel

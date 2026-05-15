@@ -8,7 +8,6 @@ from typing import Any
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from smart.domain.models import SatelliteStatusSettings
 from smart.services.project_workspace import ProjectInfo
 from smart.services.spice_service import runtime_summary
 from smart.ui.i18n import I18nManager
@@ -260,7 +259,6 @@ class DashboardPage(QtWidgets.QWidget):
         super().__init__(parent)
         self._mission_state = mission_state
         self._i18n = i18n
-        self._satellite_settings = SatelliteStatusSettings()
         self._spice_runtime_status, _ = runtime_summary()
         self._project: ProjectInfo | None = None
         self._recent_project_paths: list[str] = []
@@ -286,10 +284,6 @@ class DashboardPage(QtWidgets.QWidget):
         self._recent_project_paths = list(paths)
         self._refresh_recent_projects()
         self._refresh_recent_strip()
-
-    def set_satellite_settings(self, settings: SatelliteStatusSettings) -> None:
-        self._satellite_settings = settings
-        self._refresh_project_summary()
 
     def showEvent(self, event: QtCore.QEvent) -> None:  # noqa: N802 - Qt override
         super().showEvent(event)
@@ -542,7 +536,6 @@ class DashboardPage(QtWidgets.QWidget):
         root = self._project.root_dir
         config_dir = root / "config"
         data_dir = root / "data"
-        satellite = _read_json(config_dir / "satellite_status.json") or {}
         maneuver = _read_json(config_dir / "maneuver_strategy.json") or {}
         launch_config = _read_json(config_dir / "launch_window.json") or {}
         tracking_config = _read_json(config_dir / "tracking_arc.json") or {}
@@ -554,7 +547,7 @@ class DashboardPage(QtWidgets.QWidget):
         sample_rows = _count_csv_rows(data_dir / "launch_window_samples.csv")
         tracking_assets = self._count_enabled_assets(tracking_config)
 
-        satellite_status = "Ready" if satellite else "Disconnected"
+        satellite_status = "Planned"
         maneuver_status = "Ready" if orbit_rows else ("Planned" if maneuver else "Disconnected")
         launch_status = "Ready" if launch_rows else ("Loading" if sample_rows else "Planned")
         tracking_status = "Ready" if tracking_config and launch_rows else ("Planned" if tracking_config else "Disconnected")
@@ -590,14 +583,8 @@ class DashboardPage(QtWidgets.QWidget):
             "satellite",
             "dashboard.card.satellite",
             satellite_status,
-            self._i18n.t(
-                "dashboard.summary.satellite_body",
-                launch_mass=_fmt_float(satellite.get("launch_mass_kg"), 1, " kg"),
-                fuel=_fmt_float(satellite.get("fuel_load_kg"), 1, " kg"),
-                ground=len(satellite.get("ground_assets", [])) if isinstance(satellite.get("ground_assets"), list) else 0,
-                relay=len(satellite.get("relay_satellites", [])) if isinstance(satellite.get("relay_satellites"), list) else 0,
-            ),
-            [float(satellite.get("launch_mass_kg", 0) or 0), float(satellite.get("fuel_load_kg", 0) or 0)],
+            self._i18n.t("dashboard.summary.satellite_body"),
+            [0.0, 0.0],
         )
 
         self._set_card(

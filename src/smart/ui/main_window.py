@@ -116,7 +116,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self._satellite_page.settings_changed.connect(self._on_satellite_settings_changed)
         self._maneuver_page.strategy_changed.connect(self._on_maneuver_strategy_changed)
         self._latest_satellite_settings = self._satellite_page.settings()
-        self._dashboard_page.set_satellite_settings(self._latest_satellite_settings)
         self._reset_spice_workspace(self._workspace_root / "data" / "kernels")
 
         self.retranslate()
@@ -528,7 +527,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _on_satellite_settings_changed(self, settings: SatelliteStatusSettings) -> None:
         self._latest_satellite_settings = settings
-        self._dashboard_page.set_satellite_settings(settings)
         if not self._autosave_enabled:
             return
         self._persist_satellite_config()

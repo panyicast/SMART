@@ -254,6 +254,10 @@
 - 提交：`f006d31`
 - 影响文件：`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
 
-## 2026-05-15T19:48:47+08:00 | cache earth orientation for maneuver planning
-- 提交：`本次提交`
+## 2026-05-15T19:48:49+08:00 | cache earth orientation for maneuver planning
+- 提交：`246e5dd`
 - 影响文件：`src/smart/services/earth_orientation.py`、`HANDOFF.md`。
+
+## 2026-05-15T19:57:40+08:00 | isolate satellite status configuration
+- 提交：`本次提交`
+- 影响文件：`src/smart/ui/i18n.py`、`src/smart/ui/main_window.py`、`src/smart/ui/widgets/dashboard_page.py`、`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
