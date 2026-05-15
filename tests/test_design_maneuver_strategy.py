@@ -65,6 +65,9 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path) -> None
     assert page._parameter_config_button.text() == "参数配置"
     assert page._advanced_settings_button.text() == "高级设置"
     assert page._plan_button.property("variant") == "primaryAction"
+    assert page._summary_card.parent() is page._config_panel
+    assert page._config_panel_layout.indexOf(page._summary_card) == page._config_panel_layout.count() - 1
+    assert page._result_panel.layout().indexOf(page._summary_card) == -1
     assert has_icon("nav.design_maneuver_strategy")
 
     advanced_dialog = _DesignManeuverSettingsDialog(

@@ -218,6 +218,10 @@
 - 提交：`df5fa5f`
 - 影响文件：`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`src/smart/ui/widgets/flight_program_page.py`、`tests/test_flight_program_page.py`、`tests/test_sidebar_navigation.py`、`HANDOFF.md`。
 
-## 2026-05-15T13:04:55+08:00 | checkpoint F4 design maneuver config
-- 提交：`本次提交`
+## 2026-05-15T13:04:57+08:00 | checkpoint F4 design maneuver config
+- 提交：`9d70370`
 - 影响文件：`projects/F4/config/design_maneuver_strategy.json`、`projects/F4/smart_project.json`。
+
+## 2026-05-15T14:14:29+08:00 | move design maneuver summary left
+- 提交：`本次提交`
+- 影响文件：`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。

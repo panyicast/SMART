@@ -178,7 +178,9 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
 
     def _build_config_panel(self) -> QtWidgets.QWidget:
         panel = QtWidgets.QWidget()
+        self._config_panel = panel
         layout = QtWidgets.QVBoxLayout(panel)
+        self._config_panel_layout = layout
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(14)
 
@@ -225,6 +227,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         button_layout.addWidget(self._plan_button)
         layout.addWidget(button_card)
         layout.addStretch(1)
+        layout.addWidget(self._build_summary_card())
         return panel
 
     def _build_config_overview_card(self) -> QtWidgets.QFrame:
@@ -245,24 +248,10 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
 
     def _build_result_panel(self) -> QtWidgets.QWidget:
         panel = QtWidgets.QWidget()
+        self._result_panel = panel
         layout = QtWidgets.QVBoxLayout(panel)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(14)
-
-        summary_card = QtWidgets.QFrame()
-        summary_card.setProperty("role", "card")
-        summary_layout = QtWidgets.QVBoxLayout(summary_card)
-        summary_layout.setContentsMargins(18, 18, 18, 18)
-        summary_layout.setSpacing(10)
-        self._summary_header_label = QtWidgets.QLabel()
-        self._summary_header_label.setProperty("role", "cardTitle")
-        summary_layout.addWidget(self._summary_header_label)
-        self._summary_table = QtWidgets.QTableWidget(0, 2)
-        self._setup_readonly_table(self._summary_table)
-        self._summary_table.horizontalHeader().setStretchLastSection(True)
-        self._summary_table.setMinimumHeight(150)
-        summary_layout.addWidget(self._summary_table)
-        layout.addWidget(summary_card, 1)
 
         burn_card = QtWidgets.QFrame()
         burn_card.setProperty("role", "card")
@@ -316,6 +305,22 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         bottom_row.addWidget(future_card, 2)
         layout.addLayout(bottom_row, 1)
         return panel
+
+    def _build_summary_card(self) -> QtWidgets.QFrame:
+        self._summary_card = QtWidgets.QFrame()
+        self._summary_card.setProperty("role", "card")
+        summary_layout = QtWidgets.QVBoxLayout(self._summary_card)
+        summary_layout.setContentsMargins(18, 18, 18, 18)
+        summary_layout.setSpacing(10)
+        self._summary_header_label = QtWidgets.QLabel()
+        self._summary_header_label.setProperty("role", "cardTitle")
+        summary_layout.addWidget(self._summary_header_label)
+        self._summary_table = QtWidgets.QTableWidget(0, 2)
+        self._setup_readonly_table(self._summary_table)
+        self._summary_table.horizontalHeader().setStretchLastSection(True)
+        self._summary_table.setMinimumHeight(150)
+        summary_layout.addWidget(self._summary_table)
+        return self._summary_card
 
     @classmethod
     def _engine_burn_specs(cls) -> tuple[_NumberSpec, ...]:
