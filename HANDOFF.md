@@ -34,6 +34,7 @@
 - Updated the design-maneuver pulse table display: headers include units, all displayed burn-table numeric values use two decimals, the separation-point subsatellite longitude is calculated from the initial state, MV1 editable semi-major-axis-control cell has delegate-backed highlight, and a calculated thrust yaw-angle column is shown.
 - Reworked design-maneuver yaw-angle optimization so longitude phasing first establishes the post-burn semi-major-axis chain, then alpha/yaw is optimized with those semi-major axes locked. The score now treats terminal longitude, terminal inclination, terminal semi-major axis, duration, and warnings as constraints before minimizing propellant. For supersynchronous transfers, the final perigee burn is kept tangential and no longer performs hidden inclination trim.
 - Added `doc/design_maneuver_pulse_planning_algorithm.md`, a full Markdown description of the current design-maneuver pulse planning algorithm, including inputs, q sequence, longitude phasing, fixed semi-major-axis chain, yaw/inclination optimization, scoring, propellant calculation, UI output, archive behavior, and limitations.
+- Added SciPy as a runtime dependency and installed it in the project venv so future design-maneuver SLSQP continuous optimization can use `scipy.optimize.minimize(method="SLSQP")`.
 
 ## Modified / Added Areas
 
@@ -177,8 +178,9 @@ Latest pulse-table display runs: py_compile passed; 6 design tests passed; 12 pr
 Latest merge-readiness fix runs: 13 project workspace tests passed; 6 design maneuver tests passed.
 Latest yaw-angle optimization runs: py_compile passed; 19 design/project tests passed.
 Latest algorithm-documentation task: documentation-only change; no code tests required.
+Latest SciPy dependency task: SciPy 1.17.1 installed; SLSQP smoke test passed; 19 design/project tests passed.
 
-Next minimum task: keep the algorithm document synchronized whenever `src/smart/services/design_maneuver_strategy.py` changes the phasing, alpha optimization, or scoring logic.
+Next minimum task: implement the SLSQP path behind an optimizer-method switch while retaining the current coordinate-search fallback.
 
 ## Working Rule
 
