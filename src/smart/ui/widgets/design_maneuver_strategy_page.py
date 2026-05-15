@@ -593,6 +593,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             ("用户指定次数", str(result.summary["user_count"])),
             ("实际采用次数", str(result.summary["actual_count"])),
             ("点火结构", str(result.summary["apsis_pattern"])),
+            ("回归圈数", str(result.summary.get("q_sequence", ""))),
             ("均匀性离散度", f"{result.summary['uniform_spread_mps']:.3f} m/s"),
         ]
         self._set_two_column_rows(self._summary_table, summary_rows)

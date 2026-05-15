@@ -395,12 +395,20 @@ def plan_design_maneuver_strategy(payload: dict[str, Any] | None) -> DesignManeu
         dv_tail_perigee_est,
     )
     alpha_values = _alpha_values(config, orbit_type, apsis_pattern)
+    phase_plan = _select_phase_plan(
+        config,
+        orbit_type=orbit_type,
+        apsis_pattern=apsis_pattern,
+        delta_vs=delta_vs,
+        alpha_values=alpha_values,
+    )
     burns = _build_burns(
         config,
         apsis_pattern=apsis_pattern,
         delta_vs=delta_vs,
         alpha_values=alpha_values,
         warnings=warnings,
+        q_sequence_override=phase_plan["q_sequence"],
     )
     checks = _build_checks(config, burns)
     duration_limit = float(burn_limit["max_total_burn_time_min"])
@@ -434,6 +442,9 @@ def plan_design_maneuver_strategy(payload: dict[str, Any] | None) -> DesignManeu
         "user_count": user_count,
         "actual_count": actual_count,
         "apsis_pattern": ",".join(apsis_pattern),
+        "q_sequence": ",".join(str(value) for value in phase_plan["q_sequence"]),
+        "phase_optimized": bool(phase_plan["optimized"]),
+        "phase_lon_error_before_deg": phase_plan["initial_error_deg"],
         "duration_ok": duration_ok,
         "longitude_ok": longitude_ok,
         "uniform_spread_mps": uniform_spread,
@@ -691,6 +702,121 @@ def _q_sequence(config: dict[str, Any], count: int, orbit_type: str) -> list[int
     if orbit_type == "supersynchronous_transfer" and count >= 3:
         return [int(config["apsis"]["q_AA_default"])] * max(0, count - 3) + [2, 1]
     return [int(config["apsis"]["q_AA_default"])] * max(0, count - 1)
+
+
+def _select_phase_plan(
+    config: dict[str, Any],
+    *,
+    orbit_type: str,
+    apsis_pattern: list[str],
+    delta_vs: list[float | None],
+    alpha_values: list[float],
+) -> dict[str, Any]:
+    base_sequence = _q_sequence(config, len(apsis_pattern), orbit_type)
+    if not _can_phase_optimize(config, orbit_type, apsis_pattern):
+        return {
+            "q_sequence": list(base_sequence),
+            "optimized": False,
+            "initial_error_deg": None,
+        }
+
+    base_error = _phase_terminal_longitude_error(
+        config,
+        apsis_pattern=apsis_pattern,
+        delta_vs=delta_vs,
+        alpha_values=alpha_values,
+        q_sequence=base_sequence,
+    )
+    best_sequence = list(base_sequence)
+    best_error = base_error
+    tolerance = float(config["terminal_tolerance"]["lon_deg"])
+    practical_tolerance = max(tolerance, 0.02)
+    for candidate in _phase_q_candidates(config, apsis_pattern, base_sequence):
+        error = _phase_terminal_longitude_error(
+            config,
+            apsis_pattern=apsis_pattern,
+            delta_vs=delta_vs,
+            alpha_values=alpha_values,
+            q_sequence=candidate,
+        )
+        if abs(error) + 1.0e-12 < abs(best_error):
+            best_sequence = list(candidate)
+            best_error = error
+            if abs(best_error) <= practical_tolerance:
+                break
+    return {
+        "q_sequence": best_sequence,
+        "optimized": best_sequence != base_sequence,
+        "initial_error_deg": base_error,
+    }
+
+
+def _can_phase_optimize(config: dict[str, Any], orbit_type: str, apsis_pattern: list[str]) -> bool:
+    if not bool(config["optimizer"]["enabled"]):
+        return False
+    if orbit_type != "supersynchronous_transfer":
+        return False
+    if len(apsis_pattern) < 4 or apsis_pattern[-1] != "P":
+        return False
+    if not bool(config["supersynchronous_transfer"]["tail_fixed_enabled"]):
+        return False
+    q_user = config["apsis"].get("q_sequence_user", [])
+    return not isinstance(q_user, list) or not q_user
+
+
+def _phase_q_candidates(
+    config: dict[str, Any],
+    apsis_pattern: list[str],
+    base_sequence: list[int],
+) -> list[list[int]]:
+    if len(base_sequence) != len(apsis_pattern) - 1:
+        return [base_sequence]
+    q_default = max(1, int(config["apsis"]["q_AA_default"]))
+    max_q = max(q_default, min(int(config["apsis"]["max_event_search"]), q_default * 2))
+    tail_q = 1 if apsis_pattern[-2:] == ["A", "P"] else base_sequence[-1]
+    raw = [
+        base_sequence,
+        [q_default, min(max_q, q_default * 2), q_default, tail_q],
+        [max(1, q_default - 1), max(1, q_default - 1), q_default, tail_q],
+        [max(1, q_default - 1), max(1, q_default - 1), 1, tail_q],
+        [q_default + 2, q_default, q_default, tail_q],
+        [q_default + 2, 1, q_default, tail_q],
+        [1, q_default, 1, tail_q],
+        [q_default, q_default + 1, q_default, tail_q],
+        [q_default + 1, min(max_q, q_default * 2), q_default, tail_q],
+    ]
+    candidates: list[list[int]] = []
+    seen: set[tuple[int, ...]] = set()
+    for candidate in raw:
+        if len(candidate) != len(base_sequence):
+            continue
+        normalized = [max(1, min(int(config["apsis"]["max_event_search"]), int(value))) for value in candidate]
+        key = tuple(normalized)
+        if key not in seen:
+            candidates.append(normalized)
+            seen.add(key)
+    return candidates
+
+
+def _phase_terminal_longitude_error(
+    config: dict[str, Any],
+    *,
+    apsis_pattern: list[str],
+    delta_vs: list[float | None],
+    alpha_values: list[float],
+    q_sequence: list[int],
+) -> float:
+    burns = _build_burns(
+        config,
+        apsis_pattern=apsis_pattern,
+        delta_vs=delta_vs,
+        alpha_values=alpha_values,
+        warnings=[],
+        q_sequence_override=q_sequence,
+    )
+    if not burns:
+        return float("inf")
+    return _wrap180(burns[-1].longitude_deg_e - float(config["target"]["lon_degE"]))
 
 
 def _initial_state_km(config: dict[str, Any]) -> tuple[np.ndarray, np.ndarray]:
@@ -969,6 +1095,7 @@ def _build_burns(
     delta_vs: list[float | None],
     alpha_values: list[float],
     warnings: list[str],
+    q_sequence_override: list[int] | None = None,
 ) -> list[DesignManeuverBurn]:
     initial = config["initial"]
     longitude_cfg = config["longitude"]
@@ -981,6 +1108,15 @@ def _build_burns(
     burns: list[DesignManeuverBurn] = []
     r, v = _initial_state_km(config)
     elapsed_s, r, v, longitude = _find_initial_burn_event(config, r, v, apsis_pattern[0])
+    q_sequence = q_sequence_override or _q_sequence(
+        config,
+        len(apsis_pattern),
+        _classify_orbit(
+            config,
+            float(initial["a_km"]) * (1.0 + float(initial["e"])),
+            float(config["target"]["a_km"]),
+        ),
+    )
 
     for index, apsis in enumerate(apsis_pattern):
         longitude_ok = _in_window(longitude, planning_window)
@@ -1050,11 +1186,6 @@ def _build_burns(
         mass = mass_after
         if index < len(apsis_pattern) - 1:
             next_apsis_name = apsis_pattern[index + 1]
-            q_sequence = _q_sequence(config, len(apsis_pattern), _classify_orbit(
-                config,
-                float(initial["a_km"]) * (1.0 + float(initial["e"])),
-                float(config["target"]["a_km"]),
-            ))
             q = q_sequence[index] if index < len(q_sequence) else int(apsis_cfg["q_AA_default"])
             target_longitude = None
             if apsis == "A" and next_apsis_name == "P":

@@ -34,11 +34,36 @@ def test_supersynchronous_design_planner_outputs_fixed_tail() -> None:
     assert result.burns[0].elapsed_min == pytest.approx(1254.557603, rel=1e-6)
     assert result.burns[0].longitude_deg_e == pytest.approx(73.475824, rel=1e-6)
     assert result.burns[0].delta_v_mps == pytest.approx(304.666667, rel=1e-6)
-    assert result.burns[-1].delta_v_mps == pytest.approx(161.952229, rel=1e-6)
-    assert abs(result.summary["terminal_errors"]["lon_deg"]) < 10.0
+    assert result.burns[-1].delta_v_mps == pytest.approx(161.958805, rel=1e-6)
+    assert result.summary["q_sequence"] == "3,6,3,1"
+    assert result.summary["phase_optimized"] is True
+    assert abs(result.summary["terminal_errors"]["lon_deg"]) < 0.02
     assert result.checks[-1]["item"] == "终端经度误差"
     assert all(0.0 <= burn.longitude_deg_e < 360.0 for burn in result.burns)
     assert result.checks
+
+
+def test_design_planner_phase_q_search_hits_f4_terminal_longitude() -> None:
+    payload = default_design_maneuver_strategy_payload()
+    payload["initial"].update(
+        {
+            "t0_epoch": "2026-05-14T13:09:19Z",
+            "m0_kg": 5200.0,
+            "e": 0.776846092,
+            "mean_anomaly_deg": 1.85437,
+        }
+    )
+    payload["maneuver_count"].update({"max": 5, "user": 5, "total_dv_est_user_mps": 0.0})
+    payload["planner"].update({"maneuver_count_user": 5, "force_user_count": True})
+    payload["supersynchronous_transfer"].update({"dv_tail_apogee_fixed_mps": 0.0, "dv_tail_perigee_fixed_mps": 0.0})
+
+    result = plan_design_maneuver_strategy(payload)
+
+    assert result.summary["q_sequence"] == "3,6,3,1"
+    assert result.summary["phase_optimized"] is True
+    assert result.burns[-1].longitude_deg_e == pytest.approx(120.004414, rel=1e-6)
+    assert abs(result.summary["terminal_errors"]["lon_deg"]) <= result.config["terminal_tolerance"]["lon_deg"]
+    assert result.checks[-1]["passed"] is True
 
 
 def test_standard_design_planner_honors_user_count() -> None:

@@ -230,6 +230,10 @@
 - 提交：`e499f26`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`src/smart/services/project_workspace.py`、`src/smart/ui/i18n.py`、`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`tests/test_project_workspace.py`、`HANDOFF.md`。
 
-## 2026-05-15T16:29:29+08:00 | tighten design maneuver longitude tolerance
-- 提交：`本次提交`
+## 2026-05-15T16:29:31+08:00 | tighten design maneuver longitude tolerance
+- 提交：`3a0bea8`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`、`projects/F4/config/design_maneuver_strategy.json`、`projects/F4/smart_project.json`、`"doc//347/256/200/345/214/226/350/204/211/345/206/262/345/210/235/345/247/213/350/247/204/345/210/222/347/256/227/346/263/225_V4.2_/350/266/205/345/220/214/346/255/245/350/275/254/347/247/273/344/270/216/346/240/207/345/207/206/350/275/254/347/247/273.md"`、`"doc//347/256/200/345/214/226/350/204/211/345/206/262/350/247/204/345/210/222/347/256/227/346/263/225_V4_/345/211/215/344/270/211/346/254/241/345/235/207/345/214/200/346/234/272/345/212/250/351/207/217/345/210/206/351/205/215.md"`。
+
+## 2026-05-15T16:48:48+08:00 | optimize design maneuver phase chain
+- 提交：`本次提交`
+- 影响文件：`src/smart/services/design_maneuver_strategy.py`、`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
