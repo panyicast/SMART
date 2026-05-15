@@ -18,6 +18,7 @@
 - Added a new "设计变轨策略" page below "导入变轨策略". It uses independent `config/design_maneuver_strategy.json` and implements V4.2 simplified impulse initial planning outputs: count recommendation, A/P pulse table, and constraint checks.
 - Updated the design maneuver strategy planner against the user-provided V4.2 reference package. Defaults now match the reference mission, and planning uses J2 secular apsis events, q-sequence search, local-horizontal impulses, fixed-tail semi-major-axis Δv solving, and reference-shape config import.
 - Redesigned the "设计变轨策略" page parameter editing flow: the page now shows a compact current-config summary and opens two frameless dialogs, "参数配置" for initial orbit, target orbit, and the first 7 engine/burn-limit fields, and "高级设置" for the remaining parameters.
+- Fixed a Qt startup/maximize geometry warning caused by oversized page minimum-height hints. Flight-program splitters/3D preview and design-maneuver result tables now use smaller minimum heights and rely on scroll areas for overflow.
 
 ## Modified / Added Areas
 
@@ -46,6 +47,8 @@
 - `tests/test_design_maneuver_strategy.py`: now also checks reference default output landmarks: 5 burns, 1539 m/s estimate, 312.123864 m/s design burn, first apogee event longitude/time, and final fixed-tail Δv.
 - `src/smart/ui/widgets/design_maneuver_strategy_page.py`: current parameter settings moved out of the left scroll form into two dedicated dialogs with Beijing-time epoch editing, no-wheel controls, and the same dark/cyan/orange dialog style used by maneuver configuration.
 - `src/smart/ui/i18n.py`, `tests/test_design_maneuver_strategy.py`: added labels/status text and regression coverage for the two-dialog editing flow.
+- `src/smart/ui/widgets/flight_program_page.py`, `src/smart/ui/widgets/design_maneuver_strategy_page.py`: reduced oversized minimum heights that inflated `MainWindow` minimum geometry on scaled Windows displays.
+- `tests/test_sidebar_navigation.py`: adds a main-window minimum-height regression check.
 
 ## Risks
 
@@ -69,6 +72,7 @@ Current STK attitude-mode annotation update is complete. STK import now labels o
 Current design maneuver strategy page task is complete. The page has its own config file and does not mutate the import maneuver strategy config.
 Current reference-alignment task is complete. The default design planner now matches the provided V4.2 package shape and major default-output landmarks while staying runnable without SciPy.
 Current design maneuver dialog split task is complete. Parameter configuration and advanced settings are separated into two dialogs, and planning still uses the independent design config.
+Current Qt geometry warning fix is complete. Main window `minimumSizeHint().height()` now measures 942 in the local check, down from the warning-producing oversized layout.
 
 Verified:
 
@@ -86,11 +90,12 @@ D:\Spark\SMART\.venv\Scripts\python.exe -m pytest
 D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_design_maneuver_strategy.py tests/test_project_workspace.py
 D:\Spark\SMART\.venv\Scripts\python.exe -m pytest
 D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_design_maneuver_strategy.py tests/test_project_workspace.py
+D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_sidebar_navigation.py tests/test_flight_program_page.py tests/test_design_maneuver_strategy.py tests/test_project_workspace.py
 ```
 
-Result: 63 passed for the previous playhead checkpoint; 41 passed for STK/launch-window focused tests; 26 passed for project/tracking/page regression tests; 13 passed for STK annotation tests; 54 passed for STK/flight-program regression tests; 14 passed for the STK label regex fix; 14 passed for the attitude-mode Pixel annotation test; 55 passed for STK/flight-program regression tests; 16 passed for design maneuver focused tests; 182 passed for full suite; after reference alignment, 16 focused tests passed and 183 full tests passed; after dialog split, 16 focused project/design tests passed.
+Result: 63 passed for the previous playhead checkpoint; 41 passed for STK/launch-window focused tests; 26 passed for project/tracking/page regression tests; 13 passed for STK annotation tests; 54 passed for STK/flight-program regression tests; 14 passed for the STK label regex fix; 14 passed for the attitude-mode Pixel annotation test; 55 passed for STK/flight-program regression tests; 16 passed for design maneuver focused tests; 182 passed for full suite; after reference alignment, 16 focused tests passed and 183 full tests passed; after dialog split, 16 focused project/design tests passed; after geometry fix, 58 focused UI/project tests passed.
 
-Next minimum task: visually smoke-test the two design-maneuver dialogs in the running Qt app, then if continuing design strategy work add an explicit user-confirmed export/mapping from pulse output into finite-thrust `maneuver_strategy.json`.
+Next minimum task: visually smoke-test maximize/restore and the two design-maneuver dialogs in the running Qt app, then if continuing design strategy work add an explicit user-confirmed export/mapping from pulse output into finite-thrust `maneuver_strategy.json`.
 
 ## Working Rule
 

@@ -437,7 +437,7 @@ def test_right_panel_is_full_realtime_scene_card() -> None:
     assert right_panel.property("role") == "card"
     assert right_panel.layout().count() == 2
     assert right_panel.layout().itemAt(1).widget() is page._scene_view
-    assert page._scene_view.minimumHeight() == 480
+    assert page._scene_view.minimumHeight() == 320
 
 
 def test_reference_table_hides_source_column() -> None:

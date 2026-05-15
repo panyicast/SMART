@@ -39,6 +39,16 @@ def test_nav_items_carry_icons_and_tooltips() -> None:
         window.deleteLater()
 
 
+def test_main_window_minimum_height_fits_common_desktop() -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    window = MainWindow()
+    try:
+        assert window.minimumSizeHint().height() <= 1000
+    finally:
+        window.deleteLater()
+
+
 def test_project_menu_has_save_as_and_close_actions(tmp_path) -> None:
     _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
 

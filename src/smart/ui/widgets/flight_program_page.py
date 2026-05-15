@@ -160,13 +160,13 @@ class FlightProgramPage(QtWidgets.QWidget):
 
         main_splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Vertical)
         main_splitter.setChildrenCollapsible(False)
-        main_splitter.setMinimumHeight(820)
+        main_splitter.setMinimumHeight(520)
         root.addWidget(main_splitter, 1)
         main_splitter.addWidget(self._build_overview_panel())
 
         bottom_splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
         bottom_splitter.setChildrenCollapsible(False)
-        bottom_splitter.setMinimumHeight(520)
+        bottom_splitter.setMinimumHeight(360)
         bottom_splitter.addWidget(self._build_event_design_panel())
         bottom_splitter.addWidget(self._build_right_panel())
         bottom_splitter.setStretchFactor(0, 3)
@@ -414,10 +414,10 @@ class FlightProgramPage(QtWidgets.QWidget):
 
     def _build_right_panel(self) -> QtWidgets.QWidget:
         preview = self._card("实时状态")
-        preview.setMinimumHeight(520)
+        preview.setMinimumHeight(360)
         preview_layout = preview.layout()
         self._scene_view = OrbitPlot3D()
-        self._scene_view.setMinimumHeight(480)
+        self._scene_view.setMinimumHeight(320)
         preview_layout.addWidget(self._scene_view, 1)
         return preview
 

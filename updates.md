@@ -210,6 +210,10 @@
 - 提交：`e569b23`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`tests/test_project_workspace.py`、`HANDOFF.md`。
 
-## 2026-05-15T11:43:11+08:00 | split design maneuver settings dialogs
-- 提交：`本次提交`
+## 2026-05-15T11:43:13+08:00 | split design maneuver settings dialogs
+- 提交：`cfd9daa`
 - 影响文件：`src/smart/ui/i18n.py`、`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-15T11:48:04+08:00 | fix main window minimum geometry
+- 提交：`本次提交`
+- 影响文件：`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`src/smart/ui/widgets/flight_program_page.py`、`tests/test_flight_program_page.py`、`tests/test_sidebar_navigation.py`、`HANDOFF.md`。

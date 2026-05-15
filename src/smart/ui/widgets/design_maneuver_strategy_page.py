@@ -239,7 +239,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._config_overview_table = QtWidgets.QTableWidget(0, 2)
         self._setup_readonly_table(self._config_overview_table)
         self._config_overview_table.horizontalHeader().setStretchLastSection(True)
-        self._config_overview_table.setMinimumHeight(300)
+        self._config_overview_table.setMinimumHeight(220)
         layout.addWidget(self._config_overview_table)
         return card
 
@@ -260,7 +260,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._summary_table = QtWidgets.QTableWidget(0, 2)
         self._setup_readonly_table(self._summary_table)
         self._summary_table.horizontalHeader().setStretchLastSection(True)
-        self._summary_table.setMinimumHeight(220)
+        self._summary_table.setMinimumHeight(150)
         summary_layout.addWidget(self._summary_table)
         layout.addWidget(summary_card, 1)
 
@@ -275,7 +275,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._burn_table = QtWidgets.QTableWidget(0, 13)
         self._setup_readonly_table(self._burn_table)
         self._burn_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
-        self._burn_table.setMinimumHeight(260)
+        self._burn_table.setMinimumHeight(180)
         burn_layout.addWidget(self._burn_table)
         layout.addWidget(burn_card, 2)
 
@@ -292,7 +292,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._check_table = QtWidgets.QTableWidget(0, 4)
         self._setup_readonly_table(self._check_table)
         self._check_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
-        self._check_table.setMinimumHeight(180)
+        self._check_table.setMinimumHeight(120)
         check_layout.addWidget(self._check_table)
         bottom_row.addWidget(check_card, 3)
 
@@ -307,7 +307,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._future_slot_label = QtWidgets.QLabel()
         self._future_slot_label.setProperty("role", "pageBody")
         self._future_slot_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self._future_slot_label.setMinimumHeight(180)
+        self._future_slot_label.setMinimumHeight(120)
         future_layout.addWidget(self._future_slot_label, 1)
         self._warning_label = QtWidgets.QLabel()
         self._warning_label.setProperty("role", "statusDisconnected")
