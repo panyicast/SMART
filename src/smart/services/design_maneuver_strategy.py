@@ -100,7 +100,7 @@ def default_design_maneuver_strategy_payload() -> dict[str, Any]:
             "i_deg": 16.5,
             "lon_node_deg": 8.53237,
             "argp_deg": 200.0,
-            "mean_anomaly_deg": 1.8547,
+            "mean_anomaly_deg": 1.85437,
         },
         "orbit_type": {
             "mode": "auto",

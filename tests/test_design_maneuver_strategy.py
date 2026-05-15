@@ -31,10 +31,10 @@ def test_supersynchronous_design_planner_outputs_fixed_tail() -> None:
     assert result.burns[-2].target_post_a_km == pytest.approx(47271.168509)
     assert result.burns[-1].target_post_a_km == pytest.approx(42164.2)
     assert result.burns[-1].post_a_km == pytest.approx(42164.2)
-    assert result.burns[0].elapsed_min == pytest.approx(1254.557603, rel=1e-6)
-    assert result.burns[0].longitude_deg_e == pytest.approx(73.475824, rel=1e-6)
+    assert result.burns[0].elapsed_min == pytest.approx(1254.558372, rel=1e-6)
+    assert result.burns[0].longitude_deg_e == pytest.approx(73.475631, rel=1e-6)
     assert result.burns[0].delta_v_mps == pytest.approx(224.666667, rel=1e-6)
-    assert result.burns[-1].delta_v_mps == pytest.approx(178.298039, rel=1e-6)
+    assert result.burns[-1].delta_v_mps == pytest.approx(178.298042, rel=1e-6)
     assert result.summary["q_sequence"] == "3,3,2,1"
     assert result.summary["phase_optimized"] is True
     assert result.summary["phase_delta_v_optimized"] is True
@@ -52,7 +52,7 @@ def test_design_planner_phase_q_search_hits_f4_terminal_longitude() -> None:
         {
             "t0_epoch": "2026-05-14T13:09:19Z",
             "m0_kg": 5200.0,
-            "e": 0.776846092,
+            "e": 0.77684692,
             "mean_anomaly_deg": 1.85437,
         }
     )
@@ -65,10 +65,10 @@ def test_design_planner_phase_q_search_hits_f4_terminal_longitude() -> None:
     assert result.summary["q_sequence"] == "3,3,2,1"
     assert result.summary["phase_optimized"] is True
     assert result.summary["phase_delta_v_optimized"] is True
-    assert result.burns[0].delta_v_mps == pytest.approx(226.229837, rel=1e-6)
-    assert result.burns[1].delta_v_mps == pytest.approx(246.229837, rel=1e-6)
-    assert result.burns[2].delta_v_mps == pytest.approx(487.365831, rel=1e-6)
-    assert result.burns[-1].longitude_deg_e == pytest.approx(119.993441, rel=1e-6)
+    assert result.burns[0].delta_v_mps == pytest.approx(226.230311, rel=1e-6)
+    assert result.burns[1].delta_v_mps == pytest.approx(246.230311, rel=1e-6)
+    assert result.burns[2].delta_v_mps == pytest.approx(487.366849, rel=1e-6)
+    assert result.burns[-1].longitude_deg_e == pytest.approx(119.992056, rel=1e-6)
     assert max(burn.total_burn_time_min for burn in result.burns) <= result.config["burn_limit"]["max_total_burn_time_min"]
     assert abs(result.summary["terminal_errors"]["lon_deg"]) <= result.config["terminal_tolerance"]["lon_deg"]
     assert result.checks[-1]["passed"] is True
@@ -185,7 +185,7 @@ def test_design_maneuver_config_accepts_reference_package_shape() -> None:
                 "e": 0.77684692,
                 "i_deg": 16.5,
                 "argp_deg": 200.0,
-                "M_deg": 1.8547,
+                "M_deg": 1.85437,
                 "ascending_node_longitude_deg": 8.53237,
             },
             "maneuver_count": {
@@ -198,5 +198,5 @@ def test_design_maneuver_config_accepts_reference_package_shape() -> None:
 
     assert payload["initial"]["t0_epoch"] == "2026-04-24T13:54:27Z"
     assert payload["initial"]["m0_kg"] == pytest.approx(6515.0)
-    assert payload["initial"]["mean_anomaly_deg"] == pytest.approx(1.8547)
+    assert payload["initial"]["mean_anomaly_deg"] == pytest.approx(1.85437)
     assert payload["maneuver_count"]["engineering_min_count_supersync"] == 5

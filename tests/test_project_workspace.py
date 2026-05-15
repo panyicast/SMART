@@ -74,6 +74,12 @@ def test_create_project_creates_expected_structure(tmp_path: Path) -> None:
     )
     assert design_payload["planner"]["version"] == "V4.2_simplified_transfer_type"
     assert design_payload["initial"]["m0_kg"] == pytest.approx(6515.0)
+    assert design_payload["initial"]["a_km"] == pytest.approx(29478.137)
+    assert design_payload["initial"]["e"] == pytest.approx(0.77684692)
+    assert design_payload["initial"]["i_deg"] == pytest.approx(16.5)
+    assert design_payload["initial"]["lon_node_deg"] == pytest.approx(8.53237)
+    assert design_payload["initial"]["argp_deg"] == pytest.approx(200.0)
+    assert design_payload["initial"]["mean_anomaly_deg"] == pytest.approx(1.85437)
     assert design_payload["target"]["a_km"] == pytest.approx(42164.2)
     assert design_payload["maneuver_count"]["user"] == 0
     assert design_payload["maneuver_count"]["total_dv_est_user_mps"] == pytest.approx(1539.0)

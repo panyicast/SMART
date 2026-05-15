@@ -30,6 +30,7 @@
 - Added design-maneuver calculation busy UI. Clicking "生成脉冲规划" or editing MV1 semi-major-axis control now shows an indeterminate progress bar/status, disables controls and result tables during calculation, and restores interaction after results are saved. MV1 editable cell is highlighted with a distinct background/foreground and tooltip.
 - Optimized design-maneuver planning performance without changing the calculation path by caching Earth-orientation SPICE manager construction and Greenwich angle evaluations. F4 single-plan profiling dropped from about 64 s to about 2 s cold / 4 s profiled hot in the local run; focused tests dropped from ~110 s to ~8 s.
 - Removed the design-maneuver "带入当前任务基线" button and all baseline-import logic. Satellite-status page configuration is now treated as local to that page only; Dashboard no longer reads or displays `satellite_status.json` details, and MainWindow no longer forwards satellite settings into Dashboard.
+- Restored the design-maneuver initial-orbit reference values to the user-provided table: `a=29478.137 km`, `e=0.77684692`, `i=16.5 deg`, `omega=200 deg`, `Omega=8.53237 deg`, and `M=1.85437 deg`; the F4 design config eccentricity now matches the same value.
 
 ## Modified / Added Areas
 
@@ -168,8 +169,9 @@ Latest terminal inclination-control runs: 6 design tests passed; 12 project work
 Latest busy-UI runs: py_compile passed; 6 design tests passed; 12 project workspace tests passed.
 Latest performance runs: py_compile passed; 6 design tests passed in 7.97 s; 12 project workspace tests passed in 3.19 s.
 Latest satellite-status isolation runs: py_compile passed; 6 design tests passed; 6 sidebar/navigation tests passed.
+Latest initial-orbit restore runs: py_compile passed; 18 design/project tests passed.
 
-Next minimum task: visually smoke-test the design-maneuver page result table/archive reload with the new q sequence, then add continuous early-Δv/period correction only if future mission cases cannot meet terminal longitude tolerance by q selection alone.
+Next minimum task: visually smoke-test the design-maneuver page parameter dialog and result archive reload with the restored orbit initials.
 
 ## Working Rule
 
