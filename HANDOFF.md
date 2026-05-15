@@ -21,6 +21,8 @@
 - Fixed a Qt startup/maximize geometry warning caused by oversized page minimum-height hints. Flight-program splitters/3D preview and design-maneuver result tables now use smaller minimum heights and rely on scroll areas for overflow.
 - Moved the "变轨次数推荐" result card from the design-maneuver right result column to the lower-left parameter column.
 - Added automatic design-maneuver result archiving. Clicking "生成脉冲规划" now saves `data/design_maneuver_results.json`, and the page auto-loads archived planning results on refresh/open.
+- Fixed design-maneuver final-burn longitude selection so the last burn searches for the candidate closest to `target.lon_degE` instead of accepting the first in-window P event. Terminal longitude error is now shown in constraint checks.
+- Tightened design-maneuver terminal longitude tolerance from `0.05 deg` to `0.01 deg` in defaults, F4 config, and local algorithm docs. Optimization research shows target longitude is a phasing/period-chain problem controlled mainly by q/event choices and early-burn Δv/period, not by alpha alone.
 
 ## Modified / Added Areas
 
@@ -57,6 +59,10 @@
 - `src/smart/services/project_workspace.py`: adds `design_maneuver_results_path()`, `save_design_maneuver_results()`, and `load_design_maneuver_results()` using `data/design_maneuver_results.json`.
 - `src/smart/ui/widgets/design_maneuver_strategy_page.py`: saves result archive after successful planning and loads archived result tables during `refresh_from_workspace()`.
 - `src/smart/ui/i18n.py`, `tests/test_design_maneuver_strategy.py`, `tests/test_project_workspace.py`: adds status strings and regression coverage for archive save/load.
+- `src/smart/services/design_maneuver_strategy.py`: final burn event search now uses target longitude preference and adds terminal longitude check output.
+- `tests/test_design_maneuver_strategy.py`: updates reference expected output for target-longitude-aware final burn selection.
+- `src/smart/services/design_maneuver_strategy.py`, `projects/F4/config/design_maneuver_strategy.json`, and V4/V4.2 algorithm docs: terminal longitude tolerance is now `0.01 deg`.
+- `.planning/2026-05-15-design-maneuver-longitude-optimization/`: local research notes, not intended for commit, record the phase-chain optimization findings.
 
 ## Risks
 
@@ -83,6 +89,8 @@ Current design maneuver dialog split task is complete. Parameter configuration a
 Current Qt geometry warning fix is complete. Main window `minimumSizeHint().height()` now measures 942 in the local check, down from the warning-producing oversized layout.
 Current design maneuver summary placement task is complete. The recommendation card is now in the page lower-left.
 Current design maneuver result archive task is complete. Planning result tables persist to project data and auto-load when the page opens.
+Current final-burn longitude fix is complete. For the F4 config seen locally, final burn longitude changes from ~82.0006 degE to ~128.7545 degE; exact 120 degE still requires broader phasing/optimization work.
+Current longitude optimization research step is complete. User-provided phase-chain logic is accepted as the right method: first-burn longitude, post-burn orbital periods, integer regression counts, and Earth rotation close the longitude chain. Next implementation should solve q/early-Δv phasing before alpha optimization.
 
 Verified:
 
@@ -103,9 +111,10 @@ D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_design_maneuver_str
 D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_sidebar_navigation.py tests/test_flight_program_page.py tests/test_design_maneuver_strategy.py tests/test_project_workspace.py
 D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_design_maneuver_strategy.py tests/test_sidebar_navigation.py
 D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_design_maneuver_strategy.py tests/test_project_workspace.py tests/test_sidebar_navigation.py
+D:\Spark\SMART\.venv\Scripts\python.exe -m pytest tests/test_design_maneuver_strategy.py tests/test_project_workspace.py
 ```
 
-Result: 63 passed for the previous playhead checkpoint; 41 passed for STK/launch-window focused tests; 26 passed for project/tracking/page regression tests; 13 passed for STK annotation tests; 54 passed for STK/flight-program regression tests; 14 passed for the STK label regex fix; 14 passed for the attitude-mode Pixel annotation test; 55 passed for STK/flight-program regression tests; 16 passed for design maneuver focused tests; 182 passed for full suite; after reference alignment, 16 focused tests passed and 183 full tests passed; after dialog split, 16 focused project/design tests passed; after geometry fix, 58 focused UI/project tests passed; after summary-card move, 11 focused design/sidebar tests passed; after archive save/load, 23 focused tests passed.
+Result: 63 passed for the previous playhead checkpoint; 41 passed for STK/launch-window focused tests; 26 passed for project/tracking/page regression tests; 13 passed for STK annotation tests; 54 passed for STK/flight-program regression tests; 14 passed for the STK label regex fix; 14 passed for the attitude-mode Pixel annotation test; 55 passed for STK/flight-program regression tests; 16 passed for design maneuver focused tests; 182 passed for full suite; after reference alignment, 16 focused tests passed and 183 full tests passed; after dialog split, 16 focused project/design tests passed; after geometry fix, 58 focused UI/project tests passed; after summary-card move, 11 focused design/sidebar tests passed; after archive save/load, 23 focused tests passed; after target-longitude final-burn fix, 17 focused tests passed.
 
 Next minimum task: visually smoke-test maximize/restore and the two design-maneuver dialogs in the running Qt app, then if continuing design strategy work add an explicit user-confirmed export/mapping from pulse output into finite-thrust `maneuver_strategy.json`.
 

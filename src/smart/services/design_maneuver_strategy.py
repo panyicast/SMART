@@ -198,7 +198,7 @@ def default_design_maneuver_strategy_payload() -> dict[str, Any]:
             "a_km": 1.0,
             "e": 1.0e-4,
             "i_deg": 0.01,
-            "lon_deg": 0.05,
+            "lon_deg": 0.01,
         },
         "optimizer": {
             "enabled": True,
@@ -931,6 +931,8 @@ def _find_next_burn_event(
     elapsed_s: float,
     apsis: str,
     q: int,
+    *,
+    target_longitude_deg_e: float | None = None,
 ) -> tuple[float, np.ndarray, np.ndarray, float]:
     raw_window = config["longitude"]["raw_window_degE"]
     planning_window = config["longitude"]["planning_window_degE"]
@@ -943,8 +945,15 @@ def _find_next_burn_event(
         raw_events.append(event)
         if _in_window(lon, planning_window):
             eligible.append(event)
-            if len(eligible) >= q:
+            if target_longitude_deg_e is None and len(eligible) >= q:
                 return eligible[q - 1]
+    if target_longitude_deg_e is not None:
+        if eligible:
+            return min(eligible, key=lambda event: abs(_wrap180(event[3] - target_longitude_deg_e)))
+        eligible_raw = [event for event in raw_events if _in_window(event[3], raw_window)]
+        if eligible_raw:
+            return min(eligible_raw, key=lambda event: abs(_wrap180(event[3] - target_longitude_deg_e)))
+        return min(raw_events, key=lambda event: abs(_wrap180(event[3] - target_longitude_deg_e)))
     eligible_raw = [event for event in raw_events if _in_window(event[3], raw_window)]
     if len(eligible_raw) >= q:
         return eligible_raw[q - 1]
@@ -1047,9 +1056,20 @@ def _build_burns(
                 float(config["target"]["a_km"]),
             ))
             q = q_sequence[index] if index < len(q_sequence) else int(apsis_cfg["q_AA_default"])
+            target_longitude = None
             if apsis == "A" and next_apsis_name == "P":
                 q = 1
-            elapsed_s, r, v, longitude = _find_next_burn_event(config, r, v, elapsed_s, next_apsis_name, q)
+            if index == len(apsis_pattern) - 2:
+                target_longitude = float(config["target"]["lon_degE"])
+            elapsed_s, r, v, longitude = _find_next_burn_event(
+                config,
+                r,
+                v,
+                elapsed_s,
+                next_apsis_name,
+                q,
+                target_longitude_deg_e=target_longitude,
+            )
     return burns
 
 
@@ -1207,6 +1227,14 @@ def _build_checks(config: dict[str, Any], burns: list[DesignManeuverBurn]) -> li
                     "requirement": f"<= {float(tolerance['i_deg']):.3f} deg",
                     "result": f"{final.post_i_deg - float(target['i_deg']):.6f} deg",
                     "passed": abs(final.post_i_deg - float(target["i_deg"])) <= float(tolerance["i_deg"]),
+                },
+                {
+                    "item": "终端经度误差",
+                    "requirement": f"<= {float(tolerance['lon_deg']):.3f} deg",
+                    "result": f"{_wrap180(final.longitude_deg_e - float(target['lon_degE'])):.6f} deg",
+                    "passed": abs(_wrap180(final.longitude_deg_e - float(target["lon_degE"]))) <= float(
+                        tolerance["lon_deg"]
+                    ),
                 },
             ]
         )

@@ -144,7 +144,7 @@
     "a_km": 1.0,
     "e": 0.0001,
     "i_deg": 0.01,
-    "lon_deg": 0.05
+    "lon_deg": 0.01
   },
   "optimizer": {
     "enabled": true,

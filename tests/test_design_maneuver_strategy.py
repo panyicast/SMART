@@ -19,6 +19,7 @@ def test_supersynchronous_design_planner_outputs_fixed_tail() -> None:
     result = plan_design_maneuver_strategy(default_design_maneuver_strategy_payload())
 
     assert result.summary["orbit_type"] == "supersynchronous_transfer"
+    assert result.config["terminal_tolerance"]["lon_deg"] == pytest.approx(0.01)
     assert result.summary["actual_count"] == result.summary["recommended_count"]
     assert result.summary["actual_count"] == 5
     assert result.summary["estimated_total_delta_v_mps"] == pytest.approx(1539.0)
@@ -33,7 +34,9 @@ def test_supersynchronous_design_planner_outputs_fixed_tail() -> None:
     assert result.burns[0].elapsed_min == pytest.approx(1254.557603, rel=1e-6)
     assert result.burns[0].longitude_deg_e == pytest.approx(73.475824, rel=1e-6)
     assert result.burns[0].delta_v_mps == pytest.approx(304.666667, rel=1e-6)
-    assert result.burns[-1].delta_v_mps == pytest.approx(161.946868, rel=1e-6)
+    assert result.burns[-1].delta_v_mps == pytest.approx(161.952229, rel=1e-6)
+    assert abs(result.summary["terminal_errors"]["lon_deg"]) < 10.0
+    assert result.checks[-1]["item"] == "终端经度误差"
     assert all(0.0 <= burn.longitude_deg_e < 360.0 for burn in result.burns)
     assert result.checks
 
