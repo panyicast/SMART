@@ -7,7 +7,7 @@
   },
   "initial": {
     "t0_epoch": "2026-05-14T13:09:19Z",
-    "m0_kg": 5200.0,
+    "m0_kg": 6515.0,
     "state_input_type": "keplerian",
     "a_km": 29478.137,
     "e": 0.77684692,
@@ -149,15 +149,46 @@
   },
   "optimizer": {
     "enabled": true,
-    "method": "Powell",
+    "method": "POWELL",
     "maxiter": 900,
     "maxfev": 25000,
+    "q_fast_optimize_top_k": 10,
+    "slsqp_top_k": 6,
+    "slsqp_multistart_top_k": 2,
+    "slsqp_maxiter": 120,
+    "time_budget_sec": 30.0,
     "terminal_weight": 1000000.0,
     "longitude_weight": 1000000.0,
+    "inclination_weight": 10000000.0,
+    "eccentricity_weight": 100000000.0,
+    "semi_major_axis_weight": 100000.0,
     "duration_weight": 1000000.0,
     "uniform_weight": 1000.0,
     "tail_weight": 1000000000.0,
     "correction_weight": 100.0,
     "random_seed": 7
+  },
+  "hard_constraint_planner": {
+    "enabled": true,
+    "q_AA_user": [
+      3,
+      3,
+      2
+    ],
+    "q_AP_user": null,
+    "q_AP_candidates": [
+      0,
+      1,
+      2
+    ],
+    "fixed_hp_targets_km": {
+      "1": 3933.0,
+      "2": 8360.0
+    },
+    "hard_raw_window": true,
+    "hard_planning_window": true,
+    "prefilter_top_k": 10,
+    "max_local_starts_per_sequence": 5,
+    "local_maxiter": 45
   }
 }
