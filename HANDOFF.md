@@ -194,6 +194,8 @@ Current V5.1 user-input task is complete. The design maneuver advanced page now 
 Latest V5.1 user-input run: 7 design maneuver tests passed.
 Current V5.1 page-UI task is superseded. The left-side `V5.1 用户约束` card was removed. MV1/MV2 front-burn cells in the result table `控后近地点高度/km` column are now highlighted and editable; edits write `hard_constraint_planner.fixed_hp_targets_km[1/2]` and trigger replanning.
 Latest V5.1 perigee-table UI run: 7 design maneuver tests passed.
+Current perigee-table editability fix is complete. The burn table now overrides its readonly edit triggers, uses cell selection, and paints MV1/MV2 editable perigee-height cells with a delegate so the orange highlight survives the global table stylesheet.
+Latest perigee-table editability run: 7 design maneuver tests passed.
 
 Next minimum task: run the page on the real F4 project and confirm the operator-facing advanced settings values match the desired mission sequence and perigee-height targets.
 

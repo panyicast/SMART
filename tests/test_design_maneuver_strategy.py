@@ -204,7 +204,10 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path) -> None
     assert len(page._burn_table.item(1, 9).text().split(".")[1]) == 2
     assert page._burn_table.item(1, 13).flags() & QtCore.Qt.ItemFlag.ItemIsEditable
     assert page._burn_table.item(2, 13).flags() & QtCore.Qt.ItemFlag.ItemIsEditable
-    assert page._burn_table.item(1, 13).background().color().name() == "#237d89"
+    assert page._burn_table.editTriggers() != QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers
+    assert page._burn_table.item(1, 13).data(QtCore.Qt.ItemDataRole.UserRole) == "editable_perigee_height"
+    assert page._burn_table.item(2, 13).data(QtCore.Qt.ItemDataRole.UserRole) == "editable_perigee_height"
+    assert page._burn_table.item(1, 13).background().color().name() == "#ff8a2a"
     replans: list[bool] = []
     page.run_planner = lambda: replans.append(True)  # type: ignore[method-assign]
     page._burn_table.item(1, 13).setText("6100.00")

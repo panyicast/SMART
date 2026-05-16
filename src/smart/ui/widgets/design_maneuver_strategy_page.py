@@ -42,6 +42,27 @@ def _format_config_text_value(section: str, key: str, value: Any) -> str:
     return str(value)
 
 
+class _PerigeeHeightEditDelegate(QtWidgets.QStyledItemDelegate):
+    def paint(
+        self,
+        painter: QtGui.QPainter,
+        option: QtWidgets.QStyleOptionViewItem,
+        index: QtCore.QModelIndex,
+    ) -> None:
+        if index.data(QtCore.Qt.ItemDataRole.UserRole) == "editable_perigee_height":
+            painter.save()
+            painter.fillRect(option.rect, QtGui.QColor("#ff8a2a"))
+            painter.setPen(QtGui.QPen(QtGui.QColor("#ffe0b5"), 2))
+            painter.drawRect(option.rect.adjusted(1, 1, -2, -2))
+            painter.restore()
+            patched = QtWidgets.QStyleOptionViewItem(option)
+            patched.palette.setColor(QtGui.QPalette.ColorRole.Text, QtGui.QColor("#ffffff"))
+            patched.palette.setColor(QtGui.QPalette.ColorRole.HighlightedText, QtGui.QColor("#ffffff"))
+            super().paint(painter, patched, index)
+            return
+        super().paint(painter, option, index)
+
+
 @dataclass(frozen=True, slots=True)
 class _NumberSpec:
     section: str
@@ -302,6 +323,14 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         burn_layout.addWidget(self._burn_header_label)
         self._burn_table = QtWidgets.QTableWidget(0, 14)
         self._setup_readonly_table(self._burn_table)
+        self._burn_table.setItemDelegate(_PerigeeHeightEditDelegate(self._burn_table))
+        self._burn_table.setEditTriggers(
+            QtWidgets.QAbstractItemView.EditTrigger.DoubleClicked
+            | QtWidgets.QAbstractItemView.EditTrigger.SelectedClicked
+            | QtWidgets.QAbstractItemView.EditTrigger.EditKeyPressed
+            | QtWidgets.QAbstractItemView.EditTrigger.AnyKeyPressed
+        )
+        self._burn_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectItems)
         self._burn_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
         self._burn_table.itemChanged.connect(self._handle_burn_table_item_changed)
         self._burn_table.setMinimumHeight(180)
@@ -689,7 +718,8 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             hp_item = self._burn_table.item(row, 13)
             if hp_item is not None and burn.index in {1, 2} and burn.burn_type == "front":
                 hp_item.setFlags(hp_item.flags() | QtCore.Qt.ItemFlag.ItemIsEditable)
-                hp_item.setBackground(QtGui.QColor("#237d89"))
+                hp_item.setData(QtCore.Qt.ItemDataRole.UserRole, "editable_perigee_height")
+                hp_item.setBackground(QtGui.QColor("#ff8a2a"))
                 hp_item.setForeground(QtGui.QColor("#ffffff"))
                 hp_item.setToolTip("编辑后自动按控后近地点高度重新优化")
         for column in range(self._burn_table.columnCount()):
