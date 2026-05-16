@@ -153,26 +153,9 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path) -> None
     assert page._summary_card.parent() is page._config_panel
     assert page._config_panel_layout.indexOf(page._summary_card) == page._config_panel_layout.count() - 1
     assert page._result_panel.layout().indexOf(page._summary_card) == -1
-    assert page._v51_q_aa_edit.text() == "3,3,2"
-    assert page._v51_hp_targets_edit.text() == "1:3933,2:8360"
+    assert not hasattr(page, "_v51_user_constraints_header_label")
+    assert not hasattr(page, "_v51_hp_targets_edit")
     assert has_icon("nav.design_maneuver_strategy")
-
-    page._v51_user_sequence_checkbox.setChecked(True)
-    page._v51_q_aa_edit.setText("3,2")
-    page._v51_q_ap_edit.setText("0")
-    page._v51_q_ap_candidates_edit.setText("0,1")
-    page._v51_hp_targets_edit.setText("1:6000")
-    direct_config = page.config()
-    assert direct_config["apsis"]["pattern_mode"] == "user"
-    assert direct_config["hard_constraint_planner"]["q_AA_user"] == [3, 2]
-    assert direct_config["hard_constraint_planner"]["q_AP_user"] == 0
-    assert direct_config["hard_constraint_planner"]["q_AP_candidates"] == [0, 1]
-    assert direct_config["hard_constraint_planner"]["fixed_hp_targets_km"] == {"1": 6000.0}
-    page._v51_user_sequence_checkbox.setChecked(False)
-    page._v51_q_aa_edit.setText("3,3,2")
-    page._v51_q_ap_edit.clear()
-    page._v51_q_ap_candidates_edit.setText("0,1,2")
-    page._v51_hp_targets_edit.setText("1:3933,2:8360")
 
     advanced_dialog = _DesignManeuverSettingsDialog(
         "高级设置",
@@ -189,23 +172,23 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path) -> None
     assert dialog_config["hard_constraint_planner"]["q_AP_user"] == 0
     assert dialog_config["hard_constraint_planner"]["fixed_hp_targets_km"] == {"1": 6000.0}
 
-    advanced_dialog = _DesignManeuverSettingsDialog(
-        "高级设置",
-        page.config(),
-        page._advanced_dialog_cards(),
-        page,
-    )
-    advanced_dialog._number_fields[("maneuver_count", "user")].setValue(2)
-    page._accept_dialog_config(advanced_dialog.config())
+    page_config = page.config()
+    page_config["apsis"]["pattern_mode"] = "user"
+    page_config["hard_constraint_planner"]["q_AA_user"] = [3, 2]
+    page_config["hard_constraint_planner"]["q_AP_user"] = 0
+    page_config["hard_constraint_planner"]["fixed_hp_targets_km"] = {"1": 6000.0, "2": 8360.0}
+    page_config["maneuver_count"]["user"] = 0
+    page_config["planner"]["maneuver_count_user"] = 0
+    page._accept_dialog_config(page_config)
     saved = page.save_config()
     assert saved == workspace.design_maneuver_strategy_path()
     assert workspace.design_maneuver_strategy_path().name == "design_maneuver_strategy.json"
     assert workspace.maneuver_strategy_path().name == "maneuver_strategy.json"
-    assert workspace.load_design_maneuver_strategy()["maneuver_count"]["user"] == 2
+    assert workspace.load_design_maneuver_strategy()["hard_constraint_planner"]["fixed_hp_targets_km"]["1"] == 6000.0
 
     page.run_planner()
     assert page._summary_table.rowCount() > 0
-    assert page._burn_table.rowCount() == 3
+    assert page._burn_table.rowCount() == 5
     assert page._burn_table.columnCount() == 14
     assert page._burn_table.horizontalHeaderItem(4).text() == "星下点经度/degE"
     assert page._burn_table.horizontalHeaderItem(9).text() == "计算的变轨推力偏航角/deg"
@@ -219,13 +202,20 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path) -> None
     assert page._burn_table.item(1, 0).text() == "MV1"
     assert len(page._burn_table.item(1, 1).text().split(".")[1]) == 2
     assert len(page._burn_table.item(1, 9).text().split(".")[1]) == 2
-    assert not page._burn_table.item(1, 13).flags() & QtCore.Qt.ItemFlag.ItemIsEditable
+    assert page._burn_table.item(1, 13).flags() & QtCore.Qt.ItemFlag.ItemIsEditable
+    assert page._burn_table.item(2, 13).flags() & QtCore.Qt.ItemFlag.ItemIsEditable
+    assert page._burn_table.item(1, 13).background().color().name() == "#237d89"
+    replans: list[bool] = []
+    page.run_planner = lambda: replans.append(True)  # type: ignore[method-assign]
+    page._burn_table.item(1, 13).setText("6100.00")
+    assert replans == [True]
+    assert page.config()["hard_constraint_planner"]["fixed_hp_targets_km"]["1"] == pytest.approx(6100.0)
     assert page._check_table.rowCount() > 0
     assert workspace.design_maneuver_results_path().exists()
 
     reloaded_page = DesignManeuverStrategyPage(I18nManager("zh"), workspace)
     assert reloaded_page._summary_table.rowCount() > 0
-    assert reloaded_page._burn_table.rowCount() == 3
+    assert reloaded_page._burn_table.rowCount() == 5
     assert reloaded_page._check_table.rowCount() > 0
 
     beijing_tz = QtCore.QTimeZone(b"Asia/Shanghai")

@@ -330,6 +330,10 @@
 - 提交：`1f42f22`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`doc/design_maneuver_pulse_planning_algorithm.md`、`HANDOFF.md`。
 
-## 2026-05-16T17:55:53+08:00 | Add V5.1 page constraint controls
+## 2026-05-16T17:55:56+08:00 | Add V5.1 page constraint controls
+- 提交：`9af6921`
+- 影响文件：`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`doc/design_maneuver_pulse_planning_algorithm.md`、`HANDOFF.md`。
+
+## 2026-05-16T19:00:20+08:00 | Edit perigee targets from maneuver table
 - 提交：`本次提交`
 - 影响文件：`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`doc/design_maneuver_pulse_planning_algorithm.md`、`HANDOFF.md`。

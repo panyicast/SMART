@@ -222,7 +222,6 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         layout.setSpacing(14)
 
         layout.addWidget(self._build_config_overview_card())
-        layout.addWidget(self._build_v51_user_constraints_card())
 
         button_card = QtWidgets.QFrame()
         button_card.setProperty("role", "card")
@@ -286,48 +285,6 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         layout.addWidget(self._config_overview_table)
         return card
 
-    def _build_v51_user_constraints_card(self) -> QtWidgets.QFrame:
-        card = QtWidgets.QFrame()
-        card.setProperty("role", "card")
-        layout = QtWidgets.QVBoxLayout(card)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(10)
-
-        self._v51_user_constraints_header_label = QtWidgets.QLabel("V5.1 用户约束")
-        self._v51_user_constraints_header_label.setProperty("role", "cardTitle")
-        layout.addWidget(self._v51_user_constraints_header_label)
-
-        self._v51_user_sequence_checkbox = QtWidgets.QCheckBox("用户序列")
-        self._v51_user_sequence_checkbox.setMinimumHeight(30)
-        self._v51_user_sequence_checkbox.toggled.connect(self._on_v51_user_controls_changed)
-        layout.addWidget(self._v51_user_sequence_checkbox)
-
-        grid = self._new_form_grid()
-        self._v51_q_aa_edit = self._v51_line_edit("3,3,2")
-        self._v51_q_ap_edit = self._v51_line_edit("0")
-        self._v51_q_ap_candidates_edit = self._v51_line_edit("0,1,2")
-        self._v51_hp_targets_edit = self._v51_line_edit("1:3933,2:8360")
-        rows = (
-            ("远地点间 q", self._v51_q_aa_edit),
-            ("终端 A-P q", self._v51_q_ap_edit),
-            ("A-P q 候选", self._v51_q_ap_candidates_edit),
-            ("控后近地点高度/km", self._v51_hp_targets_edit),
-        )
-        for row_index, (label_text, field) in enumerate(rows):
-            label = QtWidgets.QLabel(label_text)
-            label.setProperty("role", "cardCaption")
-            grid.addWidget(label, row_index, 0)
-            grid.addWidget(field, row_index, 1)
-        layout.addLayout(grid)
-        return card
-
-    def _v51_line_edit(self, placeholder: str) -> QtWidgets.QLineEdit:
-        field = QtWidgets.QLineEdit()
-        field.setPlaceholderText(placeholder)
-        field.setMinimumHeight(36)
-        field.editingFinished.connect(self._on_v51_user_controls_changed)
-        return field
-
     def _build_result_panel(self) -> QtWidgets.QWidget:
         panel = QtWidgets.QWidget()
         self._result_panel = panel
@@ -346,6 +303,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._burn_table = QtWidgets.QTableWidget(0, 14)
         self._setup_readonly_table(self._burn_table)
         self._burn_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
+        self._burn_table.itemChanged.connect(self._handle_burn_table_item_changed)
         self._burn_table.setMinimumHeight(180)
         burn_layout.addWidget(self._burn_table)
         layout.addWidget(burn_card, 2)
@@ -553,7 +511,6 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
 
     def _accept_dialog_config(self, config: dict[str, Any]) -> None:
         self._config = normalize_design_maneuver_strategy_payload(config)
-        self._apply_v51_controls_from_config(self._config)
         self._refresh_config_overview()
         self._clear_results()
         self.config_changed.emit(self._config)
@@ -633,7 +590,6 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
 
     def config(self) -> dict[str, Any]:
         config = normalize_design_maneuver_strategy_payload(self._config)
-        config = self._apply_v51_controls_to_config(config)
         config["planner"]["maneuver_count_user"] = int(config["maneuver_count"]["user"])
         return normalize_design_maneuver_strategy_payload(config)
 
@@ -656,59 +612,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
     def _apply_config_to_fields(self, config: dict[str, Any]) -> None:
         normalized = normalize_design_maneuver_strategy_payload(config)
         self._config = normalized
-        self._apply_v51_controls_from_config(normalized)
         self._refresh_config_overview()
-
-    def _apply_v51_controls_from_config(self, config: dict[str, Any]) -> None:
-        hard_cfg = config["hard_constraint_planner"]
-        controls = (
-            self._v51_user_sequence_checkbox,
-            self._v51_q_aa_edit,
-            self._v51_q_ap_edit,
-            self._v51_q_ap_candidates_edit,
-            self._v51_hp_targets_edit,
-        )
-        for widget in controls:
-            widget.blockSignals(True)
-        try:
-            self._v51_user_sequence_checkbox.setChecked(str(config["apsis"].get("pattern_mode", "auto")) == "user")
-            self._v51_q_aa_edit.setText(
-                _format_config_text_value("hard_constraint_planner", "q_AA_user", hard_cfg["q_AA_user"])
-            )
-            self._v51_q_ap_edit.setText("" if hard_cfg["q_AP_user"] is None else str(hard_cfg["q_AP_user"]))
-            self._v51_q_ap_candidates_edit.setText(
-                _format_config_text_value("hard_constraint_planner", "q_AP_candidates", hard_cfg["q_AP_candidates"])
-            )
-            self._v51_hp_targets_edit.setText(
-                _format_config_text_value(
-                    "hard_constraint_planner",
-                    "fixed_hp_targets_km",
-                    hard_cfg["fixed_hp_targets_km"],
-                )
-            )
-        finally:
-            for widget in controls:
-                widget.blockSignals(False)
-
-    def _apply_v51_controls_to_config(self, config: dict[str, Any]) -> dict[str, Any]:
-        result = normalize_design_maneuver_strategy_payload(config)
-        result["apsis"]["pattern_mode"] = "user" if self._v51_user_sequence_checkbox.isChecked() else "auto"
-        hard_cfg = result["hard_constraint_planner"]
-        hard_cfg["q_AA_user"] = self._v51_q_aa_edit.text().strip()
-        hard_cfg["q_AP_user"] = self._v51_q_ap_edit.text().strip()
-        hard_cfg["q_AP_candidates"] = self._v51_q_ap_candidates_edit.text().strip()
-        hard_cfg["fixed_hp_targets_km"] = self._v51_hp_targets_edit.text().strip()
-        return normalize_design_maneuver_strategy_payload(result)
-
-    def _on_v51_user_controls_changed(self) -> None:
-        try:
-            self._config = self._apply_v51_controls_to_config(self._config)
-        except Exception as exc:
-            self._set_status("statusDisconnected", f"配置格式错误: {exc}")
-            return
-        self._refresh_config_overview()
-        self._clear_results()
-        self.config_changed.emit(self._config)
 
     def _set_result(self, result: DesignManeuverResult) -> None:
         self._config = result.config
@@ -782,6 +686,12 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                 item = self._burn_table.item(row, column)
                 if item is not None:
                     item.setFlags(item.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable)
+            hp_item = self._burn_table.item(row, 13)
+            if hp_item is not None and burn.index in {1, 2} and burn.burn_type == "front":
+                hp_item.setFlags(hp_item.flags() | QtCore.Qt.ItemFlag.ItemIsEditable)
+                hp_item.setBackground(QtGui.QColor("#237d89"))
+                hp_item.setForeground(QtGui.QColor("#ffffff"))
+                hp_item.setToolTip("编辑后自动按控后近地点高度重新优化")
         for column in range(self._burn_table.columnCount()):
             item = self._burn_table.item(0, column)
             if item is not None:
@@ -804,6 +714,34 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             )
         self._warning_label.setText("\n".join(result.warnings) if result.warnings else "无警告")
 
+    def _handle_burn_table_item_changed(self, item: QtWidgets.QTableWidgetItem) -> None:
+        if self._updating_burn_table or self._planning_busy:
+            return
+        if item.column() != 13 or item.row() not in {1, 2}:
+            return
+        label_item = self._burn_table.item(item.row(), 0)
+        if label_item is None or label_item.text() not in {"MV1", "MV2"}:
+            return
+        try:
+            hp_km = float(item.text())
+        except ValueError:
+            self._set_status("statusDisconnected", "控后近地点高度必须是数字。")
+            return
+        if hp_km <= 0.0:
+            self._set_status("statusDisconnected", "控后近地点高度必须大于 0。")
+            return
+        self._replan_with_fixed_perigee_height(int(item.row()), hp_km)
+
+    def _replan_with_fixed_perigee_height(self, burn_index: int, hp_km: float) -> None:
+        config = normalize_design_maneuver_strategy_payload(self._config)
+        fixed_hp = dict(config["hard_constraint_planner"].get("fixed_hp_targets_km", {}))
+        fixed_hp[str(burn_index)] = float(hp_km)
+        config["hard_constraint_planner"]["fixed_hp_targets_km"] = fixed_hp
+        self._config = normalize_design_maneuver_strategy_payload(config)
+        self._refresh_config_overview()
+        self.config_changed.emit(self._config)
+        self.run_planner()
+
     def _set_planning_busy(self, busy: bool, message: str = "") -> None:
         self._planning_busy = busy
         self._progress_bar.setVisible(busy)
@@ -822,11 +760,6 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             self._reload_button,
             self._save_button,
             self._plan_button,
-            self._v51_user_sequence_checkbox,
-            self._v51_q_aa_edit,
-            self._v51_q_ap_edit,
-            self._v51_q_ap_candidates_edit,
-            self._v51_hp_targets_edit,
             self._burn_table,
             self._check_table,
             self._summary_table,
@@ -900,11 +833,6 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             self._reload_button,
             self._save_button,
             self._plan_button,
-            self._v51_user_sequence_checkbox,
-            self._v51_q_aa_edit,
-            self._v51_q_ap_edit,
-            self._v51_q_ap_candidates_edit,
-            self._v51_hp_targets_edit,
         ):
             widget.setEnabled(enabled)
 
@@ -929,7 +857,6 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         t = self._i18n.t
         self._title_label.setText(t("design_maneuver.title"))
         self._config_overview_header_label.setText(t("design_maneuver.config_overview_header"))
-        self._v51_user_constraints_header_label.setText("V5.1 用户约束")
         self._parameter_config_button.setText(t("design_maneuver.parameter_config_button"))
         self._advanced_settings_button.setText(t("design_maneuver.advanced_settings_button"))
         self._reload_button.setText(f"+  {t('design_maneuver.reload_button')}")
