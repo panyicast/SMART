@@ -10,9 +10,10 @@ from typing import Any
 import numpy as np
 
 try:
-    from scipy.optimize import minimize
+    from scipy.optimize import minimize, minimize_scalar
 except Exception:  # pragma: no cover - optional runtime fallback
     minimize = None
+    minimize_scalar = None
 
 from smart.domain.models import OrbitalElements
 from smart.services.earth_orientation import format_utc, greenwich_angle_at_utc, parse_utc, utc_now_iso_z
@@ -93,7 +94,7 @@ def design_maneuver_result_from_payload(payload: dict[str, Any] | None) -> Desig
 def default_design_maneuver_strategy_payload() -> dict[str, Any]:
     return {
         "planner": {
-            "version": "V4.2_simplified_transfer_type",
+            "version": "V5.1_hard_constrained_phase_search",
             "auto_recommend_count": True,
             "maneuver_count_user": 0,
             "force_user_count": True,
@@ -234,6 +235,18 @@ def default_design_maneuver_strategy_payload() -> dict[str, Any]:
             "correction_weight": 1.0e2,
             "random_seed": 7,
         },
+        "hard_constraint_planner": {
+            "enabled": True,
+            "q_AA_user": [3, 3, 2],
+            "q_AP_user": None,
+            "q_AP_candidates": [0, 1, 2],
+            "fixed_hp_targets_km": {"1": 3933.0, "2": 8360.0},
+            "hard_raw_window": True,
+            "hard_planning_window": True,
+            "prefilter_top_k": 10,
+            "max_local_starts_per_sequence": 5,
+            "local_maxiter": 45,
+        },
     }
 
 
@@ -291,6 +304,33 @@ def normalize_design_maneuver_strategy_payload(payload: dict[str, Any] | None) -
     }.items():
         for key in keys:
             result[section][key] = float(result[section].get(key, defaults[section][key]))
+
+    hard_cfg = result["hard_constraint_planner"]
+    hard_defaults = defaults["hard_constraint_planner"]
+    hard_cfg["enabled"] = bool(hard_cfg.get("enabled", hard_defaults["enabled"]))
+    hard_cfg["hard_raw_window"] = bool(hard_cfg.get("hard_raw_window", hard_defaults["hard_raw_window"]))
+    hard_cfg["hard_planning_window"] = bool(
+        hard_cfg.get("hard_planning_window", hard_defaults["hard_planning_window"])
+    )
+    hard_cfg["prefilter_top_k"] = max(1, int(hard_cfg.get("prefilter_top_k", hard_defaults["prefilter_top_k"])))
+    hard_cfg["max_local_starts_per_sequence"] = max(
+        1,
+        int(hard_cfg.get("max_local_starts_per_sequence", hard_defaults["max_local_starts_per_sequence"])),
+    )
+    hard_cfg["local_maxiter"] = max(1, int(hard_cfg.get("local_maxiter", hard_defaults["local_maxiter"])))
+    q_aa_user = hard_cfg.get("q_AA_user", [])
+    hard_cfg["q_AA_user"] = [max(1, int(value)) for value in q_aa_user] if isinstance(q_aa_user, list) else []
+    q_ap_user = hard_cfg.get("q_AP_user")
+    hard_cfg["q_AP_user"] = None if q_ap_user in (None, "") else max(0, int(q_ap_user))
+    q_ap_candidates = hard_cfg.get("q_AP_candidates", hard_defaults["q_AP_candidates"])
+    hard_cfg["q_AP_candidates"] = (
+        [max(0, int(value)) for value in q_ap_candidates] if isinstance(q_ap_candidates, list) else [0, 1, 2]
+    )
+    fixed_hp = hard_cfg.get("fixed_hp_targets_km", {})
+    if isinstance(fixed_hp, dict):
+        hard_cfg["fixed_hp_targets_km"] = {str(int(key)): float(value) for key, value in fixed_hp.items()}
+    else:
+        hard_cfg["fixed_hp_targets_km"] = {}
 
     for key in ("dv_tail_apogee_fixed_mps", "dv_tail_perigee_fixed_mps"):
         result["supersynchronous_transfer"][key] = _optional_float(result["supersynchronous_transfer"].get(key))
@@ -418,6 +458,21 @@ def plan_design_maneuver_strategy(payload: dict[str, Any] | None) -> DesignManeu
     if user_count > 0 and user_count < recommended_count:
         warnings.append("用户指定次数小于自动推荐次数，可能导致点火时长超限。")
 
+    if orbit_type == "supersynchronous_transfer" and bool(config["hard_constraint_planner"]["enabled"]):
+        try:
+            return _plan_v51_hard_constrained(
+                config,
+                orbit_type=orbit_type,
+                dv_total_est=dv_total_est,
+                design_dv=design_dv,
+                recommended_count=recommended_count,
+                actual_count=actual_count,
+                user_count=user_count,
+                warnings=warnings,
+            )
+        except Exception as exc:
+            warnings.append(f"V5.1 硬约束规划失败，已回退到 V4.2 流程：{exc}")
+
     apsis_pattern = _apsis_pattern(config, orbit_type, actual_count)
     delta_vs = _distribute_delta_v(
         config,
@@ -501,6 +556,680 @@ def initial_design_maneuver_subsatellite_longitude_deg_e(payload: dict[str, Any]
     config = normalize_design_maneuver_strategy_payload(payload)
     r, _v = _initial_state_km(config)
     return _longitude_deg(config, r, 0.0)
+
+
+def _plan_v51_hard_constrained(
+    config: dict[str, Any],
+    *,
+    orbit_type: str,
+    dv_total_est: float,
+    design_dv: float,
+    recommended_count: int,
+    actual_count: int,
+    user_count: int,
+    warnings: list[str],
+) -> DesignManeuverResult:
+    initial = config["initial"]
+    target = config["target"]
+    earth = config["earth"]
+    hard_cfg = config["hard_constraint_planner"]
+    a0 = float(initial["a_km"])
+    e0 = float(initial["e"])
+    i0 = float(initial["i_deg"])
+    a_target = float(target["a_km"])
+    e_target = float(target["e"])
+    i_target = float(target["i_deg"])
+    re_km = float(earth["Re_km"])
+    r_a0 = a0 * (1.0 + e0)
+    h_a0 = r_a0 - re_km
+    h_sync = a_target - re_km
+
+    first_elapsed, first_r, first_v, first_lon = _find_initial_burn_event(config, *_initial_state_km(config), "A")
+    reference = _v51_apogee_to_rp_i(config, first_r, first_v, a_target, i_target)
+    if reference is None:
+        raise RuntimeError("首个远地点无法一次完成目标近地点与倾角参考解。")
+
+    raw_design_dv = max(1.0, float(config["burn_limit"]["design_dv_per_burn_mps"]))
+    v51_recommended_total = max(2, int(math.ceil(float(reference["dv_mps"]) / raw_design_dv)) + 1)
+    total_count = actual_count if user_count > 0 else v51_recommended_total
+    total_count = max(2, total_count)
+    n_apogee = total_count - 1
+    front_count = max(0, n_apogee - 1)
+    apsis_pattern = ["A"] * n_apogee + ["P"]
+
+    fixed_rp: dict[int, float] = {}
+    for key, hp in hard_cfg.get("fixed_hp_targets_km", {}).items():
+        index = int(key)
+        if 1 <= index <= front_count:
+            fixed_rp[index] = re_km + float(hp)
+    manual_first_control = _first_post_a_control_km(config)
+    if manual_first_control is not None and front_count >= 1:
+        pre_a_first, *_ = _rv_to_coe(first_r, first_v)
+        target_post_a_first = pre_a_first + manual_first_control
+        fixed_rp[1] = 2.0 * target_post_a_first - float(np.linalg.norm(first_r))
+    _v51_validate_fixed_rp(config, fixed_rp, front_count)
+
+    q_aa_candidates = _v51_q_aa_candidates(config, front_count)
+    q_ap_candidates = (
+        [int(hard_cfg["q_AP_user"])]
+        if hard_cfg.get("q_AP_user") is not None
+        else [int(value) for value in hard_cfg.get("q_AP_candidates", [0, 1, 2])]
+    )
+    starts = _v51_template_points(config, front_count, fixed_rp)
+    bounds = _v51_variable_bounds(config, front_count, fixed_rp)
+    variable_indices = [index for index in range(1, front_count + 1) if index not in fixed_rp]
+
+    records: list[dict[str, Any]] = []
+    for q_aa in q_aa_candidates[: max(1, int(hard_cfg["prefilter_top_k"]))]:
+        for q_ap in q_ap_candidates:
+            records.extend(
+                _v51_optimize_sequence(
+                    config,
+                    first=(first_elapsed, first_r, first_v, first_lon),
+                    fixed_rp=fixed_rp,
+                    variable_indices=variable_indices,
+                    bounds=bounds,
+                    starts=starts,
+                    q_aa=q_aa,
+                    q_ap=q_ap,
+                )
+            )
+    if not records:
+        raise RuntimeError("没有生成可传播候选。")
+    records.sort(key=lambda rec: _v51_rank_record(config, rec))
+    best = records[0]
+    if not best.get("success"):
+        raise RuntimeError(str(best.get("reason") or "没有成功候选。"))
+
+    best_violations = _v51_feasibility_violations(config, best)
+    feasible = _v51_is_feasible(config, best)
+    if not feasible:
+        warnings.append("V5.1 未找到完全满足硬约束的候选，当前显示违约量最小候选。")
+    feasible_count = sum(1 for rec in records if rec.get("success") and _v51_is_feasible(config, rec))
+    unique_records = _v51_unique_record_summaries(config, records)
+
+    burns = list(best["burns"])
+    checks = _build_checks(config, burns, ignore_uniform=True)
+    terminal_a = burns[-1].post_a_km if burns else a0
+    terminal_e = burns[-1].post_e if burns else e0
+    terminal_i = burns[-1].post_i_deg if burns else i0
+    terminal_errors = {
+        "a_km": terminal_a - a_target,
+        "e": terminal_e - e_target,
+        "i_deg": terminal_i - i_target,
+        "lon_deg": _wrap180((burns[-1].longitude_deg_e if burns else 0.0) - float(target["lon_degE"])),
+    }
+    max_duration = max((burn.total_burn_time_min for burn in burns), default=0.0)
+    summary = {
+        "initial_apogee_altitude_km": h_a0,
+        "sync_altitude_km": h_sync,
+        "orbit_type": orbit_type,
+        "estimated_total_delta_v_mps": dv_total_est,
+        "design_single_burn_delta_v_mps": design_dv,
+        "reference_apogee_delta_v_mps": float(reference["dv_mps"]),
+        "recommended_count": v51_recommended_total if user_count <= 0 else recommended_count,
+        "user_count": user_count,
+        "actual_count": total_count,
+        "apsis_pattern": ",".join(apsis_pattern),
+        "q_sequence": ",".join([str(value) for value in best["q_AA"]] + [str(best["q_AP"])]),
+        "phase_optimized": True,
+        "phase_delta_v_optimized": True,
+        "phase_alpha_optimized": True,
+        "optimized_propellant_kg": sum(burn.propellant_kg for burn in burns),
+        "phase_lon_error_before_deg": None,
+        "duration_ok": max_duration <= float(config["burn_limit"]["max_total_burn_time_min"]) + 1.0e-9,
+        "longitude_ok": all(burn.longitude_ok for burn in burns),
+        "uniform_spread_mps": _uniform_spread([burn.delta_v_mps for burn in burns if burn.apsis == "A"]),
+        "uniform_ok": True,
+        "terminal_errors": terminal_errors,
+        "phase_diagnostics": {
+            "optimizer_method": "V5.1 hard-constrained",
+            "hard_constraint_feasible": feasible,
+            "hard_constraint_violations": best_violations,
+            "q_total_candidates": len(q_aa_candidates) * len(q_ap_candidates),
+            "q_tested_fast": len(q_aa_candidates) * len(q_ap_candidates),
+            "q_tested_slsqp": 0,
+            "feasible_solutions": feasible_count,
+            "best_q_sequence": list(best["q_AA"]) + [int(best["q_AP"])],
+            "fixed_hp_targets_km": {
+                str(index): fixed_rp[index] - re_km for index in sorted(fixed_rp)
+            },
+            "optimized_hp_targets_km": [float(value) - re_km for value in best["rp_targets_km"]],
+            "top_candidates": unique_records,
+        },
+    }
+    return DesignManeuverResult(config=config, summary=summary, burns=burns, checks=checks, warnings=warnings)
+
+
+def _v51_q_aa_candidates(config: dict[str, Any], front_count: int) -> list[tuple[int, ...]]:
+    hard_cfg = config["hard_constraint_planner"]
+    q_user = list(hard_cfg.get("q_AA_user", []))
+    if len(q_user) == front_count:
+        return [tuple(q_user)]
+    if front_count <= 0:
+        return [tuple()]
+    q_limit = max(1, int(config["apsis"]["q_AA_default"]))
+    values = tuple(range(1, q_limit + 1))
+    return [tuple(int(item) for item in candidate) for candidate in product(values, repeat=front_count)]
+
+
+def _v51_validate_fixed_rp(config: dict[str, Any], fixed_rp: dict[int, float], front_count: int) -> None:
+    rp0 = float(config["initial"]["a_km"]) * (1.0 - float(config["initial"]["e"]))
+    target_rp = float(config["target"]["a_km"]) * (1.0 - float(config["target"]["e"]))
+    previous = rp0
+    for index in range(1, front_count + 1):
+        if index not in fixed_rp:
+            continue
+        value = fixed_rp[index]
+        if not (rp0 + 1.0 < value < target_rp - 1.0):
+            raise RuntimeError(f"固定第 {index} 次控后近地点高度超出可行范围。")
+        if value <= previous + 1.0e-6:
+            raise RuntimeError("固定控后近地点高度必须单调增加。")
+        previous = value
+
+
+def _v51_variable_bounds(
+    config: dict[str, Any],
+    front_count: int,
+    fixed_rp: dict[int, float],
+) -> list[tuple[float, float]]:
+    rp0 = float(config["initial"]["a_km"]) * (1.0 - float(config["initial"]["e"]))
+    target_rp = float(config["target"]["a_km"]) * (1.0 - float(config["target"]["e"]))
+    bounds: list[tuple[float, float]] = []
+    for index in range(1, front_count + 1):
+        if index in fixed_rp:
+            continue
+        low = rp0 + 50.0
+        for previous in range(1, index):
+            if previous in fixed_rp:
+                low = max(low, fixed_rp[previous] + 50.0)
+        high = target_rp - 50.0
+        for following in range(index + 1, front_count + 1):
+            if following in fixed_rp:
+                high = min(high, fixed_rp[following] - 50.0)
+                break
+        if low >= high:
+            raise RuntimeError(f"第 {index} 次控后近地点高度无可行搜索区间。")
+        bounds.append((low, high))
+    return bounds
+
+
+def _v51_rp_from_x(
+    config: dict[str, Any],
+    front_count: int,
+    fixed_rp: dict[int, float],
+    variable_indices: list[int],
+    x_values: list[float],
+) -> list[float]:
+    if len(variable_indices) != len(x_values):
+        raise RuntimeError("V5.1 高度变量维度不匹配。")
+    rp0 = float(config["initial"]["a_km"]) * (1.0 - float(config["initial"]["e"]))
+    target_rp = float(config["target"]["a_km"]) * (1.0 - float(config["target"]["e"]))
+    by_index = dict(fixed_rp)
+    for index, value in zip(variable_indices, x_values):
+        by_index[index] = float(value)
+    result: list[float] = []
+    previous = rp0 + 50.0
+    for index in range(1, front_count + 1):
+        raw = by_index[index]
+        low = max(previous + 50.0, rp0 + 50.0)
+        high = target_rp - 50.0
+        value = raw if index in fixed_rp else float(np.clip(raw, low, high))
+        if index in fixed_rp and not (low - 50.0 <= value <= high + 50.0):
+            raise RuntimeError("固定控后近地点高度破坏单调约束。")
+        result.append(value)
+        previous = value
+    return result
+
+
+def _v51_template_points(
+    config: dict[str, Any],
+    front_count: int,
+    fixed_rp: dict[int, float],
+) -> list[np.ndarray]:
+    variable_indices = [index for index in range(1, front_count + 1) if index not in fixed_rp]
+    if not variable_indices:
+        return [np.asarray([], dtype=float)]
+    rp0 = float(config["initial"]["a_km"]) * (1.0 - float(config["initial"]["e"]))
+    target_rp = float(config["target"]["a_km"]) * (1.0 - float(config["target"]["e"]))
+    templates: list[list[float]] = []
+    for power in (0.85, 1.0, 1.35, 1.5, 2.0):
+        templates.append([rp0 + (target_rp - rp0) * ((j + 1) / max(front_count + 1, 1)) ** power for j in range(front_count)])
+    if front_count == 3:
+        re_km = float(config["earth"]["Re_km"])
+        for hp_values in ([3000.0, 8000.0, 17000.0], [3933.0, 8360.0, 17680.0], [6000.0, 12000.0, 21000.0]):
+            templates.append([re_km + value for value in hp_values])
+    starts: list[np.ndarray] = []
+    seen: set[tuple[float, ...]] = set()
+    limit = int(config["hard_constraint_planner"]["max_local_starts_per_sequence"])
+    for template in templates:
+        full = list(template)
+        for index, value in fixed_rp.items():
+            full[index - 1] = value
+        try:
+            rp_full = _v51_rp_from_x(config, front_count, fixed_rp, variable_indices, [full[index - 1] for index in variable_indices])
+        except Exception:
+            continue
+        x = np.asarray([rp_full[index - 1] for index in variable_indices], dtype=float)
+        key = tuple(round(float(value), 1) for value in x)
+        if key not in seen:
+            starts.append(x)
+            seen.add(key)
+        if len(starts) >= limit:
+            break
+    return starts or [np.asarray([(low + high) * 0.5 for low, high in _v51_variable_bounds(config, front_count, fixed_rp)], dtype=float)]
+
+
+def _v51_front_alpha_bounds(config: dict[str, Any]) -> tuple[float, float]:
+    low, high = _number_pair(config["alpha"]["front_bounds_deg"], [-20.0, 40.0])
+    low, high = min(low, high), max(low, high)
+    initial_i = float(config["initial"]["i_deg"])
+    target_i = float(config["target"]["i_deg"])
+    if initial_i > target_i:
+        low = max(0.0, low)
+    elif initial_i < target_i:
+        high = min(0.0, high)
+    if low > high:
+        low = high = 0.0
+    return low, high
+
+
+def _v51_apogee_to_rp_i(
+    config: dict[str, Any],
+    r: np.ndarray,
+    v: np.ndarray,
+    rp_target_km: float,
+    i_target_deg: float,
+) -> dict[str, Any] | None:
+    radius = float(np.linalg.norm(r))
+    if rp_target_km >= radius:
+        return None
+    r_hat = r / radius
+    east, _north, south = _local_horizontal_basis(r)
+    cos_delta = math.sqrt(max(0.0, 1.0 - float(r_hat[2]) ** 2))
+    if cos_delta <= 1.0e-12:
+        return None
+    cos_beta = math.cos(math.radians(i_target_deg)) / cos_delta
+    if abs(cos_beta) > 1.0 + 1.0e-12:
+        return None
+    cos_beta = float(np.clip(cos_beta, -1.0, 1.0))
+    beta_abs = math.acos(cos_beta)
+    post_a = 0.5 * (radius + rp_target_km)
+    v_required = math.sqrt(float(config["earth"]["mu_km3_s2"]) * (2.0 / radius - 1.0 / post_a))
+    low, high = _v51_front_alpha_bounds(config)
+    candidates: list[dict[str, Any]] = []
+    for beta in (beta_abs, -beta_abs):
+        v_plus = v_required * (math.cos(beta) * east + math.sin(beta) * south)
+        dv_vec = v_plus - v
+        dv_mps = float(np.linalg.norm(dv_vec) * 1000.0)
+        alpha_deg = _alpha_from_local_horizontal_vector(r, dv_vec)
+        if low - 1.0e-9 <= alpha_deg <= high + 1.0e-9:
+            candidates.append({"dv_mps": dv_mps, "alpha_deg": alpha_deg, "v_plus": v_plus, "post_a_km": post_a})
+    return min(candidates, key=lambda item: item["dv_mps"]) if candidates else None
+
+
+def _v51_terminal_perigee_burn(config: dict[str, Any], r: np.ndarray, v: np.ndarray) -> dict[str, Any]:
+    radius = float(np.linalg.norm(r))
+    speed = float(np.linalg.norm(v))
+    v_required = math.sqrt(float(config["earth"]["mu_km3_s2"]) / radius)
+    dv_vec = (v_required / speed - 1.0) * v
+    return {
+        "dv_mps": float(np.linalg.norm(dv_vec) * 1000.0),
+        "alpha_deg": _alpha_from_local_horizontal_vector(r, dv_vec),
+        "v_plus": v + dv_vec,
+    }
+
+
+def _v51_optimize_front_alpha(
+    config: dict[str, Any],
+    r: np.ndarray,
+    v: np.ndarray,
+    elapsed_s: float,
+    rp_target_km: float,
+    q_next: int,
+    cache: dict[tuple[float, float, int], tuple[float, float]],
+) -> tuple[float, float]:
+    key = (round(float(elapsed_s), 3), round(float(rp_target_km), 3), int(q_next))
+    if key in cache:
+        return cache[key]
+    radius = float(np.linalg.norm(r))
+    target_a = 0.5 * (radius + rp_target_km)
+    low, high = _v51_front_alpha_bounds(config)
+    planning_window = config["longitude"]["planning_window_degE"]
+    eval_cache: dict[float, float] = {}
+
+    def objective(alpha_deg: float) -> float:
+        alpha_key = round(float(alpha_deg), 6)
+        if alpha_key in eval_cache:
+            return eval_cache[alpha_key]
+        dv_mps = _solve_dv_for_target_a(r, v, alpha_deg, target_a)
+        if dv_mps is None:
+            value = 1.0e15
+        else:
+            r_after = r.copy()
+            v_after = v + (dv_mps / 1000.0) * _local_horizontal_direction(r, alpha_deg)
+            next_elapsed, next_r, next_v = _next_apsis(config, r_after, v_after, elapsed_s, "A", int(q_next))
+            rem = _v51_apogee_to_rp_i(config, next_r, next_v, float(config["target"]["a_km"]), float(config["target"]["i_deg"]))
+            window_excess = _window_distance(_longitude_deg(config, next_r, next_elapsed), planning_window)
+            value = dv_mps + (float(rem["dv_mps"]) if rem else 1.0e7) + 1000.0 * window_excess * window_excess
+        eval_cache[alpha_key] = float(value)
+        return float(value)
+
+    grid = np.linspace(low, high, 9)
+    best_alpha = min(((objective(float(alpha)), float(alpha)) for alpha in grid), key=lambda item: item[0])[1]
+    if minimize_scalar is not None and high > low:
+        result = minimize_scalar(
+            objective,
+            bounds=(max(low, best_alpha - 6.0), min(high, best_alpha + 6.0)),
+            method="bounded",
+            options={"xatol": 0.01, "maxiter": 50},
+        )
+        if bool(getattr(result, "success", False)):
+            best_alpha = float(result.x)
+    dv_star = _solve_dv_for_target_a(r, v, best_alpha, target_a)
+    if dv_star is None:
+        raise RuntimeError("远地点 alpha 优化后无法反解 Δv。")
+    cache[key] = (float(dv_star), float(best_alpha))
+    return cache[key]
+
+
+def _v51_simulate_candidate(
+    config: dict[str, Any],
+    first: tuple[float, np.ndarray, np.ndarray, float],
+    rp_targets_km: list[float],
+    q_aa: tuple[int, ...],
+    q_ap: int,
+) -> dict[str, Any]:
+    elapsed_s, r, v, _lon = first
+    r = np.asarray(r, dtype=float)
+    v = np.asarray(v, dtype=float)
+    mass = float(config["initial"]["m0_kg"])
+    burns: list[DesignManeuverBurn] = []
+    raw_window = config["longitude"]["raw_window_degE"]
+    planning_window = config["longitude"]["planning_window_degE"]
+    cache: dict[tuple[float, float, int], tuple[float, float]] = {}
+
+    def append_burn(
+        *,
+        index: int,
+        burn_type: str,
+        apsis: str,
+        elapsed: float,
+        r_pre: np.ndarray,
+        v_pre: np.ndarray,
+        dv_mps: float,
+        alpha_deg: float,
+        v_plus: np.ndarray,
+        target_post_a: float | None,
+        flight_revolution: int,
+    ) -> None:
+        nonlocal mass
+        pre_a, *_ = _rv_to_coe(r_pre, v_pre)
+        post_a, post_e, post_i_rad, *_ = _rv_to_coe(r_pre, v_plus)
+        burn_time = _burn_time_for_delta_v(config, mass, dv_mps)
+        mass = max(1.0, mass - burn_time["propellant_kg"])
+        lon = _longitude_deg(config, r_pre, elapsed)
+        timestamp = parse_utc(str(config["initial"]["t0_epoch"])) + timedelta(seconds=elapsed)
+        longitude_ok = _in_window(lon, planning_window)
+        burns.append(
+            DesignManeuverBurn(
+                index=index,
+                burn_type=burn_type,
+                apsis=apsis,
+                elapsed_min=elapsed / 60.0,
+                beijing_time=(timestamp + BEIJING_OFFSET).strftime("%Y-%m-%d %H:%M:%S.%f"),
+                longitude_deg_e=lon,
+                delta_v_mps=dv_mps,
+                alpha_deg=alpha_deg,
+                target_post_a_km=target_post_a,
+                total_burn_time_min=burn_time["total_burn_time_min"],
+                propellant_kg=burn_time["propellant_kg"],
+                post_a_km=post_a,
+                post_e=post_e,
+                post_i_deg=math.degrees(post_i_rad),
+                duration_ok=burn_time["total_burn_time_min"] <= float(config["burn_limit"]["max_total_burn_time_min"]) + 1.0e-9,
+                longitude_ok=longitude_ok,
+                flight_revolution=flight_revolution,
+                position_label="远地点" if apsis == "A" else "近地点",
+                orbit_period_min=_orbit_period_min(config, post_a),
+                post_mass_kg=mass,
+                semi_major_axis_control_km=post_a - pre_a,
+            )
+        )
+
+    flight_revolution = 2
+    for index, rp_target in enumerate(rp_targets_km, start=1):
+        q_next = int(q_aa[index - 1])
+        dv_mps, alpha_deg = _v51_optimize_front_alpha(config, r, v, elapsed_s, rp_target, q_next, cache)
+        v_after = v + (dv_mps / 1000.0) * _local_horizontal_direction(r, alpha_deg)
+        append_burn(
+            index=index,
+            burn_type="front",
+            apsis="A",
+            elapsed=elapsed_s,
+            r_pre=r,
+            v_pre=v,
+            dv_mps=dv_mps,
+            alpha_deg=alpha_deg,
+            v_plus=v_after,
+            target_post_a=0.5 * (float(np.linalg.norm(r)) + rp_target),
+            flight_revolution=flight_revolution,
+        )
+        elapsed_s, r, v = _next_apsis(config, r, v_after, elapsed_s, "A", q_next)
+        flight_revolution += q_next
+
+    terminal = _v51_apogee_to_rp_i(config, r, v, float(config["target"]["a_km"]), float(config["target"]["i_deg"]))
+    if terminal is None:
+        return {"success": False, "reason": "terminal apogee solve infeasible"}
+    terminal_index = len(rp_targets_km) + 1
+    append_burn(
+        index=terminal_index,
+        burn_type="terminal_apogee",
+        apsis="A",
+        elapsed=elapsed_s,
+        r_pre=r,
+        v_pre=v,
+        dv_mps=float(terminal["dv_mps"]),
+        alpha_deg=float(terminal["alpha_deg"]),
+        v_plus=np.asarray(terminal["v_plus"], dtype=float),
+        target_post_a=float(terminal["post_a_km"]),
+        flight_revolution=flight_revolution,
+    )
+    r_after = r.copy()
+    v_after = np.asarray(terminal["v_plus"], dtype=float)
+    elapsed_p, r_p, v_p = _next_apsis(config, r_after, v_after, elapsed_s, "P", int(q_ap) + 1)
+    circ = _v51_terminal_perigee_burn(config, r_p, v_p)
+    append_burn(
+        index=terminal_index + 1,
+        burn_type="terminal_perigee",
+        apsis="P",
+        elapsed=elapsed_p,
+        r_pre=r_p,
+        v_pre=v_p,
+        dv_mps=float(circ["dv_mps"]),
+        alpha_deg=float(circ["alpha_deg"]),
+        v_plus=np.asarray(circ["v_plus"], dtype=float),
+        target_post_a=float(config["target"]["a_km"]),
+        flight_revolution=flight_revolution + int(q_ap),
+    )
+
+    final = burns[-1]
+    return {
+        "success": True,
+        "q_AA": list(q_aa),
+        "q_AP": int(q_ap),
+        "rp_targets_km": [float(value) for value in rp_targets_km],
+        "burns": burns,
+        "terminal": {
+            "a_error_km": final.post_a_km - float(config["target"]["a_km"]),
+            "e_error": final.post_e - float(config["target"]["e"]),
+            "i_error_deg": final.post_i_deg - float(config["target"]["i_deg"]),
+            "lon_error_deg": _wrap180(final.longitude_deg_e - float(config["target"]["lon_degE"])),
+            "total_dv_mps": sum(burn.delta_v_mps for burn in burns),
+            "total_propellant_kg": sum(burn.propellant_kg for burn in burns),
+            "max_total_burn_min": max(burn.total_burn_time_min for burn in burns),
+            "max_raw_window_excess_deg": max(_window_distance(burn.longitude_deg_e, raw_window) for burn in burns),
+            "max_planning_window_excess_deg": max(_window_distance(burn.longitude_deg_e, planning_window) for burn in burns),
+        },
+    }
+
+
+def _v51_feasibility_violations(config: dict[str, Any], rec: dict[str, Any]) -> dict[str, float]:
+    if not rec.get("success"):
+        return {"invalid": 1.0}
+    hard_cfg = config["hard_constraint_planner"]
+    terminal = rec["terminal"]
+    tolerance = config["terminal_tolerance"]
+    return {
+        "invalid": 0.0,
+        "raw_window_excess_deg": max(0.0, float(terminal["max_raw_window_excess_deg"])) if hard_cfg["hard_raw_window"] else 0.0,
+        "planning_window_excess_deg": max(0.0, float(terminal["max_planning_window_excess_deg"])) if hard_cfg["hard_planning_window"] else 0.0,
+        "duration_excess_min": max(0.0, float(terminal["max_total_burn_min"]) - float(config["burn_limit"]["max_total_burn_time_min"])),
+        "terminal_lon_excess_deg": max(0.0, abs(float(terminal["lon_error_deg"])) - float(tolerance["lon_deg"])),
+        "terminal_a_excess_km": max(0.0, abs(float(terminal["a_error_km"])) - float(tolerance["a_km"])),
+        "terminal_e_excess": max(0.0, abs(float(terminal["e_error"])) - float(tolerance["e"])),
+        "terminal_i_excess_deg": max(0.0, abs(float(terminal["i_error_deg"])) - float(tolerance["i_deg"])),
+    }
+
+
+def _v51_is_feasible(config: dict[str, Any], rec: dict[str, Any]) -> bool:
+    return all(value <= 1.0e-9 for value in _v51_feasibility_violations(config, rec).values())
+
+
+def _v51_rank_record(config: dict[str, Any], rec: dict[str, Any]) -> tuple[float, ...]:
+    if not rec.get("success"):
+        return (1.0, 1.0e99, 1.0e99, 1.0e99)
+    violations = _v51_feasibility_violations(config, rec)
+    violation_sum = sum(value * value for value in violations.values())
+    terminal = rec["terminal"]
+    return (
+        0.0 if _v51_is_feasible(config, rec) else 1.0,
+        violation_sum,
+        float(terminal["total_propellant_kg"]),
+        float(terminal["total_dv_mps"]),
+        float(terminal["max_total_burn_min"]),
+        abs(float(terminal["lon_error_deg"])),
+    )
+
+
+def _v51_hard_objective(
+    config: dict[str, Any],
+    first: tuple[float, np.ndarray, np.ndarray, float],
+    fixed_rp: dict[int, float],
+    variable_indices: list[int],
+    front_count: int,
+    x_values: list[float],
+    q_aa: tuple[int, ...],
+    q_ap: int,
+) -> float:
+    try:
+        rp_targets = _v51_rp_from_x(config, front_count, fixed_rp, variable_indices, x_values)
+        rec = _v51_simulate_candidate(config, first, rp_targets, q_aa, q_ap)
+    except Exception:
+        return 1.0e18
+    violations = _v51_feasibility_violations(config, rec)
+    violation_sum = sum(value * value for value in violations.values())
+    if violation_sum > 0.0:
+        return 1.0e12 * violation_sum + 1.0e9
+    terminal = rec["terminal"]
+    return float(terminal["total_propellant_kg"]) + 1.0e-4 * float(terminal["total_dv_mps"])
+
+
+def _v51_optimize_sequence(
+    config: dict[str, Any],
+    *,
+    first: tuple[float, np.ndarray, np.ndarray, float],
+    fixed_rp: dict[int, float],
+    variable_indices: list[int],
+    bounds: list[tuple[float, float]],
+    starts: list[np.ndarray],
+    q_aa: tuple[int, ...],
+    q_ap: int,
+) -> list[dict[str, Any]]:
+    front_count = len(q_aa)
+    records: list[dict[str, Any]] = []
+    if not variable_indices:
+        try:
+            rp_targets = _v51_rp_from_x(config, front_count, fixed_rp, variable_indices, [])
+            rec = _v51_simulate_candidate(config, first, rp_targets, q_aa, q_ap)
+            records.append(rec)
+        except Exception as exc:
+            records.append({"success": False, "reason": str(exc)})
+        return records
+
+    def append_record(x_values: list[float], optimizer: dict[str, Any]) -> None:
+        try:
+            rp_targets = _v51_rp_from_x(config, front_count, fixed_rp, variable_indices, x_values)
+            rec = _v51_simulate_candidate(config, first, rp_targets, q_aa, q_ap)
+            rec["optimizer"] = optimizer
+            records.append(rec)
+        except Exception as exc:
+            records.append({"success": False, "reason": str(exc), "optimizer": optimizer})
+
+    if len(variable_indices) == 1 and minimize_scalar is not None:
+        low, high = bounds[0]
+        result = minimize_scalar(
+            lambda value: _v51_hard_objective(config, first, fixed_rp, variable_indices, front_count, [float(value)], q_aa, q_ap),
+            bounds=(low, high),
+            method="bounded",
+            options={"xatol": 1.0e-3, "maxiter": int(config["hard_constraint_planner"]["local_maxiter"])},
+        )
+        append_record([float(result.x)], {"method": "bounded_scalar", "success": bool(result.success), "nfev": int(getattr(result, "nfev", -1))})
+    if minimize is not None:
+        for start in starts:
+            result = minimize(
+                lambda values: _v51_hard_objective(
+                    config,
+                    first,
+                    fixed_rp,
+                    variable_indices,
+                    front_count,
+                    [float(value) for value in values],
+                    q_aa,
+                    q_ap,
+                ),
+                np.asarray(start, dtype=float),
+                method="Powell",
+                bounds=bounds,
+                options={"maxiter": int(config["hard_constraint_planner"]["local_maxiter"]), "xtol": 1.0e-2, "ftol": 1.0e-3, "disp": False},
+            )
+            append_record([float(value) for value in result.x], {"method": "Powell_barrier", "success": bool(result.success), "nfev": int(getattr(result, "nfev", -1))})
+    if not records:
+        for start in starts:
+            append_record([float(value) for value in start], {"method": "template", "success": True, "nfev": 1})
+    return records
+
+
+def _v51_unique_record_summaries(config: dict[str, Any], records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    unique: list[dict[str, Any]] = []
+    seen: set[tuple[Any, ...]] = set()
+    for rec in records:
+        if not rec.get("success"):
+            continue
+        key = (
+            tuple(rec.get("q_AA", [])),
+            int(rec.get("q_AP", 0)),
+            tuple(round(float(value), 2) for value in rec.get("rp_targets_km", [])),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        terminal = rec["terminal"]
+        unique.append(
+            {
+                "q_sequence": list(rec.get("q_AA", [])) + [int(rec.get("q_AP", 0))],
+                "score": list(_v51_rank_record(config, rec)),
+                "propellant_kg": float(terminal["total_propellant_kg"]),
+                "total_delta_v_mps": float(terminal["total_dv_mps"]),
+                "lon_error_deg": float(terminal["lon_error_deg"]),
+                "max_burn_duration_min": float(terminal["max_total_burn_min"]),
+                "hp_targets_km": [float(value) - float(config["earth"]["Re_km"]) for value in rec.get("rp_targets_km", [])],
+                "feasible": _v51_is_feasible(config, rec),
+            }
+        )
+        if len(unique) >= 5:
+            break
+    return unique
 
 
 def _merge_dict(defaults: dict[str, Any], source: dict[str, Any]) -> dict[str, Any]:

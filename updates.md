@@ -314,6 +314,10 @@
 - 提交：`9b6cdad`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`doc/design_maneuver_pulse_planning_algorithm.md`、`HANDOFF.md`。
 
-## 2026-05-16T10:32:35+08:00 | Show post-burn perigee altitude in design table
-- 提交：`本次提交`
+## 2026-05-16T10:32:38+08:00 | Show post-burn perigee altitude in design table
+- 提交：`045dd84`
 - 影响文件：`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`doc/design_maneuver_pulse_planning_algorithm.md`、`HANDOFF.md`。
+
+## 2026-05-16T17:12:33+08:00 | Implement V5.1 hard-constrained maneuver planner
+- 提交：`本次提交`
+- 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`doc/design_maneuver_pulse_planning_algorithm.md`、`HANDOFF.md`。

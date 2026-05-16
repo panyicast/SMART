@@ -5,7 +5,18 @@
 - `src/smart/services/design_maneuver_strategy.py`
 - 页面展示与结果存档位于 `src/smart/ui/widgets/design_maneuver_strategy_page.py`
 
-当前算法定位为工程初设级的简化脉冲规划，用于快速给出多次 A/P 点火策略初值。它不是有限推力高精度传播器，也不替代后续有限推力展开、STK/Astrogator 精化或完整姿轨耦合优化。
+当前算法定位为工程初设级脉冲初值规划，用于快速给出多次 A/P 点火策略初值。它不是有限推力高精度传播器，也不替代后续有限推力展开、STK/Astrogator 精化或完整姿轨耦合优化。
+
+默认超同步转移路径采用 V5.1 硬约束相位搜索：
+
+```text
+先枚举/读取 q_AA 与 q_AP；
+再搜索前段远地点控后近地点高度 hp/rp；
+先筛选点火窗口、点火时长、终端 a/e/i/lon 等硬约束；
+最后在硬约束可行候选中按推进剂消耗排序。
+```
+
+标准转移和 V5.1 不可用时，仍保留旧的 V4.2 简化半长轴链流程作为回退。
 
 ## 1. 输入与默认任务
 
@@ -76,6 +87,20 @@ burn_limit.max_total_burn_time_min = 90.0 min
 ```
 
 若 `burn_limit.include_settling_in_burn_time = True`，总点火时长包含沉底段。
+
+### 1.4 V5.1 硬约束搜索参数
+
+| 参数 | 默认值 | 含义 |
+| --- | ---: | --- |
+| `hard_constraint_planner.enabled` | `true` | 超同步转移启用 V5.1 |
+| `hard_constraint_planner.q_AA_user` | `[3, 3, 2]` | 前段远地点之间的 q 序列 |
+| `hard_constraint_planner.q_AP_user` | `null` | 终端远地点到近地点的 q；为空时搜索候选 |
+| `hard_constraint_planner.q_AP_candidates` | `[0, 1, 2]` | 可搜索的终端近地点候选 |
+| `hard_constraint_planner.fixed_hp_targets_km` | `{1: 3933, 2: 8360}` | 用户固定的前段控后近地点高度 |
+| `hard_constraint_planner.hard_raw_window` | `true` | 原始测控窗口作为硬约束 |
+| `hard_constraint_planner.hard_planning_window` | `true` | 收缩规划窗口作为硬约束 |
+
+默认 F4 参考任务中，V5.1 会搜索剩余控后近地点高度，并在满足 `terminal_tolerance.lon_deg = 0.01 deg` 的候选中选择推进剂最小者。
 
 ## 2. 轨道类型判定
 
@@ -242,9 +267,49 @@ base_sequence
 
 只保留长度正确且去重后的序列。
 
-## 7. 半长轴控制与经度控制
+## 7. V5.1 控后近地点高度与经度控制
 
-当前算法把经度控制放在半长轴链上处理。
+V5.1 对超同步转移不再把前段主变量设为均匀 Δv 或半长轴控制量，而是设为每次前段远地点点火后的目标近地点半径：
+
+```text
+rp_target_1, rp_target_2, ..., rp_target_{n_A-1}
+```
+
+UI 最后一列显示的 `控后近地点高度/km` 即：
+
+```text
+hp_plus_k = rp_plus_k - Re
+```
+
+给定 `q_AA`、`q_AP` 和一组 `rp_target` 后，算法逐段传播：
+
+1. 第 k 次前段远地点点火锁定 `a_plus = (r_A + rp_target_k)/2`；
+2. 对 alpha 做一维搜索，alpha 每次由固定 `a_plus` 反解 Δv；
+3. 传播到由 `q_AA,k` 指定的下一个远地点；
+4. 终端远地点解析求解 `rp_plus = r_sync` 且 `i_plus = i_target`；
+5. 最后近地点按逆速度投影圆化到 `a_target`；
+6. 对点火经度、时长、终端 a/e/i/lon 做硬约束检查；
+7. 可行候选按总推进剂递增排序。
+
+默认固定前两次控后近地点高度：
+
+```text
+hp_1 = 3933 km
+hp_2 = 8360 km
+```
+
+剩余 `hp_3` 由硬约束优化器搜索。当前默认 q 结构为：
+
+```text
+q_AA = [3, 3, 2]
+q_AP ∈ [0, 1, 2]
+```
+
+候选报告保存在 `summary.phase_diagnostics.top_candidates`，并按 `(q_AA, q_AP, rp_targets)` 去重，避免重复 Top 行。
+
+## 7.1 V4.2 回退：半长轴控制与经度控制
+
+V4.2 回退流程把经度控制放在半长轴链上处理。
 
 流程：
 
