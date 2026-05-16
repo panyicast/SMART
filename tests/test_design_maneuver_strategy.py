@@ -97,6 +97,30 @@ def test_design_planner_phase_q_search_hits_f4_terminal_longitude() -> None:
     assert abs(manual_result.summary["terminal_errors"]["lon_deg"]) <= manual_result.config["terminal_tolerance"]["lon_deg"]
 
 
+def test_v51_user_sequence_and_perigee_targets_drive_planner() -> None:
+    payload = default_design_maneuver_strategy_payload()
+    payload["apsis"]["pattern_mode"] = "user"
+    payload["maneuver_count"]["user"] = 2
+    payload["planner"]["maneuver_count_user"] = 2
+    payload["hard_constraint_planner"]["q_AA_user"] = "3,2"
+    payload["hard_constraint_planner"]["q_AP_user"] = "0"
+    payload["hard_constraint_planner"]["q_AP_candidates"] = "0,1"
+    payload["hard_constraint_planner"]["fixed_hp_targets_km"] = "1:6000"
+
+    normalized = normalize_design_maneuver_strategy_payload(payload)
+    assert normalized["hard_constraint_planner"]["q_AA_user"] == [3, 2]
+    assert normalized["hard_constraint_planner"]["q_AP_user"] == 0
+    assert normalized["hard_constraint_planner"]["q_AP_candidates"] == [0, 1]
+    assert normalized["hard_constraint_planner"]["fixed_hp_targets_km"] == {"1": 6000.0}
+
+    result = plan_design_maneuver_strategy(payload)
+    assert result.summary["actual_count"] == 4
+    assert result.summary["q_sequence"] == "3,2,0"
+    assert len(result.burns) == 4
+    assert result.summary["phase_diagnostics"]["fixed_hp_targets_km"]["1"] == pytest.approx(6000.0)
+    assert result.summary["phase_diagnostics"]["q_total_candidates"] == 1
+
+
 def test_standard_design_planner_honors_user_count() -> None:
     payload = default_design_maneuver_strategy_payload()
     payload["orbit_type"]["mode"] = "standard_transfer"
@@ -130,6 +154,21 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path) -> None
     assert page._config_panel_layout.indexOf(page._summary_card) == page._config_panel_layout.count() - 1
     assert page._result_panel.layout().indexOf(page._summary_card) == -1
     assert has_icon("nav.design_maneuver_strategy")
+
+    advanced_dialog = _DesignManeuverSettingsDialog(
+        "高级设置",
+        page.config(),
+        page._advanced_dialog_cards(),
+        page,
+    )
+    assert advanced_dialog._text_fields[("hard_constraint_planner", "q_AA_user")].text() == "3,3,2"
+    advanced_dialog._text_fields[("hard_constraint_planner", "q_AA_user")].setText("3,2")
+    advanced_dialog._text_fields[("hard_constraint_planner", "q_AP_user")].setText("0")
+    advanced_dialog._text_fields[("hard_constraint_planner", "fixed_hp_targets_km")].setText("1:6000")
+    dialog_config = advanced_dialog.config()
+    assert dialog_config["hard_constraint_planner"]["q_AA_user"] == [3, 2]
+    assert dialog_config["hard_constraint_planner"]["q_AP_user"] == 0
+    assert dialog_config["hard_constraint_planner"]["fixed_hp_targets_km"] == {"1": 6000.0}
 
     advanced_dialog = _DesignManeuverSettingsDialog(
         "高级设置",

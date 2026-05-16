@@ -190,8 +190,10 @@ Latest SciPy dependency task: SciPy 1.17.1 installed; SLSQP smoke test passed; 1
 Latest hybrid optimizer task: py_compile passed; default and F4-like planning smoke runs completed in about 18-20 s with terminal longitude/inclination inside 0.01 deg; 6 design tests passed; 13 project workspace tests passed; 19 combined design/project tests passed.
 Latest runtime/result evaluation: default SLSQP run took about 18.8 s, selected q `1,1,1,1`, terminal lon error `-0.000367 deg`, terminal i error `0.003748 deg`, propellant `2599.177443 kg`, max burn `75.900735 min`; F4-like SLSQP run took about 18.5 s, selected q `1,3,2,1`, terminal lon error `0.007849 deg`, terminal i error `-0.009279 deg`, propellant `2097.137869 kg`, max burn `72.942825 min`; final P alpha fixed at `-180 deg`; 19 combined design/project tests passed.
 Latest dynamic final-P alpha fix: default SLSQP run took about 20.3 s, selected q `1,1,1,1`, final P alpha `-178.578786 deg`, terminal lon error `-0.001199 deg`, terminal i error `0.002253 deg`, propellant `2598.321563 kg`; F4-like SLSQP run took about 19.1 s, selected q `1,3,2,1`, final P alpha `179.293510 deg`, terminal lon error `0.007897 deg`, terminal i error `-0.009535 deg`, propellant `2097.622147 kg`; 19 combined design/project tests passed.
+Current V5.1 user-input task is complete. The design maneuver advanced page now exposes q_AA sequence, q_AP/q_AP candidates, fixed post-burn perigee-height targets, and hard-window options. When `apsis.pattern_mode=user`, the q_AA sequence drives the V5.1 burn count; fixed `index:hp_km` targets replace defaults and feed the optimizer.
+Latest V5.1 user-input run: 7 design maneuver tests passed.
 
-Next minimum task: tune the hybrid optimizer UI/runtime defaults if real project runs show the 30 s time budget or Top-K values need adjustment.
+Next minimum task: run the page on the real F4 project and confirm the operator-facing advanced settings values match the desired mission sequence and perigee-height targets.
 
 ## Working Rule
 

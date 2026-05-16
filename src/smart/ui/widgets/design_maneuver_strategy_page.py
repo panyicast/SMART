@@ -27,6 +27,21 @@ def _perigee_altitude_km(a_km: float, e: float, re_km: float) -> float:
     return float(a_km) * (1.0 - float(e)) - float(re_km)
 
 
+def _format_config_text_value(section: str, key: str, value: Any) -> str:
+    if value in (None, ""):
+        return ""
+    if section == "hard_constraint_planner" and key in {"q_AA_user", "q_AP_candidates"}:
+        if isinstance(value, (list, tuple)):
+            return ",".join(str(int(item)) for item in value)
+    if section == "hard_constraint_planner" and key == "fixed_hp_targets_km":
+        if isinstance(value, dict):
+            return ",".join(
+                f"{int(raw_key)}:{float(raw_value):g}"
+                for raw_key, raw_value in sorted(value.items(), key=lambda item: int(item[0]))
+            )
+    return str(value)
+
+
 @dataclass(frozen=True, slots=True)
 class _NumberSpec:
     section: str
@@ -54,12 +69,21 @@ class _ComboSpec:
 
 
 @dataclass(frozen=True, slots=True)
+class _TextSpec:
+    section: str
+    key: str
+    label: str
+    placeholder: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class _DialogCardSpec:
     title: str
     number_specs: tuple[_NumberSpec, ...] = ()
     pair_specs: tuple[tuple[str, str, str], ...] = ()
     check_specs: tuple[_CheckSpec, ...] = ()
     combo_specs: tuple[_ComboSpec, ...] = ()
+    text_specs: tuple[_TextSpec, ...] = ()
     include_epoch: bool = False
 
 
@@ -114,6 +138,9 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         _NumberSpec("terminal_tolerance", "e", "终端 e 容差", 0.0, 1.0, 0.0001, 9),
         _NumberSpec("terminal_tolerance", "i_deg", "终端 i 容差 (deg)", 0.0, 180.0, 0.01, 6),
         _NumberSpec("terminal_tolerance", "lon_deg", "终端经度容差 (deg)", 0.0, 360.0, 0.01, 6),
+        _NumberSpec("hard_constraint_planner", "prefilter_top_k", "V5.1 预筛候选数", 1.0, 999.0, 1.0, 0),
+        _NumberSpec("hard_constraint_planner", "max_local_starts_per_sequence", "V5.1 多起点数", 1.0, 99.0, 1.0, 0),
+        _NumberSpec("hard_constraint_planner", "local_maxiter", "V5.1 单序列迭代上限", 1.0, 999.0, 1.0, 0),
     )
 
     _PAIR_SPECS = (
@@ -134,6 +161,9 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         _CheckSpec("supersynchronous_transfer", "tail_fixed_enabled", "超同步固定尾段"),
         _CheckSpec("distribution", "allow_small_dv_correction", "允许小 Δv 修正"),
         _CheckSpec("alpha", "optimize_alpha", "方向角优化"),
+        _CheckSpec("hard_constraint_planner", "enabled", "启用 V5.1 硬约束优化"),
+        _CheckSpec("hard_constraint_planner", "hard_raw_window", "原始窗口硬约束"),
+        _CheckSpec("hard_constraint_planner", "hard_planning_window", "规划窗口硬约束"),
     )
 
     def __init__(
@@ -443,6 +473,17 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                     ),
                 ),
             ),
+            _DialogCardSpec(
+                "V5.1 硬约束用户指定项",
+                number_specs=tuple(spec for spec in cls._NUMBER_SPECS if spec.section == "hard_constraint_planner"),
+                check_specs=tuple(spec for spec in cls._CHECK_SPECS if spec.section == "hard_constraint_planner"),
+                text_specs=(
+                    _TextSpec("hard_constraint_planner", "q_AA_user", "远地点间 q 序列", "3,3,2"),
+                    _TextSpec("hard_constraint_planner", "q_AP_user", "终端 A-P q", "空=搜索候选"),
+                    _TextSpec("hard_constraint_planner", "q_AP_candidates", "终端 A-P q 候选", "0,1,2"),
+                    _TextSpec("hard_constraint_planner", "fixed_hp_targets_km", "指定控后近地点高度/km", "1:3933,2:8360"),
+                ),
+            ),
         )
 
     def _open_parameter_config_dialog(self) -> None:
@@ -701,6 +742,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
 
     def _refresh_config_overview(self) -> None:
         config = normalize_design_maneuver_strategy_payload(self._config)
+        hard_cfg = config["hard_constraint_planner"]
         rows = [
             ("初始历元", self._utc_to_qdatetime(str(config["initial"]["t0_epoch"])).toString("yyyy-MM-dd HH:mm:ss")),
             ("初始轨道", f"a {config['initial']['a_km']:.3f} km, e {config['initial']['e']:.6f}, i {config['initial']['i_deg']:.3f} deg"),
@@ -710,6 +752,21 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             ("点火上限", f"{config['burn_limit']['max_total_burn_time_min']:.3f} min"),
             ("次数设置", f"min {config['maneuver_count']['min']}, max {config['maneuver_count']['max']}, user {config['maneuver_count']['user']}"),
             ("经度窗口", f"{config['longitude']['planning_window_degE'][0]:.3f} - {config['longitude']['planning_window_degE'][1]:.3f} degE"),
+            ("V5.1 q 序列", _format_config_text_value("hard_constraint_planner", "q_AA_user", hard_cfg["q_AA_user"])),
+            (
+                "V5.1 A-P q",
+                str(hard_cfg["q_AP_user"])
+                if hard_cfg["q_AP_user"] is not None
+                else f"候选 {_format_config_text_value('hard_constraint_planner', 'q_AP_candidates', hard_cfg['q_AP_candidates'])}",
+            ),
+            (
+                "V5.1 近地点目标",
+                _format_config_text_value(
+                    "hard_constraint_planner",
+                    "fixed_hp_targets_km",
+                    hard_cfg["fixed_hp_targets_km"],
+                ),
+            ),
         ]
         self._set_two_column_rows(self._config_overview_table, rows)
 
@@ -861,6 +918,7 @@ class _DesignManeuverSettingsDialog(QtWidgets.QDialog):
         self._pair_fields: dict[tuple[str, str], tuple[NoWheelDoubleSpinBox, NoWheelDoubleSpinBox]] = {}
         self._check_fields: dict[tuple[str, str], QtWidgets.QCheckBox] = {}
         self._combo_fields: dict[tuple[str, str], NoWheelComboBox] = {}
+        self._text_fields: dict[tuple[str, str], QtWidgets.QLineEdit] = {}
         self._t0_epoch_field: NoWheelDateTimeEdit | None = None
         self._drag_position: QtCore.QPoint | None = None
 
@@ -961,6 +1019,8 @@ class _DesignManeuverSettingsDialog(QtWidgets.QDialog):
             config[section][key] = checkbox.isChecked()
         for (section, key), combo in self._combo_fields.items():
             config[section][key] = str(combo.currentData())
+        for (section, key), field in self._text_fields.items():
+            config[section][key] = field.text().strip()
         config["planner"]["maneuver_count_user"] = int(config["maneuver_count"]["user"])
         return normalize_design_maneuver_strategy_payload(config)
 
@@ -1003,6 +1063,9 @@ class _DesignManeuverSettingsDialog(QtWidgets.QDialog):
         row = 0
         for combo_spec in spec.combo_specs:
             self._add_combo(grid, row, combo_spec)
+            row += 1
+        for text_spec in spec.text_specs:
+            self._add_text(grid, row, text_spec)
             row += 1
         if spec.include_epoch:
             label = QtWidgets.QLabel("初始历元 (北京时间)")
@@ -1081,6 +1144,17 @@ class _DesignManeuverSettingsDialog(QtWidgets.QDialog):
         grid.addWidget(label, row, 0)
         grid.addWidget(combo, row, 1)
 
+    def _add_text(self, grid: QtWidgets.QGridLayout, row: int, spec: _TextSpec) -> None:
+        label = QtWidgets.QLabel(spec.label)
+        label.setProperty("role", "cardCaption")
+        field = QtWidgets.QLineEdit()
+        field.setPlaceholderText(spec.placeholder)
+        field.setMinimumHeight(40)
+        field.setMinimumWidth(190)
+        self._text_fields[(spec.section, spec.key)] = field
+        grid.addWidget(label, row, 0)
+        grid.addWidget(field, row, 1)
+
     def _apply_config_to_fields(self) -> None:
         config = self._config
         if self._t0_epoch_field is not None:
@@ -1103,6 +1177,8 @@ class _DesignManeuverSettingsDialog(QtWidgets.QDialog):
             checkbox.setChecked(bool(config[section][key]))
         for (section, key), combo in self._combo_fields.items():
             DesignManeuverStrategyPage._set_combo_value(combo, str(config[section][key]))
+        for (section, key), field in self._text_fields.items():
+            field.setText(_format_config_text_value(section, key, config[section].get(key)))
 
     def _apply_dialog_style(self) -> None:
         self.setStyleSheet(
@@ -1157,6 +1233,7 @@ class _DesignManeuverSettingsDialog(QtWidgets.QDialog):
             QDialog#designManeuverSettingsDialog QDoubleSpinBox,
             QDialog#designManeuverSettingsDialog QSpinBox,
             QDialog#designManeuverSettingsDialog QDateTimeEdit,
+            QDialog#designManeuverSettingsDialog QLineEdit,
             QDialog#designManeuverSettingsDialog QComboBox {
                 background: rgba(7, 19, 28, 0.98);
                 border: 1px solid #2b6075;
@@ -1167,6 +1244,7 @@ class _DesignManeuverSettingsDialog(QtWidgets.QDialog):
             QDialog#designManeuverSettingsDialog QDoubleSpinBox:focus,
             QDialog#designManeuverSettingsDialog QSpinBox:focus,
             QDialog#designManeuverSettingsDialog QDateTimeEdit:focus,
+            QDialog#designManeuverSettingsDialog QLineEdit:focus,
             QDialog#designManeuverSettingsDialog QComboBox:focus {
                 border: 1px solid #62d8ea;
             }

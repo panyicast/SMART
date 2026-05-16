@@ -102,6 +102,15 @@ burn_limit.max_total_burn_time_min = 90.0 min
 
 默认 F4 参考任务中，V5.1 会搜索剩余控后近地点高度，并在满足 `terminal_tolerance.lon_deg = 0.01 deg` 的候选中选择推进剂最小者。
 
+页面高级设置中可直接填写这些字段：
+
+- `远地点间 q 序列`：逗号分隔，例如 `3,3,2`。当 `apsis.pattern_mode = user` 时，该序列直接决定点火次数：前段 q 个数 + 终端远地点 + 终端近地点。
+- `终端 A-P q`：单个整数，例如 `0`。留空时使用 `终端 A-P q 候选` 搜索。
+- `终端 A-P q 候选`：逗号分隔，例如 `0,1,2`。
+- `指定控后近地点高度/km`：`点火序号:高度` 形式，例如 `1:3933,2:8360`。留空表示对应前段近地点高度由优化器搜索。
+
+若用户指定 q 序列与 `maneuver_count.user` 不一致，V5.1 以 q 序列定义的点火次数为准，并给出 warning。
+
 ## 2. 轨道类型判定
 
 算法先计算初始远地点半径：
@@ -129,6 +138,7 @@ recommended_count = ceil(total_dv_est / design_single_burn_dv)
 再结合工程下限、用户指定次数和固定尾段要求确定实际次数：
 
 - 若 `maneuver_count.user > 0`，采用用户指定次数。
+- 若超同步 V5.1 且 `apsis.pattern_mode = user`，并且 `hard_constraint_planner.q_AA_user` 非空，则采用 `len(q_AA_user) + 2` 次。
 - 超同步转移至少保留固定尾段需要的次数。
 - 默认超同步工程下限为 5 次。
 - 若用户指定次数小于推荐次数，产生 warning，但仍按用户指定次数计算。

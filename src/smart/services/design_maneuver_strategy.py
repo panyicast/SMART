@@ -254,6 +254,11 @@ def normalize_design_maneuver_strategy_payload(payload: dict[str, Any] | None) -
     defaults = default_design_maneuver_strategy_payload()
     source = payload if isinstance(payload, dict) else {}
     source = _reference_config_to_internal(source)
+    explicit_fixed_hp_targets = None
+    source_hard_cfg = source.get("hard_constraint_planner")
+    if isinstance(source_hard_cfg, dict) and "fixed_hp_targets_km" in source_hard_cfg:
+        explicit_fixed_hp_targets = _parse_index_float_map(source_hard_cfg.get("fixed_hp_targets_km"))
+    source = _coerce_hard_constraint_source(source)
     result = _merge_dict(defaults, source)
 
     result["planner"]["auto_recommend_count"] = bool(result["planner"].get("auto_recommend_count", True))
@@ -318,19 +323,15 @@ def normalize_design_maneuver_strategy_payload(payload: dict[str, Any] | None) -
         int(hard_cfg.get("max_local_starts_per_sequence", hard_defaults["max_local_starts_per_sequence"])),
     )
     hard_cfg["local_maxiter"] = max(1, int(hard_cfg.get("local_maxiter", hard_defaults["local_maxiter"])))
-    q_aa_user = hard_cfg.get("q_AA_user", [])
-    hard_cfg["q_AA_user"] = [max(1, int(value)) for value in q_aa_user] if isinstance(q_aa_user, list) else []
+    hard_cfg["q_AA_user"] = _parse_int_list(hard_cfg.get("q_AA_user", []), minimum=1)
     q_ap_user = hard_cfg.get("q_AP_user")
-    hard_cfg["q_AP_user"] = None if q_ap_user in (None, "") else max(0, int(q_ap_user))
+    hard_cfg["q_AP_user"] = None if q_ap_user in (None, "") else max(0, int(float(str(q_ap_user).strip())))
     q_ap_candidates = hard_cfg.get("q_AP_candidates", hard_defaults["q_AP_candidates"])
-    hard_cfg["q_AP_candidates"] = (
-        [max(0, int(value)) for value in q_ap_candidates] if isinstance(q_ap_candidates, list) else [0, 1, 2]
-    )
-    fixed_hp = hard_cfg.get("fixed_hp_targets_km", {})
-    if isinstance(fixed_hp, dict):
-        hard_cfg["fixed_hp_targets_km"] = {str(int(key)): float(value) for key, value in fixed_hp.items()}
-    else:
-        hard_cfg["fixed_hp_targets_km"] = {}
+    parsed_q_ap = _parse_int_list(q_ap_candidates, minimum=0)
+    hard_cfg["q_AP_candidates"] = parsed_q_ap or [0, 1, 2]
+    if explicit_fixed_hp_targets is not None:
+        hard_cfg["fixed_hp_targets_km"] = explicit_fixed_hp_targets
+    hard_cfg["fixed_hp_targets_km"] = _parse_index_float_map(hard_cfg.get("fixed_hp_targets_km", {}))
 
     for key in ("dv_tail_apogee_fixed_mps", "dv_tail_perigee_fixed_mps"):
         result["supersynchronous_transfer"][key] = _optional_float(result["supersynchronous_transfer"].get(key))
@@ -396,8 +397,7 @@ def normalize_design_maneuver_strategy_payload(payload: dict[str, Any] | None) -
     ):
         result[section][key] = _number_pair(result[section].get(key), defaults[section][key])
 
-    q_user = result["apsis"].get("q_sequence_user", [])
-    result["apsis"]["q_sequence_user"] = [max(1, int(value)) for value in q_user] if isinstance(q_user, list) else []
+    result["apsis"]["q_sequence_user"] = _parse_int_list(result["apsis"].get("q_sequence_user", []), minimum=1)
     alpha_template = result["alpha"].get("initial_template_deg", [])
     result["alpha"]["initial_template_deg"] = [float(value) for value in alpha_template] if isinstance(alpha_template, list) else []
     for key in ("user_dv_template_mps", "weights"):
@@ -591,7 +591,14 @@ def _plan_v51_hard_constrained(
 
     raw_design_dv = max(1.0, float(config["burn_limit"]["design_dv_per_burn_mps"]))
     v51_recommended_total = max(2, int(math.ceil(float(reference["dv_mps"]) / raw_design_dv)) + 1)
-    total_count = actual_count if user_count > 0 else v51_recommended_total
+    q_aa_user = [int(value) for value in hard_cfg.get("q_AA_user", [])]
+    sequence_drives_count = str(config["apsis"].get("pattern_mode", "auto")) == "user" and bool(q_aa_user)
+    if sequence_drives_count:
+        total_count = len(q_aa_user) + 2
+        if user_count > 0 and user_count != total_count:
+            warnings.append(f"用户 q 序列定义 {total_count} 次点火，已覆盖用户指定次数 {user_count}。")
+    else:
+        total_count = actual_count if user_count > 0 else v51_recommended_total
     total_count = max(2, total_count)
     n_apogee = total_count - 1
     front_count = max(0, n_apogee - 1)
@@ -1281,10 +1288,71 @@ def _reference_config_to_internal(source: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _coerce_hard_constraint_source(source: dict[str, Any]) -> dict[str, Any]:
+    hard_cfg = source.get("hard_constraint_planner")
+    if not isinstance(hard_cfg, dict):
+        return source
+    fixed_hp = hard_cfg.get("fixed_hp_targets_km")
+    if isinstance(fixed_hp, str):
+        result = dict(source)
+        result["hard_constraint_planner"] = dict(hard_cfg)
+        result["hard_constraint_planner"]["fixed_hp_targets_km"] = _parse_index_float_map(fixed_hp)
+        return result
+    return source
+
+
 def _optional_float(value: object) -> float | None:
     if value in (None, ""):
         return None
     return float(value)
+
+
+def _parse_int_list(value: object, *, minimum: int) -> list[int]:
+    if value in (None, ""):
+        return []
+    if isinstance(value, str):
+        raw_items = value.replace(";", ",").split(",")
+    elif isinstance(value, (list, tuple)):
+        raw_items = list(value)
+    else:
+        raw_items = [value]
+    result: list[int] = []
+    for raw in raw_items:
+        if raw in (None, ""):
+            continue
+        text = str(raw).strip()
+        if not text:
+            continue
+        result.append(max(minimum, int(float(text))))
+    return result
+
+
+def _parse_index_float_map(value: object) -> dict[str, float]:
+    if value in (None, ""):
+        return {}
+    if isinstance(value, dict):
+        items = value.items()
+    elif isinstance(value, str):
+        pairs: list[tuple[str, str]] = []
+        for chunk in value.replace(";", ",").split(","):
+            text = chunk.strip()
+            if not text:
+                continue
+            if ":" in text:
+                key, raw_value = text.split(":", 1)
+            elif "=" in text:
+                key, raw_value = text.split("=", 1)
+            else:
+                continue
+            pairs.append((key, raw_value))
+        items = pairs
+    else:
+        return {}
+    result: dict[str, float] = {}
+    for key, raw_value in items:
+        index = max(1, int(float(str(key).strip())))
+        result[str(index)] = float(str(raw_value).strip())
+    return dict(sorted(result.items(), key=lambda item: int(item[0])))
 
 
 def _number_pair(value: object, default: list[float]) -> list[float]:
