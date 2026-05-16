@@ -196,6 +196,8 @@ Current V5.1 page-UI task is superseded. The left-side `V5.1 用户约束` card 
 Latest V5.1 perigee-table UI run: 7 design maneuver tests passed.
 Current perigee-table editability fix is complete. The burn table now overrides its readonly edit triggers, uses cell selection, and paints MV1/MV2 editable perigee-height cells with a delegate so the orange highlight survives the global table stylesheet.
 Latest perigee-table editability run: 7 design maneuver tests passed.
+Current editable-cell affordance fix is complete. The MV1/MV2 perigee-height delegate now draws an orange border, corner marker, and `EDIT` badge after the default table paint so editable cells are visibly distinct from normal cells.
+Latest editable-cell affordance run: 7 design maneuver tests passed.
 
 Next minimum task: run the page on the real F4 project and confirm the operator-facing advanced settings values match the desired mission sequence and perigee-height targets.
 

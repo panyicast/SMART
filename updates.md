@@ -338,6 +338,10 @@
 - 提交：`3d79a52`
 - 影响文件：`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`doc/design_maneuver_pulse_planning_algorithm.md`、`HANDOFF.md`。
 
-## 2026-05-16T19:06:07+08:00 | Enable perigee height table editing
-- 提交：`本次提交`
+## 2026-05-16T19:06:10+08:00 | Enable perigee height table editing
+- 提交：`5df8985`
 - 影响文件：`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-16T19:10:40+08:00 | Clarify editable perigee height cells
+- 提交：`本次提交`
+- 影响文件：`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`HANDOFF.md`。

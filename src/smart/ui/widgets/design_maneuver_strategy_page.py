@@ -50,15 +50,40 @@ class _PerigeeHeightEditDelegate(QtWidgets.QStyledItemDelegate):
         index: QtCore.QModelIndex,
     ) -> None:
         if index.data(QtCore.Qt.ItemDataRole.UserRole) == "editable_perigee_height":
-            painter.save()
-            painter.fillRect(option.rect, QtGui.QColor("#ff8a2a"))
-            painter.setPen(QtGui.QPen(QtGui.QColor("#ffe0b5"), 2))
-            painter.drawRect(option.rect.adjusted(1, 1, -2, -2))
-            painter.restore()
             patched = QtWidgets.QStyleOptionViewItem(option)
+            patched.font.setBold(True)
             patched.palette.setColor(QtGui.QPalette.ColorRole.Text, QtGui.QColor("#ffffff"))
             patched.palette.setColor(QtGui.QPalette.ColorRole.HighlightedText, QtGui.QColor("#ffffff"))
             super().paint(painter, patched, index)
+            painter.save()
+            painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
+            rect = option.rect.adjusted(2, 2, -3, -3)
+            painter.setBrush(QtGui.QColor(255, 138, 42, 42))
+            painter.setPen(QtGui.QPen(QtGui.QColor("#ffb45f"), 2))
+            painter.drawRoundedRect(rect, 4, 4)
+
+            corner = QtGui.QPolygon(
+                [
+                    rect.topRight() + QtCore.QPoint(-24, 0),
+                    rect.topRight(),
+                    rect.topRight() + QtCore.QPoint(0, 24),
+                ]
+            )
+            painter.setPen(QtCore.Qt.PenStyle.NoPen)
+            painter.setBrush(QtGui.QColor("#ff8a2a"))
+            painter.drawPolygon(corner)
+
+            badge = QtCore.QRect(rect.left() + 4, rect.top() + 3, 34, 16)
+            painter.setBrush(QtGui.QColor("#ff8a2a"))
+            painter.setPen(QtCore.Qt.PenStyle.NoPen)
+            painter.drawRoundedRect(badge, 3, 3)
+            painter.setPen(QtGui.QColor("#061017"))
+            badge_font = QtGui.QFont(patched.font)
+            badge_font.setPointSize(max(7, badge_font.pointSize() - 2))
+            badge_font.setBold(True)
+            painter.setFont(badge_font)
+            painter.drawText(badge, QtCore.Qt.AlignmentFlag.AlignCenter, "EDIT")
+            painter.restore()
             return
         super().paint(painter, option, index)
 
