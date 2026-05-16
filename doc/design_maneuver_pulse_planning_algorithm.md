@@ -528,7 +528,7 @@ supersynchronous_transfer.tail_fixed_count = 2
 
 ## 12. 手动第一次半长轴控制量
 
-UI 允许用户手动修改 MV1 的半长轴控制量：
+配置字段支持手动指定 MV1 的半长轴控制量：
 
 ```text
 distribution.first_post_a_control_km
@@ -627,11 +627,9 @@ DesignManeuverResult(
 | 点火时长/min | 本次总点火时长 |
 | 推进剂消耗/kg | 本次推进剂 |
 | 控后卫星质量/kg | 控后质量 |
-| 半长轴控制量/km | 本次半长轴变化量 |
+| 控后近地点高度/km | `post_a_km * (1 - post_e) - Re` |
 
 所有数值在 UI 表格中保留小数点后两位。
-
-MV1 的 `半长轴控制量/km` 是可编辑单元格。用户修改后会触发重新计算。
 
 ## 15. 存档与加载
 

@@ -38,6 +38,7 @@
 - Implemented the design-maneuver hybrid phase optimizer: q sequences are fully enumerated up to the q limit, quick-screened, optimized by coordinate search for the top candidates, refined with SciPy SLSQP for the best candidates, and finally ranked with hard-constraint-first tuple scoring. Summary diagnostics now report q candidate counts, SLSQP attempts, feasibility counts, active constraints, terminal margins, and fallback state.
 - Fixed the hybrid optimizer evaluation path so the final supersynchronous perigee burn no longer uses a hard-coded `alpha=-180 deg`; it now computes the alpha angle from the local-horizontal projection of the retrograde velocity direction while keeping `alpha=0 deg` defined as local east.
 - Fixed design-maneuver apogee yaw search sign handling. For inclination-reduction cases, apogee alpha search bounds are clipped to nonnegative values so the optimizer cannot choose inefficient negative yaw for apogee inclination lowering; the opposite sign is clipped for inclination-raising cases.
+- Changed the design-maneuver burn table final column from semi-major-axis control amount to post-burn perigee altitude. Values use `a*(1-e)-Re`; the table no longer exposes MV1 semi-major-axis control as an editable highlighted cell.
 
 ## Modified / Added Areas
 
@@ -115,6 +116,7 @@ Current STK flight-event annotation fix is complete. STK import creates English-
 Current STK label regex crash fix is complete. `_english_stk_label()` now accepts ASCII `/` and `-` without forming an invalid regex range.
 Current STK attitude-mode annotation update is complete. STK import now labels only attitude modes with `SPM`/`EPM`/`AFM`/`TRM` in the 3D upper-left corner.
 Current design maneuver yaw-sign fix is complete. Apogee alpha is constrained to the correct inclination-control sign, and the focused design-maneuver tests pass.
+Current design maneuver burn-table final-column change is complete. The last column now shows post-burn perigee altitude and focused tests pass.
 Current design maneuver strategy page task is complete. The page has its own config file and does not mutate the import maneuver strategy config.
 Current reference-alignment task is complete. The default design planner now matches the provided V4.2 package shape and major default-output landmarks while staying runnable without SciPy.
 Current design maneuver dialog split task is complete. Parameter configuration and advanced settings are separated into two dialogs, and planning still uses the independent design config.

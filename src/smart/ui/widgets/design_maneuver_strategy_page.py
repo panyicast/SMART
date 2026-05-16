@@ -21,31 +21,10 @@ from smart.ui.i18n import I18nManager
 from smart.ui.widgets.spinboxes import NoWheelComboBox, NoWheelDateTimeEdit, NoWheelDoubleSpinBox, NoWheelSpinBox
 
 BEIJING_QT_TIMEZONE_ID = b"Asia/Shanghai"
-_BURN_TABLE_CONTROL_COLUMN = 13
-_EDITABLE_CELL_ROLE = int(QtCore.Qt.ItemDataRole.UserRole) + 24
 
 
-class _BurnTableDelegate(QtWidgets.QStyledItemDelegate):
-    def paint(
-        self,
-        painter: QtGui.QPainter,
-        option: QtWidgets.QStyleOptionViewItem,
-        index: QtCore.QModelIndex,
-    ) -> None:
-        if index.data(_EDITABLE_CELL_ROLE) != "first-control":
-            super().paint(painter, option, index)
-            return
-        highlighted = QtWidgets.QStyleOptionViewItem(option)
-        self.initStyleOption(highlighted, index)
-        highlighted.backgroundBrush = QtGui.QBrush(QtGui.QColor("#245d69"))
-        highlighted.palette.setColor(QtGui.QPalette.ColorRole.Text, QtGui.QColor("#ffd85a"))
-        highlighted.palette.setColor(QtGui.QPalette.ColorRole.HighlightedText, QtGui.QColor("#fff4b0"))
-        highlighted.palette.setColor(QtGui.QPalette.ColorRole.Highlight, QtGui.QColor("#2f7482"))
-        super().paint(painter, highlighted, index)
-        painter.save()
-        painter.setPen(QtGui.QPen(QtGui.QColor("#ffd85a"), 1))
-        painter.drawRect(option.rect.adjusted(1, 1, -2, -2))
-        painter.restore()
+def _perigee_altitude_km(a_km: float, e: float, re_km: float) -> float:
+    return float(a_km) * (1.0 - float(e)) - float(re_km)
 
 
 @dataclass(frozen=True, slots=True)
@@ -293,12 +272,6 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         burn_layout.addWidget(self._burn_header_label)
         self._burn_table = QtWidgets.QTableWidget(0, 14)
         self._setup_readonly_table(self._burn_table)
-        self._burn_table.setItemDelegate(_BurnTableDelegate(self._burn_table))
-        self._burn_table.setEditTriggers(
-            QtWidgets.QAbstractItemView.EditTrigger.DoubleClicked
-            | QtWidgets.QAbstractItemView.EditTrigger.EditKeyPressed
-        )
-        self._burn_table.itemChanged.connect(self._on_burn_table_item_changed)
         self._burn_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
         self._burn_table.setMinimumHeight(180)
         burn_layout.addWidget(self._burn_table)
@@ -615,11 +588,14 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._updating_burn_table = True
         self._burn_table.setRowCount(0)
         self._burn_table.insertRow(0)
-        initial = normalize_design_maneuver_strategy_payload(result.config)["initial"]
+        config = normalize_design_maneuver_strategy_payload(result.config)
+        initial = config["initial"]
+        earth = config["earth"]
         separation_longitude = initial_design_maneuver_subsatellite_longitude_deg_e(result.config)
         period_min = 2.0 * math.pi * math.sqrt(
-            max(1.0, float(initial["a_km"]) ** 3 / float(result.config["earth"]["mu_km3_s2"]))
+            max(1.0, float(initial["a_km"]) ** 3 / float(earth["mu_km3_s2"]))
         ) / 60.0
+        re_km = float(earth["Re_km"])
         self._set_row_values(
             self._burn_table,
             0,
@@ -637,7 +613,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                 "0.00",
                 "0.00",
                 f"{float(initial['m0_kg']):.2f}",
-                "0.00",
+                f"{_perigee_altitude_km(float(initial['a_km']), float(initial['e']), re_km):.2f}",
             ),
         )
         for burn in result.burns:
@@ -657,21 +633,13 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                 f"{burn.total_burn_time_min:.2f}",
                 f"{burn.propellant_kg:.2f}",
                 f"{burn.post_mass_kg:.2f}",
-                f"{burn.semi_major_axis_control_km:.2f}",
+                f"{_perigee_altitude_km(burn.post_a_km, burn.post_e, re_km):.2f}",
             )
             self._set_row_values(self._burn_table, row, values)
             for column in range(self._burn_table.columnCount()):
                 item = self._burn_table.item(row, column)
                 if item is not None:
                     item.setFlags(item.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable)
-            if burn.index == 1:
-                item = self._burn_table.item(row, _BURN_TABLE_CONTROL_COLUMN)
-                if item is not None:
-                    item.setFlags(item.flags() | QtCore.Qt.ItemFlag.ItemIsEditable)
-                    item.setData(_EDITABLE_CELL_ROLE, "first-control")
-                    item.setBackground(QtGui.QColor("#245d69"))
-                    item.setForeground(QtGui.QColor("#ffd85a"))
-                    item.setToolTip("可编辑：修改后自动按该第一次半长轴控制量重新优化")
         for column in range(self._burn_table.columnCount()):
             item = self._burn_table.item(0, column)
             if item is not None:
@@ -693,24 +661,6 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                 ),
             )
         self._warning_label.setText("\n".join(result.warnings) if result.warnings else "无警告")
-
-    def _on_burn_table_item_changed(self, item: QtWidgets.QTableWidgetItem) -> None:
-        if self._updating_burn_table:
-            return
-        if item.row() != 1 or item.column() != _BURN_TABLE_CONTROL_COLUMN:
-            return
-        try:
-            first_control_km = float(item.text())
-        except ValueError:
-            self._set_status("statusDisconnected", "第一次半长轴控制量必须为数字。")
-            return
-        config = self.config()
-        config["distribution"]["first_post_a_control_km"] = first_control_km
-        self._config = normalize_design_maneuver_strategy_payload(config)
-        self._refresh_config_overview()
-        self.config_changed.emit(self._config)
-        self._set_status("statusReady", "第一次半长轴控制量已修改，正在重新计算...")
-        self.run_planner()
 
     def _set_planning_busy(self, busy: bool, message: str = "") -> None:
         self._planning_busy = busy
@@ -838,7 +788,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                 "点火时长/min",
                 "推进剂消耗/kg",
                 "控后卫星质量/kg",
-                "半长轴控制量/km",
+                "控后近地点高度/km",
             ]
         )
         self._check_table.setHorizontalHeaderLabels(["检查项", "要求", "结果", "通过"])
