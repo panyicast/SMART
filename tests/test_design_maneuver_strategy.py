@@ -50,6 +50,7 @@ def test_supersynchronous_design_planner_outputs_fixed_tail() -> None:
         assert result.summary["optimized_propellant_kg"] <= baseline.summary["optimized_propellant_kg"]
     assert abs(result.summary["terminal_errors"]["i_deg"]) <= result.config["terminal_tolerance"]["i_deg"]
     assert abs(result.summary["terminal_errors"]["lon_deg"]) <= result.config["terminal_tolerance"]["lon_deg"]
+    assert all(burn.alpha_deg >= 0.0 for burn in result.burns if burn.apsis == "A")
     assert result.checks[2]["requirement"] == "不限制"
     assert result.checks[-1]["item"] == "终端经度误差"
     assert all(0.0 <= burn.longitude_deg_e < 360.0 for burn in result.burns)
@@ -86,6 +87,7 @@ def test_design_planner_phase_q_search_hits_f4_terminal_longitude() -> None:
     assert result.summary["phase_diagnostics"]["optimizer_method"] in {"SLSQP", "coordinate"}
     assert result.burns[-1].apsis == "P"
     assert abs(result.burns[-1].alpha_deg) > 170.0
+    assert all(burn.alpha_deg >= 0.0 for burn in result.burns if burn.apsis == "A")
     if abs(baseline.summary["terminal_errors"]["i_deg"]) <= baseline.config["terminal_tolerance"]["i_deg"]:
         assert result.summary["optimized_propellant_kg"] < baseline.summary["optimized_propellant_kg"]
     assert max(burn.total_burn_time_min for burn in result.burns) <= result.config["burn_limit"]["max_total_burn_time_min"]

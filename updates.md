@@ -306,6 +306,10 @@
 - 提交：`2fcc793`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`HANDOFF.md`。
 
-## 2026-05-16T00:41:12+08:00 | compute final perigee yaw from velocity
-- 提交：`本次提交`
+## 2026-05-16T00:41:14+08:00 | compute final perigee yaw from velocity
+- 提交：`d1464df`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-16T10:19:50+08:00 | Fix apogee yaw sign constraint
+- 提交：`本次提交`
+- 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`doc/design_maneuver_pulse_planning_algorithm.md`、`HANDOFF.md`。

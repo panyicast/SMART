@@ -1415,6 +1415,8 @@ def _alpha_search_bounds(
     apsis_pattern: list[str],
 ) -> list[tuple[float, float]]:
     alpha_cfg = config["alpha"]
+    initial_i = float(config["initial"]["i_deg"])
+    target_i = float(config["target"]["i_deg"])
     bounds: list[tuple[float, float]] = []
     for index, apsis in enumerate(apsis_pattern):
         if orbit_type == "standard_transfer":
@@ -1426,7 +1428,15 @@ def _alpha_search_bounds(
         else:
             raw_bounds = alpha_cfg["front_bounds_deg"]
         low, high = float(raw_bounds[0]), float(raw_bounds[1])
-        bounds.append((min(low, high), max(low, high)))
+        low, high = min(low, high), max(low, high)
+        if apsis == "A":
+            if initial_i > target_i:
+                low = max(0.0, low)
+            elif initial_i < target_i:
+                high = min(0.0, high)
+            if low > high:
+                low = high = 0.0
+        bounds.append((low, high))
     return bounds
 
 
