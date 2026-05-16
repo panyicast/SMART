@@ -198,6 +198,8 @@ Current perigee-table editability fix is complete. The burn table now overrides 
 Latest perigee-table editability run: 7 design maneuver tests passed.
 Current editable-cell affordance fix is complete. The MV1/MV2 perigee-height delegate now draws an orange border, corner marker, and `EDIT` badge after the default table paint so editable cells are visibly distinct from normal cells.
 Latest editable-cell affordance run: 7 design maneuver tests passed.
+Current V5.1 performance optimization is complete. Profiling showed the default one-free-variable perigee search ran bounded scalar optimization and then repeated Powell multi-starts; the Powell pass was redundant for 1D. `_v51_optimize_sequence()` now returns after bounded scalar optimization when there is exactly one variable. Default planning smoke dropped from about 37.7 s under cProfile / 1.83 s wall after the change; design maneuver tests dropped from about 76-84 s to 7.70 s while preserving the default result (`q=3,3,2,0`, propellant `2596.404635868783 kg`, hard constraints feasible).
+Latest V5.1 performance run: cProfile completed; 7 design maneuver tests passed in 7.70 s.
 
 Next minimum task: run the page on the real F4 project and confirm the operator-facing advanced settings values match the desired mission sequence and perigee-height targets.
 

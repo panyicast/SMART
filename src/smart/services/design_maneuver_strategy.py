@@ -1182,6 +1182,7 @@ def _v51_optimize_sequence(
             options={"xatol": 1.0e-3, "maxiter": int(config["hard_constraint_planner"]["local_maxiter"])},
         )
         append_record([float(result.x)], {"method": "bounded_scalar", "success": bool(result.success), "nfev": int(getattr(result, "nfev", -1))})
+        return records
     if minimize is not None:
         for start in starts:
             result = minimize(
