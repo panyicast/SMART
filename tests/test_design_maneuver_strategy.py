@@ -153,7 +153,26 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path) -> None
     assert page._summary_card.parent() is page._config_panel
     assert page._config_panel_layout.indexOf(page._summary_card) == page._config_panel_layout.count() - 1
     assert page._result_panel.layout().indexOf(page._summary_card) == -1
+    assert page._v51_q_aa_edit.text() == "3,3,2"
+    assert page._v51_hp_targets_edit.text() == "1:3933,2:8360"
     assert has_icon("nav.design_maneuver_strategy")
+
+    page._v51_user_sequence_checkbox.setChecked(True)
+    page._v51_q_aa_edit.setText("3,2")
+    page._v51_q_ap_edit.setText("0")
+    page._v51_q_ap_candidates_edit.setText("0,1")
+    page._v51_hp_targets_edit.setText("1:6000")
+    direct_config = page.config()
+    assert direct_config["apsis"]["pattern_mode"] == "user"
+    assert direct_config["hard_constraint_planner"]["q_AA_user"] == [3, 2]
+    assert direct_config["hard_constraint_planner"]["q_AP_user"] == 0
+    assert direct_config["hard_constraint_planner"]["q_AP_candidates"] == [0, 1]
+    assert direct_config["hard_constraint_planner"]["fixed_hp_targets_km"] == {"1": 6000.0}
+    page._v51_user_sequence_checkbox.setChecked(False)
+    page._v51_q_aa_edit.setText("3,3,2")
+    page._v51_q_ap_edit.clear()
+    page._v51_q_ap_candidates_edit.setText("0,1,2")
+    page._v51_hp_targets_edit.setText("1:3933,2:8360")
 
     advanced_dialog = _DesignManeuverSettingsDialog(
         "高级设置",
