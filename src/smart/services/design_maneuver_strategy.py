@@ -237,10 +237,10 @@ def default_design_maneuver_strategy_payload() -> dict[str, Any]:
         },
         "hard_constraint_planner": {
             "enabled": True,
-            "q_AA_user": [3, 3, 2],
+            "q_AA_user": [],
             "q_AP_user": None,
             "q_AP_candidates": [0, 1, 2],
-            "fixed_hp_targets_km": {"1": 3933.0, "2": 8360.0},
+            "fixed_hp_targets_km": {},
             "hard_raw_window": True,
             "hard_planning_window": True,
             "prefilter_top_k": 10,
@@ -459,19 +459,16 @@ def plan_design_maneuver_strategy(payload: dict[str, Any] | None) -> DesignManeu
         warnings.append("用户指定次数小于自动推荐次数，可能导致点火时长超限。")
 
     if orbit_type == "supersynchronous_transfer" and bool(config["hard_constraint_planner"]["enabled"]):
-        try:
-            return _plan_v51_hard_constrained(
-                config,
-                orbit_type=orbit_type,
-                dv_total_est=dv_total_est,
-                design_dv=design_dv,
-                recommended_count=recommended_count,
-                actual_count=actual_count,
-                user_count=user_count,
-                warnings=warnings,
-            )
-        except Exception as exc:
-            warnings.append(f"V5.1 硬约束规划失败，已回退到 V4.2 流程：{exc}")
+        return _plan_v51_hard_constrained(
+            config,
+            orbit_type=orbit_type,
+            dv_total_est=dv_total_est,
+            design_dv=design_dv,
+            recommended_count=recommended_count,
+            actual_count=actual_count,
+            user_count=user_count,
+            warnings=warnings,
+        )
 
     apsis_pattern = _apsis_pattern(config, orbit_type, actual_count)
     delta_vs = _distribute_delta_v(
@@ -626,8 +623,13 @@ def _plan_v51_hard_constrained(
     bounds = _v51_variable_bounds(config, front_count, fixed_rp)
     variable_indices = [index for index in range(1, front_count + 1) if index not in fixed_rp]
 
+    if str(config["apsis"].get("pattern_mode", "auto")) == "user" and q_aa_candidates:
+        q_aa_to_test = q_aa_candidates[: max(1, int(hard_cfg["prefilter_top_k"]))]
+    else:
+        q_aa_to_test = q_aa_candidates
+
     records: list[dict[str, Any]] = []
-    for q_aa in q_aa_candidates[: max(1, int(hard_cfg["prefilter_top_k"]))]:
+    for q_aa in q_aa_to_test:
         for q_ap in q_ap_candidates:
             records.extend(
                 _v51_optimize_sequence(
@@ -650,9 +652,9 @@ def _plan_v51_hard_constrained(
 
     best_violations = _v51_feasibility_violations(config, best)
     feasible = _v51_is_feasible(config, best)
-    if not feasible:
-        warnings.append("V5.1 未找到完全满足硬约束的候选，当前显示违约量最小候选。")
     feasible_count = sum(1 for rec in records if rec.get("success") and _v51_is_feasible(config, rec))
+    if not feasible:
+        raise RuntimeError(f"V5.1 未找到完全满足硬约束的候选；最小违约量: {best_violations}")
     unique_records = _v51_unique_record_summaries(config, records)
 
     burns = list(best["burns"])
@@ -694,7 +696,7 @@ def _plan_v51_hard_constrained(
             "hard_constraint_feasible": feasible,
             "hard_constraint_violations": best_violations,
             "q_total_candidates": len(q_aa_candidates) * len(q_ap_candidates),
-            "q_tested_fast": len(q_aa_candidates) * len(q_ap_candidates),
+            "q_tested_fast": len(q_aa_to_test) * len(q_ap_candidates),
             "q_tested_slsqp": 0,
             "feasible_solutions": feasible_count,
             "best_q_sequence": list(best["q_AA"]) + [int(best["q_AP"])],
@@ -711,7 +713,7 @@ def _plan_v51_hard_constrained(
 def _v51_q_aa_candidates(config: dict[str, Any], front_count: int) -> list[tuple[int, ...]]:
     hard_cfg = config["hard_constraint_planner"]
     q_user = list(hard_cfg.get("q_AA_user", []))
-    if len(q_user) == front_count:
+    if str(config["apsis"].get("pattern_mode", "auto")) == "user" and len(q_user) == front_count:
         return [tuple(q_user)]
     if front_count <= 0:
         return [tuple()]
@@ -801,9 +803,8 @@ def _v51_template_points(
     target_rp = float(config["target"]["a_km"]) * (1.0 - float(config["target"]["e"]))
     templates: list[list[float]] = []
     if front_count == 3:
-        re_km = float(config["earth"]["Re_km"])
-        for hp_values in ([3000.0, 8000.0, 17000.0], [3933.0, 8360.0, 17680.0], [6000.0, 12000.0, 21000.0]):
-            templates.append([re_km + value for value in hp_values])
+        for fractions in ((0.08, 0.22, 0.48), (0.105, 0.229, 0.491), (0.16, 0.33, 0.58)):
+            templates.append([rp0 + (target_rp - rp0) * fraction for fraction in fractions])
     for power in (0.85, 1.0, 1.35, 1.5, 2.0):
         templates.append([rp0 + (target_rp - rp0) * ((j + 1) / max(front_count + 1, 1)) ** power for j in range(front_count)])
     starts: list[np.ndarray] = []
@@ -1147,7 +1148,8 @@ def _v51_use_template_only_fast_path(
     fixed_rp: dict[int, float],
     variable_indices: list[int],
 ) -> bool:
-    return front_count == 3 and set(fixed_rp) == {1} and variable_indices == [2, 3]
+    del fixed_rp
+    return front_count == 3 and len(variable_indices) >= 2
 
 
 def _v51_refine_last_variable_from_best_template(
@@ -1174,25 +1176,34 @@ def _v51_refine_last_variable_from_best_template(
     if violations["terminal_lon_excess_deg"] <= 1.0e-9:
         return []
     rp_targets = [float(value) for value in best["rp_targets_km"]]
-    fixed_x2 = rp_targets[1]
-    low, high = bounds[1]
-    result = minimize_scalar(
-        lambda value: _v51_hard_objective(
+    x_values = [rp_targets[index - 1] for index in variable_indices]
+    variable_offset = len(variable_indices) - 1
+    low, high = bounds[variable_offset]
+
+    def objective(value: float) -> float:
+        trial = list(x_values)
+        trial[variable_offset] = float(value)
+        return _v51_hard_objective(
             config,
             first,
             fixed_rp,
             variable_indices,
             front_count,
-            [fixed_x2, float(value)],
+            trial,
             q_aa,
             q_ap,
-        ),
+        )
+
+    result = minimize_scalar(
+        objective,
         bounds=(low, high),
         method="bounded",
         options={"xatol": 1.0e-3, "maxiter": min(24, int(config["hard_constraint_planner"]["local_maxiter"]))},
     )
     try:
-        refined_targets = _v51_rp_from_x(config, front_count, fixed_rp, variable_indices, [fixed_x2, float(result.x)])
+        refined_x = list(x_values)
+        refined_x[variable_offset] = float(result.x)
+        refined_targets = _v51_rp_from_x(config, front_count, fixed_rp, variable_indices, refined_x)
         refined = _v51_simulate_candidate(config, first, refined_targets, q_aa, q_ap)
         refined["optimizer"] = {
             "method": "template_x3_scalar",

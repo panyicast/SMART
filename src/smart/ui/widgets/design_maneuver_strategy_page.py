@@ -511,10 +511,10 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                 number_specs=tuple(spec for spec in cls._NUMBER_SPECS if spec.section == "hard_constraint_planner"),
                 check_specs=tuple(spec for spec in cls._CHECK_SPECS if spec.section == "hard_constraint_planner"),
                 text_specs=(
-                    _TextSpec("hard_constraint_planner", "q_AA_user", "远地点间 q 序列", "3,3,2"),
+                    _TextSpec("hard_constraint_planner", "q_AA_user", "远地点间 q 序列", "空=自动搜索"),
                     _TextSpec("hard_constraint_planner", "q_AP_user", "终端 A-P q", "空=搜索候选"),
                     _TextSpec("hard_constraint_planner", "q_AP_candidates", "终端 A-P q 候选", "0,1,2"),
-                    _TextSpec("hard_constraint_planner", "fixed_hp_targets_km", "指定控后近地点高度/km", "1:3933,2:8360"),
+                    _TextSpec("hard_constraint_planner", "fixed_hp_targets_km", "指定控后近地点高度/km", "空=自由优化"),
                 ),
             ),
         )
@@ -835,6 +835,11 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
     def _refresh_config_overview(self) -> None:
         config = normalize_design_maneuver_strategy_payload(self._config)
         hard_cfg = config["hard_constraint_planner"]
+        q_sequence_text = (
+            _format_config_text_value("hard_constraint_planner", "q_AA_user", hard_cfg["q_AA_user"])
+            if str(config["apsis"].get("pattern_mode", "auto")) == "user"
+            else "自动搜索"
+        )
         rows = [
             ("初始历元", self._utc_to_qdatetime(str(config["initial"]["t0_epoch"])).toString("yyyy-MM-dd HH:mm:ss")),
             ("初始轨道", f"a {config['initial']['a_km']:.3f} km, e {config['initial']['e']:.6f}, i {config['initial']['i_deg']:.3f} deg"),
@@ -844,7 +849,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             ("点火上限", f"{config['burn_limit']['max_total_burn_time_min']:.3f} min"),
             ("次数设置", f"min {config['maneuver_count']['min']}, max {config['maneuver_count']['max']}, user {config['maneuver_count']['user']}"),
             ("经度窗口", f"{config['longitude']['planning_window_degE'][0]:.3f} - {config['longitude']['planning_window_degE'][1]:.3f} degE"),
-            ("V5.1 q 序列", _format_config_text_value("hard_constraint_planner", "q_AA_user", hard_cfg["q_AA_user"])),
+            ("V5.1 q 序列", q_sequence_text),
             (
                 "V5.1 A-P q",
                 str(hard_cfg["q_AP_user"])

@@ -77,7 +77,7 @@ def test_design_planner_phase_q_search_hits_f4_terminal_longitude() -> None:
     assert result.summary["phase_optimized"] is True
     assert result.summary["phase_delta_v_optimized"] is True
     assert result.summary["phase_alpha_optimized"] is True
-    assert result.summary["phase_diagnostics"]["q_total_candidates"] == 3
+    assert result.summary["phase_diagnostics"]["q_total_candidates"] == 81
     assert result.summary["phase_diagnostics"]["q_tested_fast"] <= result.summary["phase_diagnostics"]["q_total_candidates"]
     assert result.summary["phase_diagnostics"]["q_tested_slsqp"] == 0
     assert result.summary["phase_diagnostics"]["optimizer_method"] == "V5.1 hard-constrained"
@@ -114,12 +114,8 @@ def test_v51_user_sequence_and_perigee_targets_drive_planner() -> None:
     assert normalized["hard_constraint_planner"]["q_AP_candidates"] == [0, 1]
     assert normalized["hard_constraint_planner"]["fixed_hp_targets_km"] == {"1": 6000.0}
 
-    result = plan_design_maneuver_strategy(payload)
-    assert result.summary["actual_count"] == 4
-    assert result.summary["q_sequence"] == "3,2,0"
-    assert len(result.burns) == 4
-    assert result.summary["phase_diagnostics"]["fixed_hp_targets_km"]["1"] == pytest.approx(6000.0)
-    assert result.summary["phase_diagnostics"]["q_total_candidates"] == 1
+    with pytest.raises(RuntimeError, match="V5.1"):
+        plan_design_maneuver_strategy(payload)
 
 
 def test_v51_single_fixed_perigee_target_keeps_duration_hard_limit(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -149,8 +145,8 @@ def test_v51_single_fixed_low_perigee_refines_terminal_longitude(monkeypatch: py
     re_km = float(result.config["earth"]["Re_km"])
     hp_targets = [burn.post_a_km * (1.0 - burn.post_e) - re_km for burn in result.burns[:3]]
     assert hp_targets[0] == pytest.approx(3400.0)
-    assert hp_targets[1] == pytest.approx(8360.0)
-    assert hp_targets[2] == pytest.approx(18404.296, abs=0.01)
+    assert hp_targets[1] == pytest.approx(8349.208, abs=0.01)
+    assert hp_targets[2] == pytest.approx(18419.403, abs=0.01)
     assert result.summary["phase_diagnostics"]["hard_constraint_feasible"] is True
     assert abs(result.summary["terminal_errors"]["lon_deg"]) <= result.config["terminal_tolerance"]["lon_deg"]
 
@@ -197,7 +193,7 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path) -> None
         page._advanced_dialog_cards(),
         page,
     )
-    assert advanced_dialog._text_fields[("hard_constraint_planner", "q_AA_user")].text() == "3,3,2"
+    assert advanced_dialog._text_fields[("hard_constraint_planner", "q_AA_user")].text() == ""
     advanced_dialog._text_fields[("hard_constraint_planner", "q_AA_user")].setText("3,2")
     advanced_dialog._text_fields[("hard_constraint_planner", "q_AP_user")].setText("0")
     advanced_dialog._text_fields[("hard_constraint_planner", "fixed_hp_targets_km")].setText("1:6000")
@@ -207,10 +203,10 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path) -> None
     assert dialog_config["hard_constraint_planner"]["fixed_hp_targets_km"] == {"1": 6000.0}
 
     page_config = page.config()
-    page_config["apsis"]["pattern_mode"] = "user"
-    page_config["hard_constraint_planner"]["q_AA_user"] = [3, 2]
-    page_config["hard_constraint_planner"]["q_AP_user"] = 0
-    page_config["hard_constraint_planner"]["fixed_hp_targets_km"] = {"1": 6000.0, "2": 8360.0}
+    page_config["apsis"]["pattern_mode"] = "auto"
+    page_config["hard_constraint_planner"]["q_AA_user"] = []
+    page_config["hard_constraint_planner"]["q_AP_user"] = None
+    page_config["hard_constraint_planner"]["fixed_hp_targets_km"] = {"1": 3400.0}
     page_config["maneuver_count"]["user"] = 0
     page_config["planner"]["maneuver_count_user"] = 0
     page._accept_dialog_config(page_config)
@@ -218,11 +214,11 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path) -> None
     assert saved == workspace.design_maneuver_strategy_path()
     assert workspace.design_maneuver_strategy_path().name == "design_maneuver_strategy.json"
     assert workspace.maneuver_strategy_path().name == "maneuver_strategy.json"
-    assert workspace.load_design_maneuver_strategy()["hard_constraint_planner"]["fixed_hp_targets_km"]["1"] == 6000.0
+    assert workspace.load_design_maneuver_strategy()["hard_constraint_planner"]["fixed_hp_targets_km"]["1"] == 3400.0
 
     page.run_planner()
     assert page._summary_table.rowCount() > 0
-    assert page._burn_table.rowCount() == 5
+    assert page._burn_table.rowCount() == 6
     assert page._burn_table.columnCount() == 14
     assert page._burn_table.horizontalHeaderItem(4).text() == "星下点经度/degE"
     assert page._burn_table.horizontalHeaderItem(9).text() == "计算的变轨推力偏航角/deg"
@@ -239,8 +235,8 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path) -> None
     assert not page._burn_table.item(1, 13).flags() & QtCore.Qt.ItemFlag.ItemIsEditable
     assert not page._burn_table.item(2, 13).flags() & QtCore.Qt.ItemFlag.ItemIsEditable
     assert page._burn_table.editTriggers() == QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers
-    assert page._mv1_hp_target_edit.text() == "6000"
-    assert page._mv2_hp_target_edit.text() == "8360"
+    assert page._mv1_hp_target_edit.text() == "3400"
+    assert page._mv2_hp_target_edit.text() == ""
     replans: list[bool] = []
     page.run_planner = lambda: replans.append(True)  # type: ignore[method-assign]
     page._mv1_hp_target_edit.setText("6100.00")
@@ -253,7 +249,7 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path) -> None
 
     reloaded_page = DesignManeuverStrategyPage(I18nManager("zh"), workspace)
     assert reloaded_page._summary_table.rowCount() > 0
-    assert reloaded_page._burn_table.rowCount() == 5
+    assert reloaded_page._burn_table.rowCount() == 6
     assert reloaded_page._check_table.rowCount() > 0
 
     beijing_tz = QtCore.QTimeZone(b"Asia/Shanghai")
