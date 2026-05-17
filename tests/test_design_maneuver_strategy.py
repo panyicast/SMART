@@ -4,6 +4,7 @@ import pytest
 
 from PySide6 import QtCore, QtWidgets
 
+import smart.services.design_maneuver_strategy as design_strategy
 from smart.services.design_maneuver_strategy import (
     default_design_maneuver_strategy_payload,
     normalize_design_maneuver_strategy_payload,
@@ -121,11 +122,12 @@ def test_v51_user_sequence_and_perigee_targets_drive_planner() -> None:
     assert result.summary["phase_diagnostics"]["q_total_candidates"] == 1
 
 
-def test_v51_single_fixed_perigee_target_keeps_duration_hard_limit() -> None:
+def test_v51_single_fixed_perigee_target_keeps_duration_hard_limit(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = default_design_maneuver_strategy_payload()
     payload["hard_constraint_planner"]["fixed_hp_targets_km"] = {"1": 3940.0}
     payload["hard_constraint_planner"]["q_AP_user"] = 0
     payload["distribution"]["first_post_a_control_km"] = None
+    monkeypatch.setattr(design_strategy, "minimize", None)
 
     result = plan_design_maneuver_strategy(payload)
 

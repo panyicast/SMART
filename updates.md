@@ -354,6 +354,10 @@
 - 提交：`d746100`
 - 影响文件：`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
 
-## 2026-05-17T10:40:15+08:00 | Keep duration-feasible perigee templates
+## 2026-05-17T10:40:18+08:00 | Keep duration-feasible perigee templates
+- 提交：`9f7bb56`
+- 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-17T10:55:32+08:00 | Speed up single perigee target search
 - 提交：`本次提交`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。

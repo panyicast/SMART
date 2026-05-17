@@ -1142,6 +1142,14 @@ def _v51_hard_objective(
     return float(terminal["total_propellant_kg"]) + 1.0e-4 * float(terminal["total_dv_mps"])
 
 
+def _v51_use_template_only_fast_path(
+    front_count: int,
+    fixed_rp: dict[int, float],
+    variable_indices: list[int],
+) -> bool:
+    return front_count == 3 and set(fixed_rp) == {1} and variable_indices == [2, 3]
+
+
 def _v51_optimize_sequence(
     config: dict[str, Any],
     *,
@@ -1175,6 +1183,9 @@ def _v51_optimize_sequence(
 
     for start in starts:
         append_record([float(value) for value in start], {"method": "template", "success": True, "nfev": 1})
+
+    if _v51_use_template_only_fast_path(front_count, fixed_rp, variable_indices):
+        return records
 
     if len(variable_indices) == 1 and minimize_scalar is not None:
         low, high = bounds[0]

@@ -4,6 +4,7 @@
 
 - Current small task: design-maneuver perigee target entry moved out of the burn table. The burn table is read-only again, and MV1/MV2 target perigee-height inputs now live under the table. Applying those inputs updates `hard_constraint_planner.fixed_hp_targets_km`, clears the legacy `distribution.first_post_a_control_km`, and replans so values such as 3933 km/8360 km remain hard constraints instead of snapping back to the old 4132 km control.
 - Current follow-up: fixed V5.1 free perigee-target search when only the first target is set. The optimizer now keeps template candidates and prioritizes mission-specific perigee templates before generic starts, so a blank second target can still choose a duration-feasible MV2/MV3 sequence instead of drifting to a 131 min second burn.
+- Current performance follow-up: profiled the one-fixed-perigee case (`MV1=3940`, MV2 blank). Runtime was dominated by Powell refinement (15 Powell runs, 1567 full candidate simulations, about 99.9 s under cProfile). Added a template-only fast path for the common `front_count=3`, only-MV1-fixed case; the same F4 profile now runs about 0.96 s and evaluates 15 template candidates.
 - Recovered from compact failure by re-reading current repo state only.
 - No prior hidden context assumed.
 - Root `HANDOFF.md` / `NOTES.md` did not exist before this file.
@@ -68,6 +69,7 @@
 - `src/smart/ui/widgets/design_maneuver_strategy_page.py`: new Qt page with Beijing-time epoch field, no-wheel numeric controls, independent save/load, current-project baseline import, planning result tables, and reserved future-task area.
 - `src/smart/ui/widgets/design_maneuver_strategy_page.py`: MV1/MV2 post-burn perigee-height constraints are now entered through dedicated inputs under the burn table; the table cells are read-only, and applying inputs clears legacy first semi-major-axis control before replanning.
 - `src/smart/services/design_maneuver_strategy.py`: V5.1 template starts are retained as ranked candidates, and mission-specific three-front-burn perigee templates are considered before generic power-law templates so unconstrained MV2/MV3 searches preserve burn-duration feasibility.
+- `src/smart/services/design_maneuver_strategy.py`: one-fixed-perigee V5.1 search now skips Powell refinement and uses template-only ranking for the common three-front-burn case, cutting the profiled F4 case from about 99.9 s to about 0.96 s.
 - `tests/test_design_maneuver_strategy.py`: covers supersynchronous fixed-tail planning, standard transfer user count, page config independence, and config normalization.
 - `tests/test_design_maneuver_strategy.py`: now also checks reference default output landmarks: 5 burns, 1539 m/s estimate, 312.123864 m/s design burn, first apogee event longitude/time, and final fixed-tail Δv.
 - `src/smart/ui/widgets/design_maneuver_strategy_page.py`: current parameter settings moved out of the left scroll form into two dedicated dialogs with Beijing-time epoch editing, no-wheel controls, and the same dark/cyan/orange dialog style used by maneuver configuration.
