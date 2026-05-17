@@ -286,8 +286,15 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         return card
 
     def _build_result_panel(self) -> QtWidgets.QWidget:
+        scroll = QtWidgets.QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+        scroll.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Expanding)
+
         panel = QtWidgets.QWidget()
         self._result_panel = panel
+        scroll.setWidget(panel)
+
         layout = QtWidgets.QVBoxLayout(panel)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(14)
@@ -345,7 +352,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         future_layout.addWidget(self._warning_label)
         bottom_row.addWidget(future_card, 2)
         layout.addLayout(bottom_row, 1)
-        return panel
+        return scroll
 
     def _build_perigee_target_controls(self) -> QtWidgets.QWidget:
         holder = QtWidgets.QWidget()
