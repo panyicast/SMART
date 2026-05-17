@@ -306,6 +306,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._burn_table.setMinimumHeight(180)
         burn_layout.addWidget(self._burn_table)
         burn_layout.addWidget(self._build_perigee_target_controls())
+        burn_layout.addWidget(self._build_q_candidate_controls())
         layout.addWidget(burn_card, 2)
 
         bottom_row = QtWidgets.QHBoxLayout()
@@ -376,6 +377,49 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._apply_hp_targets_button.setProperty("variant", "primaryAction")
         self._apply_hp_targets_button.clicked.connect(self._apply_perigee_target_constraints)
         row.addWidget(self._apply_hp_targets_button)
+        return holder
+
+    def _build_q_candidate_controls(self) -> QtWidgets.QWidget:
+        holder = QtWidgets.QWidget()
+        layout = QtWidgets.QVBoxLayout(holder)
+        layout.setContentsMargins(0, 6, 0, 0)
+        layout.setSpacing(8)
+
+        self._q_candidate_header_label = QtWidgets.QLabel("可选 q 序列")
+        self._q_candidate_header_label.setProperty("role", "cardCaption")
+        layout.addWidget(self._q_candidate_header_label)
+
+        self._q_candidate_table = QtWidgets.QTableWidget(0, 7)
+        self._setup_readonly_table(self._q_candidate_table)
+        self._q_candidate_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
+        self._q_candidate_table.horizontalHeader().setStretchLastSection(True)
+        self._q_candidate_table.setMinimumHeight(96)
+        self._q_candidate_table.itemSelectionChanged.connect(self._fill_selected_q_candidate)
+        layout.addWidget(self._q_candidate_table)
+
+        row = QtWidgets.QHBoxLayout()
+        row.setSpacing(10)
+        self._q_sequence_user_label = QtWidgets.QLabel("指定 q 序列")
+        self._q_sequence_user_label.setProperty("role", "cardCaption")
+        row.addWidget(self._q_sequence_user_label)
+
+        self._q_sequence_user_edit = QtWidgets.QLineEdit()
+        self._q_sequence_user_edit.setPlaceholderText("例如 3,3,2,0")
+        self._q_sequence_user_edit.setMinimumHeight(36)
+        self._q_sequence_user_edit.returnPressed.connect(self._apply_q_sequence_constraints)
+        row.addWidget(self._q_sequence_user_edit, 1)
+
+        self._apply_q_sequence_button = QtWidgets.QPushButton("应用q并重算")
+        self._apply_q_sequence_button.setProperty("variant", "primaryAction")
+        self._apply_q_sequence_button.clicked.connect(self._apply_q_sequence_constraints)
+        row.addWidget(self._apply_q_sequence_button)
+
+        self._clear_q_sequence_button = QtWidgets.QPushButton("清空q约束")
+        self._clear_q_sequence_button.setProperty("variant", "secondary")
+        self._clear_q_sequence_button.clicked.connect(self._clear_q_sequence_constraints)
+        row.addWidget(self._clear_q_sequence_button)
+
+        layout.addLayout(row)
         return holder
 
     def _build_summary_card(self) -> QtWidgets.QFrame:
@@ -650,6 +694,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._config = normalized
         self._refresh_config_overview()
         self._sync_perigee_target_fields(normalized)
+        self._sync_q_sequence_field(normalized)
 
     def _set_result(self, result: DesignManeuverResult) -> None:
         self._config = result.config
@@ -729,6 +774,8 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                 item.setFlags(item.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable)
         self._updating_burn_table = False
         self._sync_perigee_target_fields(config)
+        self._sync_q_sequence_field(config)
+        self._set_q_candidate_rows(result)
 
         self._check_table.setRowCount(0)
         for check in result.checks:
@@ -746,6 +793,41 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             )
         self._warning_label.setText("\n".join(result.warnings) if result.warnings else "无警告")
 
+    def _set_q_candidate_rows(self, result: DesignManeuverResult) -> None:
+        diagnostics = result.summary.get("phase_diagnostics", {})
+        candidates = diagnostics.get("top_candidates", []) if isinstance(diagnostics, dict) else []
+        self._q_candidate_table.setRowCount(0)
+        if not isinstance(candidates, list):
+            return
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+            q_sequence = candidate.get("q_sequence", [])
+            if not isinstance(q_sequence, (list, tuple)):
+                continue
+            q_text = ",".join(str(int(value)) for value in q_sequence)
+            hp_targets = candidate.get("hp_targets_km", [])
+            hp_text = ""
+            if isinstance(hp_targets, (list, tuple)):
+                hp_text = ", ".join(f"{float(value):.0f}" for value in hp_targets)
+            row = self._q_candidate_table.rowCount()
+            self._q_candidate_table.insertRow(row)
+            values = (
+                q_text,
+                f"{float(candidate.get('propellant_kg', 0.0)):.2f}",
+                f"{float(candidate.get('total_delta_v_mps', 0.0)):.2f}",
+                f"{float(candidate.get('max_burn_duration_min', 0.0)):.2f}",
+                f"{float(candidate.get('lon_error_deg', 0.0)):.5f}",
+                hp_text,
+                "是" if bool(candidate.get("feasible", False)) else "否",
+            )
+            self._set_row_values(self._q_candidate_table, row, values)
+            item = self._q_candidate_table.item(row, 0)
+            if item is not None:
+                item.setData(QtCore.Qt.ItemDataRole.UserRole, q_text)
+        if self._q_candidate_table.rowCount() > 0:
+            self._q_candidate_table.selectRow(0)
+
     def _sync_perigee_target_fields(self, config: dict[str, Any] | None = None) -> None:
         if not hasattr(self, "_mv1_hp_target_edit"):
             return
@@ -753,6 +835,21 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         fixed_hp = normalized["hard_constraint_planner"].get("fixed_hp_targets_km", {})
         self._mv1_hp_target_edit.setText(self._format_optional_hp_target(fixed_hp.get("1")))
         self._mv2_hp_target_edit.setText(self._format_optional_hp_target(fixed_hp.get("2")))
+
+    def _sync_q_sequence_field(self, config: dict[str, Any] | None = None) -> None:
+        if not hasattr(self, "_q_sequence_user_edit"):
+            return
+        normalized = normalize_design_maneuver_strategy_payload(config or self._config)
+        hard_cfg = normalized["hard_constraint_planner"]
+        if str(normalized["apsis"].get("pattern_mode", "auto")) != "user":
+            self._q_sequence_user_edit.setText("")
+            return
+        q_aa = hard_cfg.get("q_AA_user", [])
+        q_ap = hard_cfg.get("q_AP_user")
+        if not q_aa or q_ap is None:
+            self._q_sequence_user_edit.setText("")
+            return
+        self._q_sequence_user_edit.setText(",".join(str(int(value)) for value in [*q_aa, int(q_ap)]))
 
     @staticmethod
     def _format_optional_hp_target(value: Any) -> str:
@@ -783,12 +880,75 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         except ValueError as exc:
             self._set_status("statusDisconnected", str(exc))
             return
-        config = normalize_design_maneuver_strategy_payload(self._config)
+        config = self.config()
         config["hard_constraint_planner"]["fixed_hp_targets_km"] = fixed_hp
         config["distribution"]["first_post_a_control_km"] = None
         self._config = normalize_design_maneuver_strategy_payload(config)
         self._refresh_config_overview()
         self._sync_perigee_target_fields(self._config)
+        self.config_changed.emit(self._config)
+        self.run_planner()
+
+    def _fill_selected_q_candidate(self) -> None:
+        selected = self._q_candidate_table.selectedItems()
+        if not selected:
+            return
+        row = selected[0].row()
+        item = self._q_candidate_table.item(row, 0)
+        if item is None:
+            return
+        q_text = str(item.data(QtCore.Qt.ItemDataRole.UserRole) or item.text()).strip()
+        if q_text:
+            self._q_sequence_user_edit.setText(q_text)
+
+    def _parse_q_sequence_text(self) -> list[int]:
+        text = self._q_sequence_user_edit.text().strip()
+        if not text:
+            raise ValueError("请先输入或选择 q 序列。")
+        values: list[int] = []
+        for chunk in text.replace(";", ",").split(","):
+            item = chunk.strip()
+            if not item:
+                continue
+            try:
+                values.append(int(float(item)))
+            except ValueError:
+                raise ValueError("q 序列必须是逗号分隔整数。") from None
+        if len(values) < 2:
+            raise ValueError("q 序列至少包含一个 A-A q 和一个终端 A-P q。")
+        if any(value < 1 for value in values[:-1]) or values[-1] < 0:
+            raise ValueError("A-A q 必须大于等于 1，终端 A-P q 必须大于等于 0。")
+        return values
+
+    def _apply_q_sequence_constraints(self) -> None:
+        if self._planning_busy:
+            return
+        try:
+            q_values = self._parse_q_sequence_text()
+        except ValueError as exc:
+            self._set_status("statusDisconnected", str(exc))
+            return
+        config = self.config()
+        config["apsis"]["pattern_mode"] = "user"
+        config["hard_constraint_planner"]["q_AA_user"] = q_values[:-1]
+        config["hard_constraint_planner"]["q_AP_user"] = q_values[-1]
+        config["distribution"]["first_post_a_control_km"] = None
+        self._config = normalize_design_maneuver_strategy_payload(config)
+        self._refresh_config_overview()
+        self._sync_q_sequence_field(self._config)
+        self.config_changed.emit(self._config)
+        self.run_planner()
+
+    def _clear_q_sequence_constraints(self) -> None:
+        if self._planning_busy:
+            return
+        config = self.config()
+        config["apsis"]["pattern_mode"] = "auto"
+        config["hard_constraint_planner"]["q_AA_user"] = []
+        config["hard_constraint_planner"]["q_AP_user"] = None
+        self._config = normalize_design_maneuver_strategy_payload(config)
+        self._refresh_config_overview()
+        self._sync_q_sequence_field(self._config)
         self.config_changed.emit(self._config)
         self.run_planner()
 
@@ -814,6 +974,10 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             self._mv1_hp_target_edit,
             self._mv2_hp_target_edit,
             self._apply_hp_targets_button,
+            self._q_candidate_table,
+            self._q_sequence_user_edit,
+            self._apply_q_sequence_button,
+            self._clear_q_sequence_button,
             self._check_table,
             self._summary_table,
         ):
@@ -828,6 +992,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._updating_burn_table = True
         self._summary_table.setRowCount(0)
         self._burn_table.setRowCount(0)
+        self._q_candidate_table.setRowCount(0)
         self._check_table.setRowCount(0)
         self._updating_burn_table = False
         self._warning_label.setText("--")
@@ -930,6 +1095,11 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._mv1_hp_target_edit.setPlaceholderText("不约束")
         self._mv2_hp_target_edit.setPlaceholderText("不约束")
         self._apply_hp_targets_button.setText("应用并重算")
+        self._q_candidate_header_label.setText("可选 q 序列")
+        self._q_sequence_user_label.setText("指定 q 序列")
+        self._q_sequence_user_edit.setPlaceholderText("例如 3,3,2,0")
+        self._apply_q_sequence_button.setText("应用q并重算")
+        self._clear_q_sequence_button.setText("清空q约束")
         self._check_header_label.setText(t("design_maneuver.check_header"))
         self._future_header_label.setText(t("design_maneuver.future_header"))
         self._future_slot_label.setText(t("design_maneuver.future_placeholder"))
@@ -951,6 +1121,17 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                 "推进剂消耗/kg",
                 "控后卫星质量/kg",
                 "控后近地点高度/km",
+            ]
+        )
+        self._q_candidate_table.setHorizontalHeaderLabels(
+            [
+                "q序列",
+                "推进剂/kg",
+                "总Δv/(m/s)",
+                "最大时长/min",
+                "终端经度误差/deg",
+                "目标近地点高度/km",
+                "可行",
             ]
         )
         self._check_table.setHorizontalHeaderLabels(["检查项", "要求", "结果", "通过"])

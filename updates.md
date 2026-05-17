@@ -374,6 +374,10 @@
 - 提交：`9d6b058`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
 
-## 2026-05-17T16:12:52+08:00 | Speed up phase-chain maneuver search
-- 提交：`本次提交`
+## 2026-05-17T16:12:56+08:00 | Speed up phase-chain maneuver search
+- 提交：`de74db8`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-17T16:26:13+08:00 | Add q sequence alternatives to maneuver UI
+- 提交：`本次提交`
+- 影响文件：`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。

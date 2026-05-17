@@ -237,8 +237,21 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path) -> None
     assert page._burn_table.editTriggers() == QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers
     assert page._mv1_hp_target_edit.text() == "3400"
     assert page._mv2_hp_target_edit.text() == ""
+    assert page._q_candidate_table.rowCount() > 0
+    candidate_q = page._q_candidate_table.item(0, 0).text()
+    assert candidate_q
+    page._q_candidate_table.selectRow(0)
+    assert page._q_sequence_user_edit.text() == candidate_q
     replans: list[bool] = []
     page.run_planner = lambda: replans.append(True)  # type: ignore[method-assign]
+    page._apply_q_sequence_button.click()
+    assert replans == [True]
+    q_values = [int(value) for value in candidate_q.split(",")]
+    q_config = page.config()
+    assert q_config["apsis"]["pattern_mode"] == "user"
+    assert q_config["hard_constraint_planner"]["q_AA_user"] == q_values[:-1]
+    assert q_config["hard_constraint_planner"]["q_AP_user"] == q_values[-1]
+    replans.clear()
     page._mv1_hp_target_edit.setText("6100.00")
     page._apply_hp_targets_button.click()
     assert replans == [True]
