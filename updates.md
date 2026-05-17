@@ -346,6 +346,10 @@
 - 提交：`1fc327c`
 - 影响文件：`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`HANDOFF.md`。
 
-## 2026-05-16T19:36:44+08:00 | Skip redundant 1D Powell maneuver optimization
-- 提交：`本次提交`
+## 2026-05-16T19:36:47+08:00 | Skip redundant 1D Powell maneuver optimization
+- 提交：`854908f`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-17T10:28:00+08:00 | Move perigee target edits below burn table
+- 提交：`本次提交`
+- 影响文件：`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。

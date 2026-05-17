@@ -202,17 +202,18 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path) -> None
     assert page._burn_table.item(1, 0).text() == "MV1"
     assert len(page._burn_table.item(1, 1).text().split(".")[1]) == 2
     assert len(page._burn_table.item(1, 9).text().split(".")[1]) == 2
-    assert page._burn_table.item(1, 13).flags() & QtCore.Qt.ItemFlag.ItemIsEditable
-    assert page._burn_table.item(2, 13).flags() & QtCore.Qt.ItemFlag.ItemIsEditable
-    assert page._burn_table.editTriggers() != QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers
-    assert page._burn_table.item(1, 13).data(QtCore.Qt.ItemDataRole.UserRole) == "editable_perigee_height"
-    assert page._burn_table.item(2, 13).data(QtCore.Qt.ItemDataRole.UserRole) == "editable_perigee_height"
-    assert page._burn_table.item(1, 13).background().color().name() == "#ff8a2a"
+    assert not page._burn_table.item(1, 13).flags() & QtCore.Qt.ItemFlag.ItemIsEditable
+    assert not page._burn_table.item(2, 13).flags() & QtCore.Qt.ItemFlag.ItemIsEditable
+    assert page._burn_table.editTriggers() == QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers
+    assert page._mv1_hp_target_edit.text() == "6000"
+    assert page._mv2_hp_target_edit.text() == "8360"
     replans: list[bool] = []
     page.run_planner = lambda: replans.append(True)  # type: ignore[method-assign]
-    page._burn_table.item(1, 13).setText("6100.00")
+    page._mv1_hp_target_edit.setText("6100.00")
+    page._apply_hp_targets_button.click()
     assert replans == [True]
     assert page.config()["hard_constraint_planner"]["fixed_hp_targets_km"]["1"] == pytest.approx(6100.0)
+    assert page.config()["distribution"]["first_post_a_control_km"] is None
     assert page._check_table.rowCount() > 0
     assert workspace.design_maneuver_results_path().exists()
 

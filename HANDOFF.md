@@ -2,6 +2,7 @@
 
 ## Current State
 
+- Current small task: design-maneuver perigee target entry moved out of the burn table. The burn table is read-only again, and MV1/MV2 target perigee-height inputs now live under the table. Applying those inputs updates `hard_constraint_planner.fixed_hp_targets_km`, clears the legacy `distribution.first_post_a_control_km`, and replans so values such as 3933 km/8360 km remain hard constraints instead of snapping back to the old 4132 km control.
 - Recovered from compact failure by re-reading current repo state only.
 - No prior hidden context assumed.
 - Root `HANDOFF.md` / `NOTES.md` did not exist before this file.
@@ -64,6 +65,7 @@
 - Tests updated/added for project workspace, flight program page, maneuver page, sidebar navigation, STK link helpers, existing-scenario STK time sync, debounced drag sync, and reference-jump sync.
 - `src/smart/services/design_maneuver_strategy.py`: new independent V4.2 simplified impulse planner service and config normalizer.
 - `src/smart/ui/widgets/design_maneuver_strategy_page.py`: new Qt page with Beijing-time epoch field, no-wheel numeric controls, independent save/load, current-project baseline import, planning result tables, and reserved future-task area.
+- `src/smart/ui/widgets/design_maneuver_strategy_page.py`: MV1/MV2 post-burn perigee-height constraints are now entered through dedicated inputs under the burn table; the table cells are read-only, and applying inputs clears legacy first semi-major-axis control before replanning.
 - `tests/test_design_maneuver_strategy.py`: covers supersynchronous fixed-tail planning, standard transfer user count, page config independence, and config normalization.
 - `tests/test_design_maneuver_strategy.py`: now also checks reference default output landmarks: 5 burns, 1539 m/s estimate, 312.123864 m/s design burn, first apogee event longitude/time, and final fixed-tail Δv.
 - `src/smart/ui/widgets/design_maneuver_strategy_page.py`: current parameter settings moved out of the left scroll form into two dedicated dialogs with Beijing-time epoch editing, no-wheel controls, and the same dark/cyan/orange dialog style used by maneuver configuration.

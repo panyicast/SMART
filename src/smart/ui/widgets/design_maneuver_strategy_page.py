@@ -42,52 +42,6 @@ def _format_config_text_value(section: str, key: str, value: Any) -> str:
     return str(value)
 
 
-class _PerigeeHeightEditDelegate(QtWidgets.QStyledItemDelegate):
-    def paint(
-        self,
-        painter: QtGui.QPainter,
-        option: QtWidgets.QStyleOptionViewItem,
-        index: QtCore.QModelIndex,
-    ) -> None:
-        if index.data(QtCore.Qt.ItemDataRole.UserRole) == "editable_perigee_height":
-            patched = QtWidgets.QStyleOptionViewItem(option)
-            patched.font.setBold(True)
-            patched.palette.setColor(QtGui.QPalette.ColorRole.Text, QtGui.QColor("#ffffff"))
-            patched.palette.setColor(QtGui.QPalette.ColorRole.HighlightedText, QtGui.QColor("#ffffff"))
-            super().paint(painter, patched, index)
-            painter.save()
-            painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
-            rect = option.rect.adjusted(2, 2, -3, -3)
-            painter.setBrush(QtGui.QColor(255, 138, 42, 42))
-            painter.setPen(QtGui.QPen(QtGui.QColor("#ffb45f"), 2))
-            painter.drawRoundedRect(rect, 4, 4)
-
-            corner = QtGui.QPolygon(
-                [
-                    rect.topRight() + QtCore.QPoint(-24, 0),
-                    rect.topRight(),
-                    rect.topRight() + QtCore.QPoint(0, 24),
-                ]
-            )
-            painter.setPen(QtCore.Qt.PenStyle.NoPen)
-            painter.setBrush(QtGui.QColor("#ff8a2a"))
-            painter.drawPolygon(corner)
-
-            badge = QtCore.QRect(rect.left() + 4, rect.top() + 3, 34, 16)
-            painter.setBrush(QtGui.QColor("#ff8a2a"))
-            painter.setPen(QtCore.Qt.PenStyle.NoPen)
-            painter.drawRoundedRect(badge, 3, 3)
-            painter.setPen(QtGui.QColor("#061017"))
-            badge_font = QtGui.QFont(patched.font)
-            badge_font.setPointSize(max(7, badge_font.pointSize() - 2))
-            badge_font.setBold(True)
-            painter.setFont(badge_font)
-            painter.drawText(badge, QtCore.Qt.AlignmentFlag.AlignCenter, "EDIT")
-            painter.restore()
-            return
-        super().paint(painter, option, index)
-
-
 @dataclass(frozen=True, slots=True)
 class _NumberSpec:
     section: str
@@ -348,18 +302,10 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         burn_layout.addWidget(self._burn_header_label)
         self._burn_table = QtWidgets.QTableWidget(0, 14)
         self._setup_readonly_table(self._burn_table)
-        self._burn_table.setItemDelegate(_PerigeeHeightEditDelegate(self._burn_table))
-        self._burn_table.setEditTriggers(
-            QtWidgets.QAbstractItemView.EditTrigger.DoubleClicked
-            | QtWidgets.QAbstractItemView.EditTrigger.SelectedClicked
-            | QtWidgets.QAbstractItemView.EditTrigger.EditKeyPressed
-            | QtWidgets.QAbstractItemView.EditTrigger.AnyKeyPressed
-        )
-        self._burn_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectItems)
         self._burn_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
-        self._burn_table.itemChanged.connect(self._handle_burn_table_item_changed)
         self._burn_table.setMinimumHeight(180)
         burn_layout.addWidget(self._burn_table)
+        burn_layout.addWidget(self._build_perigee_target_controls())
         layout.addWidget(burn_card, 2)
 
         bottom_row = QtWidgets.QHBoxLayout()
@@ -399,6 +345,38 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         bottom_row.addWidget(future_card, 2)
         layout.addLayout(bottom_row, 1)
         return panel
+
+    def _build_perigee_target_controls(self) -> QtWidgets.QWidget:
+        holder = QtWidgets.QWidget()
+        row = QtWidgets.QHBoxLayout(holder)
+        row.setContentsMargins(0, 4, 0, 0)
+        row.setSpacing(10)
+
+        self._mv1_hp_target_label = QtWidgets.QLabel("第一次目标近地点高度/km")
+        self._mv1_hp_target_label.setProperty("role", "cardCaption")
+        row.addWidget(self._mv1_hp_target_label)
+        self._mv1_hp_target_edit = QtWidgets.QLineEdit()
+        self._mv1_hp_target_edit.setPlaceholderText("不约束")
+        self._mv1_hp_target_edit.setMinimumHeight(36)
+        self._mv1_hp_target_edit.setValidator(QtGui.QDoubleValidator(0.0, 1.0e7, 6, self))
+        self._mv1_hp_target_edit.returnPressed.connect(self._apply_perigee_target_constraints)
+        row.addWidget(self._mv1_hp_target_edit, 1)
+
+        self._mv2_hp_target_label = QtWidgets.QLabel("第二次目标近地点高度/km")
+        self._mv2_hp_target_label.setProperty("role", "cardCaption")
+        row.addWidget(self._mv2_hp_target_label)
+        self._mv2_hp_target_edit = QtWidgets.QLineEdit()
+        self._mv2_hp_target_edit.setPlaceholderText("不约束")
+        self._mv2_hp_target_edit.setMinimumHeight(36)
+        self._mv2_hp_target_edit.setValidator(QtGui.QDoubleValidator(0.0, 1.0e7, 6, self))
+        self._mv2_hp_target_edit.returnPressed.connect(self._apply_perigee_target_constraints)
+        row.addWidget(self._mv2_hp_target_edit, 1)
+
+        self._apply_hp_targets_button = QtWidgets.QPushButton("应用并重算")
+        self._apply_hp_targets_button.setProperty("variant", "primaryAction")
+        self._apply_hp_targets_button.clicked.connect(self._apply_perigee_target_constraints)
+        row.addWidget(self._apply_hp_targets_button)
+        return holder
 
     def _build_summary_card(self) -> QtWidgets.QFrame:
         self._summary_card = QtWidgets.QFrame()
@@ -566,6 +544,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
     def _accept_dialog_config(self, config: dict[str, Any]) -> None:
         self._config = normalize_design_maneuver_strategy_payload(config)
         self._refresh_config_overview()
+        self._sync_perigee_target_fields(self._config)
         self._clear_results()
         self.config_changed.emit(self._config)
         self._set_status("statusReady", self._i18n.t("design_maneuver.status.config_updated"))
@@ -644,6 +623,9 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
 
     def config(self) -> dict[str, Any]:
         config = normalize_design_maneuver_strategy_payload(self._config)
+        if hasattr(self, "_mv1_hp_target_edit"):
+            config["hard_constraint_planner"]["fixed_hp_targets_km"] = self._perigee_target_constraints_from_fields()
+            config["distribution"]["first_post_a_control_km"] = None
         config["planner"]["maneuver_count_user"] = int(config["maneuver_count"]["user"])
         return normalize_design_maneuver_strategy_payload(config)
 
@@ -667,6 +649,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         normalized = normalize_design_maneuver_strategy_payload(config)
         self._config = normalized
         self._refresh_config_overview()
+        self._sync_perigee_target_fields(normalized)
 
     def _set_result(self, result: DesignManeuverResult) -> None:
         self._config = result.config
@@ -740,18 +723,12 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                 item = self._burn_table.item(row, column)
                 if item is not None:
                     item.setFlags(item.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable)
-            hp_item = self._burn_table.item(row, 13)
-            if hp_item is not None and burn.index in {1, 2} and burn.burn_type == "front":
-                hp_item.setFlags(hp_item.flags() | QtCore.Qt.ItemFlag.ItemIsEditable)
-                hp_item.setData(QtCore.Qt.ItemDataRole.UserRole, "editable_perigee_height")
-                hp_item.setBackground(QtGui.QColor("#ff8a2a"))
-                hp_item.setForeground(QtGui.QColor("#ffffff"))
-                hp_item.setToolTip("编辑后自动按控后近地点高度重新优化")
         for column in range(self._burn_table.columnCount()):
             item = self._burn_table.item(0, column)
             if item is not None:
                 item.setFlags(item.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable)
         self._updating_burn_table = False
+        self._sync_perigee_target_fields(config)
 
         self._check_table.setRowCount(0)
         for check in result.checks:
@@ -769,31 +746,49 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             )
         self._warning_label.setText("\n".join(result.warnings) if result.warnings else "无警告")
 
-    def _handle_burn_table_item_changed(self, item: QtWidgets.QTableWidgetItem) -> None:
-        if self._updating_burn_table or self._planning_busy:
+    def _sync_perigee_target_fields(self, config: dict[str, Any] | None = None) -> None:
+        if not hasattr(self, "_mv1_hp_target_edit"):
             return
-        if item.column() != 13 or item.row() not in {1, 2}:
-            return
-        label_item = self._burn_table.item(item.row(), 0)
-        if label_item is None or label_item.text() not in {"MV1", "MV2"}:
+        normalized = normalize_design_maneuver_strategy_payload(config or self._config)
+        fixed_hp = normalized["hard_constraint_planner"].get("fixed_hp_targets_km", {})
+        self._mv1_hp_target_edit.setText(self._format_optional_hp_target(fixed_hp.get("1")))
+        self._mv2_hp_target_edit.setText(self._format_optional_hp_target(fixed_hp.get("2")))
+
+    @staticmethod
+    def _format_optional_hp_target(value: Any) -> str:
+        if value in (None, ""):
+            return ""
+        return f"{float(value):g}"
+
+    def _perigee_target_constraints_from_fields(self) -> dict[str, float]:
+        fixed_hp: dict[str, float] = {}
+        for key, field in (("1", self._mv1_hp_target_edit), ("2", self._mv2_hp_target_edit)):
+            text = field.text().strip()
+            if not text:
+                continue
+            try:
+                hp_km = float(text)
+            except ValueError:
+                raise ValueError("目标近地点高度必须是数字。") from None
+            if hp_km <= 0.0:
+                raise ValueError("目标近地点高度必须大于 0。")
+            fixed_hp[key] = hp_km
+        return fixed_hp
+
+    def _apply_perigee_target_constraints(self) -> None:
+        if self._planning_busy:
             return
         try:
-            hp_km = float(item.text())
-        except ValueError:
-            self._set_status("statusDisconnected", "控后近地点高度必须是数字。")
+            fixed_hp = self._perigee_target_constraints_from_fields()
+        except ValueError as exc:
+            self._set_status("statusDisconnected", str(exc))
             return
-        if hp_km <= 0.0:
-            self._set_status("statusDisconnected", "控后近地点高度必须大于 0。")
-            return
-        self._replan_with_fixed_perigee_height(int(item.row()), hp_km)
-
-    def _replan_with_fixed_perigee_height(self, burn_index: int, hp_km: float) -> None:
         config = normalize_design_maneuver_strategy_payload(self._config)
-        fixed_hp = dict(config["hard_constraint_planner"].get("fixed_hp_targets_km", {}))
-        fixed_hp[str(burn_index)] = float(hp_km)
         config["hard_constraint_planner"]["fixed_hp_targets_km"] = fixed_hp
+        config["distribution"]["first_post_a_control_km"] = None
         self._config = normalize_design_maneuver_strategy_payload(config)
         self._refresh_config_overview()
+        self._sync_perigee_target_fields(self._config)
         self.config_changed.emit(self._config)
         self.run_planner()
 
@@ -816,6 +811,9 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             self._save_button,
             self._plan_button,
             self._burn_table,
+            self._mv1_hp_target_edit,
+            self._mv2_hp_target_edit,
+            self._apply_hp_targets_button,
             self._check_table,
             self._summary_table,
         ):
@@ -888,6 +886,9 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             self._reload_button,
             self._save_button,
             self._plan_button,
+            self._mv1_hp_target_edit,
+            self._mv2_hp_target_edit,
+            self._apply_hp_targets_button,
         ):
             widget.setEnabled(enabled)
 
@@ -919,6 +920,11 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._plan_button.setText(t("design_maneuver.plan_button"))
         self._summary_header_label.setText(t("design_maneuver.summary_header"))
         self._burn_header_label.setText(t("design_maneuver.burn_header"))
+        self._mv1_hp_target_label.setText("第一次目标近地点高度/km")
+        self._mv2_hp_target_label.setText("第二次目标近地点高度/km")
+        self._mv1_hp_target_edit.setPlaceholderText("不约束")
+        self._mv2_hp_target_edit.setPlaceholderText("不约束")
+        self._apply_hp_targets_button.setText("应用并重算")
         self._check_header_label.setText(t("design_maneuver.check_header"))
         self._future_header_label.setText(t("design_maneuver.future_header"))
         self._future_slot_label.setText(t("design_maneuver.future_placeholder"))
