@@ -800,12 +800,12 @@ def _v51_template_points(
     rp0 = float(config["initial"]["a_km"]) * (1.0 - float(config["initial"]["e"]))
     target_rp = float(config["target"]["a_km"]) * (1.0 - float(config["target"]["e"]))
     templates: list[list[float]] = []
-    for power in (0.85, 1.0, 1.35, 1.5, 2.0):
-        templates.append([rp0 + (target_rp - rp0) * ((j + 1) / max(front_count + 1, 1)) ** power for j in range(front_count)])
     if front_count == 3:
         re_km = float(config["earth"]["Re_km"])
         for hp_values in ([3000.0, 8000.0, 17000.0], [3933.0, 8360.0, 17680.0], [6000.0, 12000.0, 21000.0]):
             templates.append([re_km + value for value in hp_values])
+    for power in (0.85, 1.0, 1.35, 1.5, 2.0):
+        templates.append([rp0 + (target_rp - rp0) * ((j + 1) / max(front_count + 1, 1)) ** power for j in range(front_count)])
     starts: list[np.ndarray] = []
     seen: set[tuple[float, ...]] = set()
     limit = int(config["hard_constraint_planner"]["max_local_starts_per_sequence"])
@@ -1173,6 +1173,9 @@ def _v51_optimize_sequence(
         except Exception as exc:
             records.append({"success": False, "reason": str(exc), "optimizer": optimizer})
 
+    for start in starts:
+        append_record([float(value) for value in start], {"method": "template", "success": True, "nfev": 1})
+
     if len(variable_indices) == 1 and minimize_scalar is not None:
         low, high = bounds[0]
         result = minimize_scalar(
@@ -1202,9 +1205,6 @@ def _v51_optimize_sequence(
                 options={"maxiter": int(config["hard_constraint_planner"]["local_maxiter"]), "xtol": 1.0e-2, "ftol": 1.0e-3, "disp": False},
             )
             append_record([float(value) for value in result.x], {"method": "Powell_barrier", "success": bool(result.success), "nfev": int(getattr(result, "nfev", -1))})
-    if not records:
-        for start in starts:
-            append_record([float(value) for value in start], {"method": "template", "success": True, "nfev": 1})
     return records
 
 

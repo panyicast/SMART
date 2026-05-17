@@ -121,6 +121,19 @@ def test_v51_user_sequence_and_perigee_targets_drive_planner() -> None:
     assert result.summary["phase_diagnostics"]["q_total_candidates"] == 1
 
 
+def test_v51_single_fixed_perigee_target_keeps_duration_hard_limit() -> None:
+    payload = default_design_maneuver_strategy_payload()
+    payload["hard_constraint_planner"]["fixed_hp_targets_km"] = {"1": 3940.0}
+    payload["hard_constraint_planner"]["q_AP_user"] = 0
+    payload["distribution"]["first_post_a_control_km"] = None
+
+    result = plan_design_maneuver_strategy(payload)
+
+    limit = result.config["burn_limit"]["max_total_burn_time_min"]
+    assert result.summary["phase_diagnostics"]["fixed_hp_targets_km"]["1"] == pytest.approx(3940.0)
+    assert max(burn.total_burn_time_min for burn in result.burns) <= limit
+
+
 def test_standard_design_planner_honors_user_count() -> None:
     payload = default_design_maneuver_strategy_payload()
     payload["orbit_type"]["mode"] = "standard_transfer"
