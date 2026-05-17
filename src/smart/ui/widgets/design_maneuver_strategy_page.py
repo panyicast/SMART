@@ -102,7 +102,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         _NumberSpec("target", "e", "目标偏心率", 0.0, 0.999999, 0.001, 9),
         _NumberSpec("target", "i_deg", "目标倾角 (deg)", 0.0, 180.0, 0.1, 6),
         _NumberSpec("target", "lon_degE", "目标经度 (degE)", -360.0, 360.0, 0.1, 6),
-        _NumberSpec("target", "dv_lon_margin_mps", "经度相位裕度 (m/s)", 0.0, 1.0e5, 1.0, 3),
+        _NumberSpec("target", "dv_lon_margin_mps", "Δv估算裕度 (m/s)", 0.0, 1.0e5, 1.0, 3),
         _NumberSpec("earth", "mu_km3_s2", "地球引力常数 (km^3/s^2)", 1.0, 1.0e9, 1.0, 6),
         _NumberSpec("earth", "Re_km", "地球半径 (km)", 1.0, 1.0e6, 1.0, 6),
         _NumberSpec("engine", "F_main_N", "主发动机推力 (N)", 0.0, 1.0e7, 1.0, 3),
@@ -119,7 +119,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         _NumberSpec("orbit_type", "standard_transfer_apogee_margin_km", "标准转移判断裕度 (km)", 0.0, 1.0e6, 10.0, 3),
         _NumberSpec("maneuver_count", "min", "最小变轨次数", 1.0, 99.0, 1.0, 0),
         _NumberSpec("maneuver_count", "max", "最大变轨次数", 1.0, 99.0, 1.0, 0),
-        _NumberSpec("maneuver_count", "user", "用户指定次数 (0=自动)", 0.0, 99.0, 1.0, 0),
+        _NumberSpec("maneuver_count", "user", "用户指定变轨次数 (0=自动)", 0.0, 99.0, 1.0, 0),
         _NumberSpec("maneuver_count", "engineering_min_count", "工程最小次数", 1.0, 99.0, 1.0, 0),
         _NumberSpec("maneuver_count", "total_dv_est_user_mps", "用户总 Δv 估计 (m/s)", 0.0, 1.0e6, 10.0, 3),
         _NumberSpec("distribution", "max_uniform_dv_spread_mps", "均匀性最大离散度 (m/s)", 0.0, 1.0e6, 1.0, 3),
@@ -453,7 +453,19 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             ),
             _DialogCardSpec(
                 "目标轨道",
-                number_specs=tuple(spec for spec in cls._NUMBER_SPECS if spec.section == "target"),
+                number_specs=tuple(
+                    spec
+                    for spec in cls._NUMBER_SPECS
+                    if spec.section == "target" and spec.key != "dv_lon_margin_mps"
+                ),
+            ),
+            _DialogCardSpec(
+                "规划设置",
+                number_specs=tuple(
+                    spec
+                    for spec in cls._NUMBER_SPECS
+                    if (spec.section, spec.key) == ("maneuver_count", "user")
+                ),
             ),
             _DialogCardSpec("发动机与点火约束", number_specs=engine_burn[:7]),
         )
@@ -480,7 +492,10 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             _DialogCardSpec(
                 "轨道类型与变轨次数",
                 number_specs=tuple(
-                    spec for spec in cls._NUMBER_SPECS if spec.section in {"orbit_type", "maneuver_count"}
+                    spec
+                    for spec in cls._NUMBER_SPECS
+                    if spec.section == "orbit_type"
+                    or (spec.section == "maneuver_count" and spec.key != "user")
                 ),
                 check_specs=tuple(
                     spec for spec in cls._CHECK_SPECS if spec.section == "planner"
@@ -497,6 +512,14 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                             ("general_transfer", "general_transfer"),
                         ),
                     ),
+                ),
+            ),
+            _DialogCardSpec(
+                "估算参数",
+                number_specs=tuple(
+                    spec
+                    for spec in cls._NUMBER_SPECS
+                    if (spec.section, spec.key) == ("target", "dv_lon_margin_mps")
                 ),
             ),
             _DialogCardSpec(

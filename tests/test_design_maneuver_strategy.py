@@ -196,6 +196,8 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path) -> None
         page._advanced_dialog_cards(),
         page,
     )
+    assert ("target", "dv_lon_margin_mps") in advanced_dialog._number_fields
+    assert ("maneuver_count", "user") not in advanced_dialog._number_fields
     assert advanced_dialog._text_fields[("hard_constraint_planner", "q_AA_user")].text() == ""
     advanced_dialog._text_fields[("hard_constraint_planner", "q_AA_user")].setText("3,2")
     advanced_dialog._text_fields[("hard_constraint_planner", "q_AP_user")].setText("0")
@@ -277,6 +279,11 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path) -> None
         page._basic_dialog_cards(),
         page,
     )
+    assert ("maneuver_count", "user") in parameter_dialog._number_fields
+    assert ("target", "dv_lon_margin_mps") not in parameter_dialog._number_fields
+    parameter_dialog._number_fields[("maneuver_count", "user")].setValue(4)
+    assert parameter_dialog.config()["maneuver_count"]["user"] == 4
+    assert parameter_dialog.config()["planner"]["maneuver_count_user"] == 4
     assert parameter_dialog._t0_epoch_field is not None
     assert parameter_dialog._t0_epoch_field.displayFormat() == "yyyy-MM-dd HH:mm:ss"
     assert parameter_dialog._t0_epoch_field.dateTime().timeZone().id().data().decode() == "Asia/Shanghai"

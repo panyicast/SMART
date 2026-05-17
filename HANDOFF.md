@@ -11,6 +11,7 @@
 - Current phase-chain performance update: profiled the new algorithm and found most time in repeated phase-chain template generation. q ranking now uses a cheap longitude-window score, selected q values build full templates once, and scalar clamps avoid NumPy overhead in the hot loop. Local smoke timing dropped default free planning from about `21.15 s` to `4.07 s`, and `MV1=3400` from about `24.86 s` to `2.95 s`, with unchanged q, propellant, and terminal longitude error.
 - Current q-sequence UI update: design maneuver results now show feasible/top q-sequence alternatives below the burn table. Selecting a row fills the q input; applying it switches `apsis.pattern_mode` to `user`, writes `hard_constraint_planner.q_AA_user/q_AP_user`, and reruns optimization. A clear button returns to automatic q search.
 - Current q-feasibility scan update: the q alternatives table is now driven by a fast hard-constraint feasibility scan (`phase_diagnostics.feasible_q_sequences`) rather than propellant-ranked optimization records. It only lists q sequences satisfying all hard constraints and shows q, maximum burn duration, terminal longitude error, and target perigee heights.
+- Current parameter-dialog update: `target.dv_lon_margin_mps` was renamed to `Δv估算裕度 (m/s)` and moved out of the basic parameter dialog into Advanced > 估算参数. Basic parameters now include `用户指定变轨次数 (0=自动)`, which writes `maneuver_count.user` and `planner.maneuver_count_user`.
 - Recovered from compact failure by re-reading current repo state only.
 - No prior hidden context assumed.
 - Root `HANDOFF.md` / `NOTES.md` did not exist before this file.
@@ -83,6 +84,7 @@
 - `src/smart/services/design_maneuver_strategy.py`: adds a fast feasible-q scan that enumerates q candidates, uses phase-chain templates plus terminal-longitude scalar correction, and returns only hard-feasible q summaries without propellant ranking fields.
 - `src/smart/ui/widgets/design_maneuver_strategy_page.py`: adds a q-candidate table plus manual q input under the burn table; users can apply a candidate or typed q sequence and replan under that hard user q sequence.
 - `src/smart/ui/widgets/design_maneuver_strategy_page.py`: simplifies the q-candidate table to q sequence, max burn duration, terminal longitude error, and target perigee heights.
+- `src/smart/ui/widgets/design_maneuver_strategy_page.py`: moves the Δv estimate margin to the advanced dialog and adds user maneuver count to the basic parameter dialog.
 - `tests/test_design_maneuver_strategy.py`: covers supersynchronous fixed-tail planning, standard transfer user count, page config independence, and config normalization.
 - `tests/test_design_maneuver_strategy.py`: now also checks reference default output landmarks: 5 burns, 1539 m/s estimate, 312.123864 m/s design burn, first apogee event longitude/time, and final fixed-tail Δv.
 - `src/smart/ui/widgets/design_maneuver_strategy_page.py`: current parameter settings moved out of the left scroll form into two dedicated dialogs with Beijing-time epoch editing, no-wheel controls, and the same dark/cyan/orange dialog style used by maneuver configuration.
