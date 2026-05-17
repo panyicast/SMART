@@ -629,25 +629,13 @@ def _plan_v51_hard_constrained(
     else:
         q_ranked: list[tuple[float, tuple[int, ...]]] = []
         for q_aa in q_aa_candidates:
-            phase_starts = _v51_phase_chain_template_points(
-                config,
-                first=(first_elapsed, first_r, first_v, first_lon),
-                front_count=front_count,
-                fixed_rp=fixed_rp,
-                variable_indices=variable_indices,
-                bounds=bounds,
-                q_aa=q_aa,
-                q_ap=0,
-            )
-            phase_starts_by_q[q_aa] = phase_starts
             q_ranked.append(
                 (
-                    _v51_phase_chain_start_score(
+                    _v51_phase_chain_q_score(
                         config,
-                        phase_starts,
+                        first=(first_elapsed, first_r, first_v, first_lon),
                         fixed_rp=fixed_rp,
-                        variable_indices=variable_indices,
-                        front_count=front_count,
+                        q_aa=q_aa,
                     ),
                     q_aa,
                 )
@@ -660,9 +648,10 @@ def _plan_v51_hard_constrained(
     records: list[dict[str, Any]] = []
     for q_aa in q_aa_to_test:
         for q_ap in q_ap_candidates:
-            phase_starts = phase_starts_by_q.setdefault(
-                q_aa,
-                _v51_phase_chain_template_points(
+            if q_aa in phase_starts_by_q:
+                phase_starts = phase_starts_by_q[q_aa]
+            else:
+                phase_starts = _v51_phase_chain_template_points(
                     config,
                     first=(first_elapsed, first_r, first_v, first_lon),
                     front_count=front_count,
@@ -671,8 +660,8 @@ def _plan_v51_hard_constrained(
                     bounds=bounds,
                     q_aa=q_aa,
                     q_ap=int(q_ap),
-                ),
-            )
+                )
+                phase_starts_by_q[q_aa] = phase_starts
             records.extend(
                 _v51_optimize_sequence(
                     config,
@@ -825,7 +814,7 @@ def _v51_rp_from_x(
         raw = by_index[index]
         low = max(previous + 50.0, rp0 + 50.0)
         high = target_rp - 50.0
-        value = raw if index in fixed_rp else float(np.clip(raw, low, high))
+        value = raw if index in fixed_rp else min(max(raw, low), high)
         if index in fixed_rp and not (low - 50.0 <= value <= high + 50.0):
             raise RuntimeError("固定控后近地点高度破坏单调约束。")
         result.append(value)
@@ -890,39 +879,64 @@ def _v51_phase_chain_template_points(
 
     planning_low, planning_high = _number_pair(config["longitude"]["planning_window_degE"], [45.0, 175.0])
     finite_low, finite_high = _number_pair(config["longitude"]["finite_margin_window_degE"], [50.0, 170.0])
-    grid = list(np.linspace(finite_low, finite_high, 25))
-    grid = [float(np.clip(value, planning_low, planning_high)) for value in grid]
+    grid = [min(max(float(value), planning_low), planning_high) for value in np.linspace(finite_low, finite_high, 25)]
+
+    rp1_by_lon2 = [
+        _v51_phase_chain_rp_for_step(config, first_lon, lon2, int(q_aa[0]), apogee_radius)
+        for lon2 in grid
+    ]
+    rp2_by_lons = [
+        [
+            _v51_phase_chain_rp_for_step(config, lon2, lon3, int(q_aa[1]), apogee_radius)
+            for lon3 in grid
+        ]
+        for lon2 in grid
+    ]
+    rp3_by_lons = [
+        [
+            _v51_phase_chain_rp_for_step(config, lon3, lon4, int(q_aa[2]), apogee_radius)
+            for lon4 in grid
+        ]
+        for lon3 in grid
+    ]
+    span = max(1.0, target_rp - rp0)
 
     candidates: list[tuple[float, np.ndarray]] = []
-    for lon2 in grid:
-        rp1 = _v51_phase_chain_rp_for_step(config, first_lon, lon2, int(q_aa[0]), apogee_radius)
+    for lon2_index, lon2 in enumerate(grid):
+        rp1 = rp1_by_lon2[lon2_index]
         if rp1 is None:
             continue
-        for lon3 in grid:
-            rp2 = _v51_phase_chain_rp_for_step(config, lon2, lon3, int(q_aa[1]), apogee_radius)
+        for lon3_index, lon3 in enumerate(grid):
+            rp2 = rp2_by_lons[lon2_index][lon3_index]
             if rp2 is None:
                 continue
-            for lon4 in grid:
-                rp3 = _v51_phase_chain_rp_for_step(config, lon3, lon4, int(q_aa[2]), apogee_radius)
+            for lon4_index, lon4 in enumerate(grid):
+                rp3 = rp3_by_lons[lon3_index][lon4_index]
                 if rp3 is None:
                     continue
                 full = [rp1, rp2, rp3]
                 for index, value in fixed_rp.items():
                     full[index - 1] = value
-                try:
-                    rp_full = _v51_rp_from_x(
-                        config,
-                        front_count,
-                        fixed_rp,
-                        variable_indices,
-                        [full[index - 1] for index in variable_indices],
-                    )
-                except Exception:
+                rp_full: list[float] = []
+                previous = rp0 + 50.0
+                rejected = False
+                for index, raw in enumerate(full, start=1):
+                    low = max(previous + 50.0, rp0 + 50.0)
+                    high = target_rp - 50.0
+                    if index in fixed_rp:
+                        value = float(raw)
+                        if not (low - 50.0 <= value <= high + 50.0):
+                            rejected = True
+                            break
+                    else:
+                        value = min(max(float(raw), low), high)
+                    rp_full.append(value)
+                    previous = value
+                if rejected:
                     continue
                 x = np.asarray([rp_full[index - 1] for index in variable_indices], dtype=float)
                 if any(float(value) < low - 1.0e-6 or float(value) > high + 1.0e-6 for value, (low, high) in zip(x, bounds)):
                     continue
-                span = max(1.0, target_rp - rp0)
                 fractions = [(value - rp0) / span for value in rp_full]
                 fraction_penalty = sum((value - target) ** 2 for value, target in zip(fractions, (0.105, 0.229, 0.491)))
                 window_penalty = sum(_window_distance(lon, [planning_low, planning_high]) ** 2 for lon in (lon2, lon3, lon4)) / 1.0e4
@@ -942,31 +956,36 @@ def _v51_phase_chain_template_points(
     return result
 
 
-def _v51_phase_chain_start_score(
+def _v51_phase_chain_q_score(
     config: dict[str, Any],
-    starts: list[np.ndarray],
     *,
+    first: tuple[float, np.ndarray, np.ndarray, float],
     fixed_rp: dict[int, float],
-    variable_indices: list[int],
-    front_count: int,
+    q_aa: tuple[int, ...],
 ) -> float:
-    if not starts:
+    if len(q_aa) != 3:
         return 1.0e9
+    _elapsed, first_r, _first_v, first_lon = first
     rp0 = float(config["initial"]["a_km"]) * (1.0 - float(config["initial"]["e"]))
     target_rp = float(config["target"]["a_km"]) * (1.0 - float(config["target"]["e"]))
     span = max(1.0, target_rp - rp0)
-    try:
-        full = _v51_rp_from_x(
-            config,
-            front_count,
-            fixed_rp,
-            variable_indices,
-            [float(value) for value in starts[0]],
-        )
-    except Exception:
-        return 1.0e9
-    fractions = [(float(value) - rp0) / span for value in full[:3]]
-    return sum((value - target) ** 2 for value, target in zip(fractions, (0.105, 0.229, 0.491)))
+    apogee_radius = float(np.linalg.norm(first_r))
+    mu = float(config["earth"]["mu_km3_s2"])
+    earth_rot_deg_per_min = math.degrees(float(config["earth"]["omega_e_rad_s"]) * 60.0)
+    planning_window = config["longitude"]["planning_window_degE"]
+    lon = float(first_lon)
+    previous_rp = rp0
+    score = 0.0
+    for index, (fraction, q) in enumerate(zip((0.105, 0.229, 0.491), q_aa), start=1):
+        rp = float(fixed_rp.get(index, rp0 + span * fraction))
+        if rp <= previous_rp + 1.0:
+            score += 1.0e6
+        previous_rp = rp
+        a_km = 0.5 * (apogee_radius + rp)
+        period_min = 2.0 * math.pi * math.sqrt(max(1.0, a_km**3 / mu)) / 60.0
+        lon = (lon - earth_rot_deg_per_min * float(q) * period_min) % 360.0
+        score += _window_distance(lon, planning_window) ** 2
+    return score
 
 
 def _v51_phase_chain_rp_for_step(
