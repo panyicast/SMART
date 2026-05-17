@@ -358,6 +358,10 @@
 - 提交：`9f7bb56`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
 
-## 2026-05-17T10:55:32+08:00 | Speed up single perigee target search
+## 2026-05-17T10:55:36+08:00 | Speed up single perigee target search
+- 提交：`0fca6cb`
+- 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-17T11:03:36+08:00 | Refine single perigee longitude target
 - 提交：`本次提交`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。

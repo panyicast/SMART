@@ -1150,6 +1150,60 @@ def _v51_use_template_only_fast_path(
     return front_count == 3 and set(fixed_rp) == {1} and variable_indices == [2, 3]
 
 
+def _v51_refine_last_variable_from_best_template(
+    config: dict[str, Any],
+    *,
+    first: tuple[float, np.ndarray, np.ndarray, float],
+    fixed_rp: dict[int, float],
+    variable_indices: list[int],
+    bounds: list[tuple[float, float]],
+    front_count: int,
+    records: list[dict[str, Any]],
+    q_aa: tuple[int, ...],
+    q_ap: int,
+) -> list[dict[str, Any]]:
+    if minimize_scalar is None or not _v51_use_template_only_fast_path(front_count, fixed_rp, variable_indices):
+        return []
+    successful = [rec for rec in records if rec.get("success")]
+    if not successful:
+        return []
+    best = min(successful, key=lambda rec: _v51_rank_record(config, rec))
+    violations = _v51_feasibility_violations(config, best)
+    if violations["duration_excess_min"] > 1.0e-9 or violations["raw_window_excess_deg"] > 1.0e-9 or violations["planning_window_excess_deg"] > 1.0e-9:
+        return []
+    if violations["terminal_lon_excess_deg"] <= 1.0e-9:
+        return []
+    rp_targets = [float(value) for value in best["rp_targets_km"]]
+    fixed_x2 = rp_targets[1]
+    low, high = bounds[1]
+    result = minimize_scalar(
+        lambda value: _v51_hard_objective(
+            config,
+            first,
+            fixed_rp,
+            variable_indices,
+            front_count,
+            [fixed_x2, float(value)],
+            q_aa,
+            q_ap,
+        ),
+        bounds=(low, high),
+        method="bounded",
+        options={"xatol": 1.0e-3, "maxiter": min(24, int(config["hard_constraint_planner"]["local_maxiter"]))},
+    )
+    try:
+        refined_targets = _v51_rp_from_x(config, front_count, fixed_rp, variable_indices, [fixed_x2, float(result.x)])
+        refined = _v51_simulate_candidate(config, first, refined_targets, q_aa, q_ap)
+        refined["optimizer"] = {
+            "method": "template_x3_scalar",
+            "success": bool(result.success),
+            "nfev": int(getattr(result, "nfev", -1)),
+        }
+        return [refined]
+    except Exception as exc:
+        return [{"success": False, "reason": str(exc), "optimizer": {"method": "template_x3_scalar", "success": False}}]
+
+
 def _v51_optimize_sequence(
     config: dict[str, Any],
     *,
@@ -1185,6 +1239,19 @@ def _v51_optimize_sequence(
         append_record([float(value) for value in start], {"method": "template", "success": True, "nfev": 1})
 
     if _v51_use_template_only_fast_path(front_count, fixed_rp, variable_indices):
+        records.extend(
+            _v51_refine_last_variable_from_best_template(
+                config,
+                first=first,
+                fixed_rp=fixed_rp,
+                variable_indices=variable_indices,
+                bounds=bounds,
+                front_count=front_count,
+                records=records,
+                q_aa=q_aa,
+                q_ap=q_ap,
+            )
+        )
         return records
 
     if len(variable_indices) == 1 and minimize_scalar is not None:
