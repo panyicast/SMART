@@ -623,14 +623,56 @@ def _plan_v51_hard_constrained(
     bounds = _v51_variable_bounds(config, front_count, fixed_rp)
     variable_indices = [index for index in range(1, front_count + 1) if index not in fixed_rp]
 
+    phase_starts_by_q: dict[tuple[int, ...], list[np.ndarray]] = {}
     if str(config["apsis"].get("pattern_mode", "auto")) == "user" and q_aa_candidates:
         q_aa_to_test = q_aa_candidates[: max(1, int(hard_cfg["prefilter_top_k"]))]
     else:
-        q_aa_to_test = q_aa_candidates
+        q_ranked: list[tuple[float, tuple[int, ...]]] = []
+        for q_aa in q_aa_candidates:
+            phase_starts = _v51_phase_chain_template_points(
+                config,
+                first=(first_elapsed, first_r, first_v, first_lon),
+                front_count=front_count,
+                fixed_rp=fixed_rp,
+                variable_indices=variable_indices,
+                bounds=bounds,
+                q_aa=q_aa,
+                q_ap=0,
+            )
+            phase_starts_by_q[q_aa] = phase_starts
+            q_ranked.append(
+                (
+                    _v51_phase_chain_start_score(
+                        config,
+                        phase_starts,
+                        fixed_rp=fixed_rp,
+                        variable_indices=variable_indices,
+                        front_count=front_count,
+                    ),
+                    q_aa,
+                )
+            )
+        q_ranked.sort(key=lambda item: item[0])
+        q_cap = 10 if fixed_rp else 5
+        q_prefilter = min(q_cap, max(1, int(hard_cfg["prefilter_top_k"])))
+        q_aa_to_test = [q_aa for _score, q_aa in q_ranked[:q_prefilter]]
 
     records: list[dict[str, Any]] = []
     for q_aa in q_aa_to_test:
         for q_ap in q_ap_candidates:
+            phase_starts = phase_starts_by_q.setdefault(
+                q_aa,
+                _v51_phase_chain_template_points(
+                    config,
+                    first=(first_elapsed, first_r, first_v, first_lon),
+                    front_count=front_count,
+                    fixed_rp=fixed_rp,
+                    variable_indices=variable_indices,
+                    bounds=bounds,
+                    q_aa=q_aa,
+                    q_ap=int(q_ap),
+                ),
+            )
             records.extend(
                 _v51_optimize_sequence(
                     config,
@@ -638,7 +680,7 @@ def _plan_v51_hard_constrained(
                     fixed_rp=fixed_rp,
                     variable_indices=variable_indices,
                     bounds=bounds,
-                    starts=starts,
+                    starts=phase_starts or starts,
                     q_aa=q_aa,
                     q_ap=q_ap,
                 )
@@ -826,6 +868,131 @@ def _v51_template_points(
         if len(starts) >= limit:
             break
     return starts or [np.asarray([(low + high) * 0.5 for low, high in _v51_variable_bounds(config, front_count, fixed_rp)], dtype=float)]
+
+
+def _v51_phase_chain_template_points(
+    config: dict[str, Any],
+    *,
+    first: tuple[float, np.ndarray, np.ndarray, float],
+    front_count: int,
+    fixed_rp: dict[int, float],
+    variable_indices: list[int],
+    bounds: list[tuple[float, float]],
+    q_aa: tuple[int, ...],
+    q_ap: int,
+) -> list[np.ndarray]:
+    if front_count != 3 or len(q_aa) != 3 or not variable_indices:
+        return []
+    _elapsed, first_r, _first_v, first_lon = first
+    apogee_radius = float(np.linalg.norm(first_r))
+    rp0 = float(config["initial"]["a_km"]) * (1.0 - float(config["initial"]["e"]))
+    target_rp = float(config["target"]["a_km"]) * (1.0 - float(config["target"]["e"]))
+
+    planning_low, planning_high = _number_pair(config["longitude"]["planning_window_degE"], [45.0, 175.0])
+    finite_low, finite_high = _number_pair(config["longitude"]["finite_margin_window_degE"], [50.0, 170.0])
+    grid = list(np.linspace(finite_low, finite_high, 25))
+    grid = [float(np.clip(value, planning_low, planning_high)) for value in grid]
+
+    candidates: list[tuple[float, np.ndarray]] = []
+    for lon2 in grid:
+        rp1 = _v51_phase_chain_rp_for_step(config, first_lon, lon2, int(q_aa[0]), apogee_radius)
+        if rp1 is None:
+            continue
+        for lon3 in grid:
+            rp2 = _v51_phase_chain_rp_for_step(config, lon2, lon3, int(q_aa[1]), apogee_radius)
+            if rp2 is None:
+                continue
+            for lon4 in grid:
+                rp3 = _v51_phase_chain_rp_for_step(config, lon3, lon4, int(q_aa[2]), apogee_radius)
+                if rp3 is None:
+                    continue
+                full = [rp1, rp2, rp3]
+                for index, value in fixed_rp.items():
+                    full[index - 1] = value
+                try:
+                    rp_full = _v51_rp_from_x(
+                        config,
+                        front_count,
+                        fixed_rp,
+                        variable_indices,
+                        [full[index - 1] for index in variable_indices],
+                    )
+                except Exception:
+                    continue
+                x = np.asarray([rp_full[index - 1] for index in variable_indices], dtype=float)
+                if any(float(value) < low - 1.0e-6 or float(value) > high + 1.0e-6 for value, (low, high) in zip(x, bounds)):
+                    continue
+                span = max(1.0, target_rp - rp0)
+                fractions = [(value - rp0) / span for value in rp_full]
+                fraction_penalty = sum((value - target) ** 2 for value, target in zip(fractions, (0.105, 0.229, 0.491)))
+                window_penalty = sum(_window_distance(lon, [planning_low, planning_high]) ** 2 for lon in (lon2, lon3, lon4)) / 1.0e4
+                candidates.append((fraction_penalty + window_penalty, x))
+    candidates.sort(key=lambda item: item[0])
+    result: list[np.ndarray] = []
+    seen: set[tuple[float, ...]] = set()
+    limit = min(2, max(1, int(config["hard_constraint_planner"]["max_local_starts_per_sequence"])))
+    for _score, x in candidates:
+        key = tuple(round(float(value), 1) for value in x)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(x)
+        if len(result) >= limit:
+            break
+    return result
+
+
+def _v51_phase_chain_start_score(
+    config: dict[str, Any],
+    starts: list[np.ndarray],
+    *,
+    fixed_rp: dict[int, float],
+    variable_indices: list[int],
+    front_count: int,
+) -> float:
+    if not starts:
+        return 1.0e9
+    rp0 = float(config["initial"]["a_km"]) * (1.0 - float(config["initial"]["e"]))
+    target_rp = float(config["target"]["a_km"]) * (1.0 - float(config["target"]["e"]))
+    span = max(1.0, target_rp - rp0)
+    try:
+        full = _v51_rp_from_x(
+            config,
+            front_count,
+            fixed_rp,
+            variable_indices,
+            [float(value) for value in starts[0]],
+        )
+    except Exception:
+        return 1.0e9
+    fractions = [(float(value) - rp0) / span for value in full[:3]]
+    return sum((value - target) ** 2 for value, target in zip(fractions, (0.105, 0.229, 0.491)))
+
+
+def _v51_phase_chain_rp_for_step(
+    config: dict[str, Any],
+    lon_from_deg: float,
+    lon_to_deg: float,
+    q: int,
+    apogee_radius_km: float,
+) -> float | None:
+    if q <= 0:
+        return None
+    earth_rot_deg_per_min = math.degrees(float(config["earth"]["omega_e_rad_s"]) * 60.0)
+    lon_delta = (float(lon_from_deg) - float(lon_to_deg)) % 360.0
+    rp0 = float(config["initial"]["a_km"]) * (1.0 - float(config["initial"]["e"]))
+    target_rp = float(config["target"]["a_km"]) * (1.0 - float(config["target"]["e"]))
+    best: float | None = None
+    for wrap in range(0, 5):
+        period_min = (lon_delta + 360.0 * wrap) / (earth_rot_deg_per_min * float(q))
+        if period_min <= 0.0:
+            continue
+        a_km = (float(config["earth"]["mu_km3_s2"]) * (period_min * 60.0 / (2.0 * math.pi)) ** 2) ** (1.0 / 3.0)
+        rp_km = 2.0 * a_km - apogee_radius_km
+        if rp0 + 1.0 < rp_km < target_rp - 1.0:
+            if best is None or rp_km < best:
+                best = rp_km
+    return best
 
 
 def _v51_front_alpha_bounds(config: dict[str, Any]) -> tuple[float, float]:

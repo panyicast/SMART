@@ -42,7 +42,7 @@ def test_supersynchronous_design_planner_outputs_fixed_tail() -> None:
     assert result.burns[0].longitude_deg_e == pytest.approx(73.475631, rel=1e-6)
     assert result.summary["phase_diagnostics"]["optimizer_method"] == "V5.1 hard-constrained"
     assert result.summary["phase_diagnostics"]["hard_constraint_feasible"] is True
-    assert result.summary["q_sequence"] == "3,3,2,0"
+    assert result.summary["q_sequence"] == "3,3,3,0"
     assert result.summary["phase_optimized"] is True
     assert result.summary["phase_delta_v_optimized"] is True
     assert result.summary["phase_diagnostics"]["q_total_candidates"] >= 1
@@ -145,8 +145,8 @@ def test_v51_single_fixed_low_perigee_refines_terminal_longitude(monkeypatch: py
     re_km = float(result.config["earth"]["Re_km"])
     hp_targets = [burn.post_a_km * (1.0 - burn.post_e) - re_km for burn in result.burns[:3]]
     assert hp_targets[0] == pytest.approx(3400.0)
-    assert hp_targets[1] == pytest.approx(8349.208, abs=0.01)
-    assert hp_targets[2] == pytest.approx(18419.403, abs=0.01)
+    assert hp_targets[1] == pytest.approx(8544.211, abs=0.01)
+    assert hp_targets[2] == pytest.approx(18146.006, abs=0.01)
     assert result.summary["phase_diagnostics"]["hard_constraint_feasible"] is True
     assert abs(result.summary["terminal_errors"]["lon_deg"]) <= result.config["terminal_tolerance"]["lon_deg"]
 
