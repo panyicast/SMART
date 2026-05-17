@@ -48,6 +48,9 @@ def test_supersynchronous_design_planner_outputs_fixed_tail() -> None:
     assert result.summary["phase_diagnostics"]["q_total_candidates"] >= 1
     assert result.summary["phase_diagnostics"]["q_tested_fast"] >= 1
     assert result.summary["phase_diagnostics"]["feasible_solutions"] >= 1
+    feasible_q_sequences = result.summary["phase_diagnostics"]["feasible_q_sequences"]
+    assert [3, 3, 3, 0] in [item["q_sequence"] for item in feasible_q_sequences]
+    assert all("propellant_kg" not in item for item in feasible_q_sequences)
     if abs(baseline.summary["terminal_errors"]["i_deg"]) <= baseline.config["terminal_tolerance"]["i_deg"]:
         assert result.summary["optimized_propellant_kg"] <= baseline.summary["optimized_propellant_kg"]
     assert abs(result.summary["terminal_errors"]["i_deg"]) <= result.config["terminal_tolerance"]["i_deg"]
@@ -238,6 +241,8 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path) -> None
     assert page._mv1_hp_target_edit.text() == "3400"
     assert page._mv2_hp_target_edit.text() == ""
     assert page._q_candidate_table.rowCount() > 0
+    assert page._q_candidate_table.columnCount() == 4
+    assert page._q_candidate_table.horizontalHeaderItem(1).text() == "最大时长/min"
     candidate_q = page._q_candidate_table.item(0, 0).text()
     assert candidate_q
     page._q_candidate_table.selectRow(0)

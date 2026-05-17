@@ -687,6 +687,17 @@ def _plan_v51_hard_constrained(
     if not feasible:
         raise RuntimeError(f"V5.1 未找到完全满足硬约束的候选；最小违约量: {best_violations}")
     unique_records = _v51_unique_record_summaries(config, records)
+    feasible_q_sequences = _v51_scan_feasible_q_sequences(
+        config,
+        first=(first_elapsed, first_r, first_v, first_lon),
+        fixed_rp=fixed_rp,
+        variable_indices=variable_indices,
+        bounds=bounds,
+        starts=starts,
+        q_aa_candidates=q_aa_candidates,
+        q_ap_candidates=q_ap_candidates,
+        front_count=front_count,
+    )
 
     burns = list(best["burns"])
     checks = _build_checks(config, burns, ignore_uniform=True)
@@ -736,6 +747,7 @@ def _plan_v51_hard_constrained(
             },
             "optimized_hp_targets_km": [float(value) - re_km for value in best["rp_targets_km"]],
             "top_candidates": unique_records,
+            "feasible_q_sequences": feasible_q_sequences,
         },
     }
     return DesignManeuverResult(config=config, summary=summary, burns=burns, checks=checks, warnings=warnings)
@@ -1513,6 +1525,115 @@ def _v51_unique_record_summaries(config: dict[str, Any], records: list[dict[str,
         if len(unique) >= 5:
             break
     return unique
+
+
+def _v51_scan_feasible_q_sequences(
+    config: dict[str, Any],
+    *,
+    first: tuple[float, np.ndarray, np.ndarray, float],
+    fixed_rp: dict[int, float],
+    variable_indices: list[int],
+    bounds: list[tuple[float, float]],
+    starts: list[np.ndarray],
+    q_aa_candidates: list[tuple[int, ...]],
+    q_ap_candidates: list[int],
+    front_count: int,
+) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    phase_starts_by_q: dict[tuple[int, ...], list[np.ndarray]] = {}
+    seen: set[tuple[int, ...]] = set()
+    q_ranked = sorted(
+        (
+            _v51_phase_chain_q_score(config, first=first, fixed_rp=fixed_rp, q_aa=q_aa),
+            q_aa,
+        )
+        for q_aa in q_aa_candidates
+    )
+    q_score_limit = 4000.0
+    q_scan_limit = max(10, int(config["hard_constraint_planner"]["prefilter_top_k"]))
+    q_aa_to_scan = [
+        q_aa
+        for score, q_aa in q_ranked
+        if score <= q_score_limit
+    ][:q_scan_limit]
+    if not q_aa_to_scan:
+        q_aa_to_scan = [q_aa for _score, q_aa in q_ranked[:q_scan_limit]]
+    for q_aa in q_aa_to_scan:
+        phase_starts = phase_starts_by_q.get(q_aa)
+        if phase_starts is None:
+            phase_starts = _v51_phase_chain_template_points(
+                config,
+                first=first,
+                front_count=front_count,
+                fixed_rp=fixed_rp,
+                variable_indices=variable_indices,
+                bounds=bounds,
+                q_aa=q_aa,
+                q_ap=0,
+            )
+            phase_starts_by_q[q_aa] = phase_starts
+        candidate_starts = phase_starts or starts
+        for q_ap in q_ap_candidates:
+            key = tuple([*q_aa, int(q_ap)])
+            if key in seen:
+                continue
+            records: list[dict[str, Any]] = []
+            if not variable_indices:
+                try:
+                    rp_targets = _v51_rp_from_x(config, front_count, fixed_rp, variable_indices, [])
+                    records.append(_v51_simulate_candidate(config, first, rp_targets, q_aa, q_ap))
+                except Exception as exc:
+                    records.append({"success": False, "reason": str(exc)})
+            else:
+                for start in candidate_starts:
+                    try:
+                        x_values = [float(value) for value in start]
+                        rp_targets = _v51_rp_from_x(config, front_count, fixed_rp, variable_indices, x_values)
+                        records.append(_v51_simulate_candidate(config, first, rp_targets, q_aa, q_ap))
+                    except Exception as exc:
+                        records.append({"success": False, "reason": str(exc)})
+                successful = [rec for rec in records if rec.get("success")]
+                if successful:
+                    best_template = min(successful, key=lambda rec: _v51_rank_record(config, rec))
+                    violations = _v51_feasibility_violations(config, best_template)
+                    if (
+                        violations["duration_excess_min"] <= 1.0e-9
+                        and violations["raw_window_excess_deg"] <= 1.0e-9
+                        and violations["planning_window_excess_deg"] <= 1.0e-9
+                        and violations["terminal_lon_excess_deg"] <= 30.0
+                    ):
+                        records.extend(
+                            _v51_refine_last_variable_from_best_template(
+                                config,
+                                first=first,
+                                fixed_rp=fixed_rp,
+                                variable_indices=variable_indices,
+                                bounds=bounds,
+                                front_count=front_count,
+                                records=records,
+                                q_aa=q_aa,
+                                q_ap=q_ap,
+                            )
+                        )
+            feasible_records = [rec for rec in records if rec.get("success") and _v51_is_feasible(config, rec)]
+            if not feasible_records:
+                continue
+            seen.add(key)
+            best = min(feasible_records, key=lambda rec: abs(float(rec["terminal"]["lon_error_deg"])))
+            terminal = best["terminal"]
+            result.append(
+                {
+                    "q_sequence": list(best.get("q_AA", [])) + [int(best.get("q_AP", 0))],
+                    "lon_error_deg": float(terminal["lon_error_deg"]),
+                    "max_burn_duration_min": float(terminal["max_total_burn_min"]),
+                    "hp_targets_km": [
+                        float(value) - float(config["earth"]["Re_km"])
+                        for value in best.get("rp_targets_km", [])
+                    ],
+                }
+            )
+    result.sort(key=lambda item: tuple(int(value) for value in item["q_sequence"]))
+    return result
 
 
 def _merge_dict(defaults: dict[str, Any], source: dict[str, Any]) -> dict[str, Any]:

@@ -389,7 +389,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._q_candidate_header_label.setProperty("role", "cardCaption")
         layout.addWidget(self._q_candidate_header_label)
 
-        self._q_candidate_table = QtWidgets.QTableWidget(0, 7)
+        self._q_candidate_table = QtWidgets.QTableWidget(0, 4)
         self._setup_readonly_table(self._q_candidate_table)
         self._q_candidate_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
         self._q_candidate_table.horizontalHeader().setStretchLastSection(True)
@@ -795,7 +795,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
 
     def _set_q_candidate_rows(self, result: DesignManeuverResult) -> None:
         diagnostics = result.summary.get("phase_diagnostics", {})
-        candidates = diagnostics.get("top_candidates", []) if isinstance(diagnostics, dict) else []
+        candidates = diagnostics.get("feasible_q_sequences", []) if isinstance(diagnostics, dict) else []
         self._q_candidate_table.setRowCount(0)
         if not isinstance(candidates, list):
             return
@@ -814,12 +814,9 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             self._q_candidate_table.insertRow(row)
             values = (
                 q_text,
-                f"{float(candidate.get('propellant_kg', 0.0)):.2f}",
-                f"{float(candidate.get('total_delta_v_mps', 0.0)):.2f}",
                 f"{float(candidate.get('max_burn_duration_min', 0.0)):.2f}",
                 f"{float(candidate.get('lon_error_deg', 0.0)):.5f}",
                 hp_text,
-                "是" if bool(candidate.get("feasible", False)) else "否",
             )
             self._set_row_values(self._q_candidate_table, row, values)
             item = self._q_candidate_table.item(row, 0)
@@ -1126,12 +1123,9 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._q_candidate_table.setHorizontalHeaderLabels(
             [
                 "q序列",
-                "推进剂/kg",
-                "总Δv/(m/s)",
                 "最大时长/min",
                 "终端经度误差/deg",
                 "目标近地点高度/km",
-                "可行",
             ]
         )
         self._check_table.setHorizontalHeaderLabels(["检查项", "要求", "结果", "通过"])
