@@ -12,6 +12,7 @@ from smart.services.design_maneuver_strategy import (
     ContinuousThrustOptimizationResult,
     DesignManeuverResult,
     default_design_maneuver_strategy_payload,
+    export_continuous_thrust_orbit_history_csv,
     find_feasible_q_sequences as service_find_feasible_q_sequences,
     initial_design_maneuver_subsatellite_longitude_deg_e,
     normalize_design_maneuver_strategy_payload,
@@ -719,10 +720,17 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             continuous_result = optimize_continuous_thrust_model_parameters(self._last_result)
             self._continuous_thrust_result = continuous_result
             self._set_continuous_thrust_rows(continuous_result)
+            history_path = None
+            if self._workspace.current_project is not None:
+                history_path = export_continuous_thrust_orbit_history_csv(
+                    continuous_result,
+                    self._workspace.data_dir() / "design_continuous_thrust_orbit_history.csv",
+                )
             if continuous_result.hard_constraint_passed:
                 self._set_status(
                     "statusReady",
-                    f"连续推力参数优化完成，硬约束全部通过，ΔG={continuous_result.objective_delta_g_kg:.3f} kg",
+                    f"连续推力参数优化完成，硬约束全部通过，ΔG={continuous_result.objective_delta_g_kg:.3f} kg"
+                    + (f"，轨道数据：{history_path}" if history_path is not None else ""),
                 )
             else:
                 self._set_status(

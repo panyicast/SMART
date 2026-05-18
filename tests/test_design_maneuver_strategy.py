@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from PySide6 import QtCore, QtWidgets
@@ -7,6 +9,7 @@ from PySide6 import QtCore, QtWidgets
 import smart.services.design_maneuver_strategy as design_strategy
 from smart.services.design_maneuver_strategy import (
     default_design_maneuver_strategy_payload,
+    export_continuous_thrust_orbit_history_csv,
     find_feasible_q_sequences,
     normalize_design_maneuver_strategy_payload,
     optimize_continuous_thrust_model_parameters,
@@ -65,7 +68,7 @@ def test_supersynchronous_design_planner_outputs_fixed_tail() -> None:
     assert result.checks
 
 
-def test_continuous_thrust_parameter_optimizer_uses_pulse_targets() -> None:
+def test_continuous_thrust_parameter_optimizer_uses_pulse_targets(tmp_path: Path) -> None:
     pulse_result = plan_design_maneuver_strategy(default_design_maneuver_strategy_payload())
     continuous_result = optimize_continuous_thrust_model_parameters(pulse_result)
 
@@ -86,6 +89,11 @@ def test_continuous_thrust_parameter_optimizer_uses_pulse_targets() -> None:
     assert continuous_result.parameters[-1].cutoff_longitude_deg_e == pytest.approx(
         pulse_result.config["target"]["lon_degE"], abs=pulse_result.config["terminal_tolerance"]["lon_deg"]
     )
+    assert continuous_result.orbit_history_rows
+    assert continuous_result.orbit_history_rows[-1]["phase"] in {"settle", "orbit_control"}
+    history_path = export_continuous_thrust_orbit_history_csv(continuous_result, tmp_path / "ct_history.csv")
+    assert history_path.exists()
+    assert "semi_major_axis_m" in history_path.read_text(encoding="utf-8-sig").splitlines()[0]
     assert continuous_result.objective_delta_g_kg >= continuous_result.total_propellant_kg
 
 

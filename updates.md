@@ -422,6 +422,10 @@
 - 提交：`071358d`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
 
-## 2026-05-18T21:20:14+08:00 | Implement continuous thrust local search
+## 2026-05-18T21:20:17+08:00 | Implement continuous thrust local search
+- 提交：`2af316d`
+- 影响文件：`src/smart/services/design_maneuver_strategy.py`、`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-18T22:17:51+08:00 | Add low thrust continuous trajectory export
 - 提交：`本次提交`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
