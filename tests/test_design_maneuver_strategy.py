@@ -253,9 +253,9 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path, monkeyp
 
     monkeypatch.setattr(design_page_module, "service_find_feasible_q_sequences", fake_find_feasible_q_sequences)
     page._find_feasible_q_button.click()
-    assert page._q_candidate_table.rowCount() == 1
-    assert page._q_candidate_table.item(0, 0).text() == "2,3,1,0"
-    assert page._q_candidate_table.item(0, 1).text() == "37.50"
+    assert page._q_sequence_combo.count() == 2
+    assert page._q_sequence_combo.itemText(0) == ""
+    assert page._q_sequence_combo.itemText(1) == "2,3,1,0"
     assert "共 1 组" in page._status_label.text()
 
     page.run_planner()
@@ -279,22 +279,29 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path, monkeyp
     assert page._burn_table.editTriggers() == QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers
     assert page._mv1_hp_target_edit.text() == "3400"
     assert page._mv2_hp_target_edit.text() == ""
-    assert page._q_candidate_table.rowCount() > 0
-    assert page._q_candidate_table.columnCount() == 4
-    assert page._q_candidate_table.horizontalHeaderItem(1).text() == "最大时长/min"
-    candidate_q = page._q_candidate_table.item(0, 0).text()
+    assert not hasattr(page, "_q_candidate_table")
+    assert page._q_sequence_combo.count() > 1
+    assert page._q_sequence_combo.itemText(0) == ""
+    candidate_q = page._q_sequence_combo.itemText(1)
     assert candidate_q
-    page._q_candidate_table.selectRow(0)
-    assert page._q_sequence_user_edit.text() == candidate_q
     replans: list[bool] = []
     page.run_planner = lambda: replans.append(True)  # type: ignore[method-assign]
-    page._apply_q_sequence_button.click()
+    page._q_sequence_combo.setCurrentIndex(1)
+    page._apply_selected_q_sequence()
     assert replans == [True]
     q_values = [int(value) for value in candidate_q.split(",")]
     q_config = page.config()
     assert q_config["apsis"]["pattern_mode"] == "user"
     assert q_config["hard_constraint_planner"]["q_AA_user"] == q_values[:-1]
     assert q_config["hard_constraint_planner"]["q_AP_user"] == q_values[-1]
+    replans.clear()
+    page._q_sequence_combo.setCurrentIndex(0)
+    page._apply_selected_q_sequence()
+    assert replans == [True]
+    cleared_q_config = page.config()
+    assert cleared_q_config["apsis"]["pattern_mode"] == "auto"
+    assert cleared_q_config["hard_constraint_planner"]["q_AA_user"] == []
+    assert cleared_q_config["hard_constraint_planner"]["q_AP_user"] is None
     replans.clear()
     page._mv1_hp_target_edit.setText("6100.00")
     page._apply_hp_targets_button.click()
