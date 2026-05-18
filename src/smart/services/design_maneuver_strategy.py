@@ -63,10 +63,15 @@ class DesignManeuverResult:
 @dataclass(frozen=True, slots=True)
 class ContinuousThrustManeuverParameter:
     maneuver_index: int
+    initial_burn_start_min: float
+    initial_yaw_angle_deg: float
     burn_start_min: float
     settle_end_min: float
     cutoff_min: float
     yaw_angle_deg: float
+    ignition_longitude_deg_e: float
+    cutoff_longitude_deg_e: float
+    delta_v_mps: float
     target_post_a_km: float
     total_burn_time_min: float
     settle_duration_min: float
@@ -77,6 +82,13 @@ class ContinuousThrustManeuverParameter:
     trim_propellant_kg: float
     objective_delta_g_kg: float
     objective_formula: str
+    post_a_km: float
+    post_e: float
+    post_i_deg: float
+    post_mass_kg: float
+    duration_ok: bool
+    longitude_ok: bool
+    search_evaluations: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -265,6 +277,16 @@ def default_design_maneuver_strategy_payload() -> dict[str, Any]:
             "correction_weight": 1.0e2,
             "random_seed": 7,
         },
+        "continuous_thrust_optimizer": {
+            "time_step_s": 10.0,
+            "yaw_step_deg": 0.05,
+            "time_window_min": 40.0,
+            "yaw_window_deg": 10.0,
+            "coarse_time_step_s": 300.0,
+            "coarse_yaw_step_deg": 2.0,
+            "fine_time_window_min": 2.0,
+            "fine_yaw_window_deg": 0.25,
+        },
         "hard_constraint_planner": {
             "enabled": True,
             "q_AA_user": [],
@@ -335,6 +357,16 @@ def normalize_design_maneuver_strategy_payload(payload: dict[str, Any] | None) -
             "tail_weight",
             "correction_weight",
             "time_budget_sec",
+        ),
+        "continuous_thrust_optimizer": (
+            "time_step_s",
+            "yaw_step_deg",
+            "time_window_min",
+            "yaw_window_deg",
+            "coarse_time_step_s",
+            "coarse_yaw_step_deg",
+            "fine_time_window_min",
+            "fine_yaw_window_deg",
         ),
     }.items():
         for key in keys:
@@ -589,59 +621,445 @@ def optimize_continuous_thrust_model_parameters(
     result: DesignManeuverResult,
 ) -> ContinuousThrustOptimizationResult:
     config = normalize_design_maneuver_strategy_payload(result.config)
-    engine = config["engine"]
-    burn_limit = config["burn_limit"]
-    include_settling = bool(burn_limit.get("include_settling_in_burn_time", True))
-    settle_duration_min = max(0.0, float(engine.get("tau_set_s", 0.0)) / 60.0)
+    continuous_cfg = config["continuous_thrust_optimizer"]
+    time_step_s = max(1.0, float(continuous_cfg["time_step_s"]))
+    yaw_step_deg = max(0.001, float(continuous_cfg["yaw_step_deg"]))
+    time_window_s = max(time_step_s, float(continuous_cfg["time_window_min"]) * 60.0)
+    yaw_window_deg = max(yaw_step_deg, float(continuous_cfg["yaw_window_deg"]))
+    coarse_time_step_s = max(time_step_s, float(continuous_cfg["coarse_time_step_s"]))
+    coarse_yaw_step_deg = max(yaw_step_deg, float(continuous_cfg["coarse_yaw_step_deg"]))
+    fine_time_window_s = max(time_step_s, float(continuous_cfg["fine_time_window_min"]) * 60.0)
+    fine_yaw_window_deg = max(yaw_step_deg, float(continuous_cfg["fine_yaw_window_deg"]))
     parameters: list[ContinuousThrustManeuverParameter] = []
-    previous_cutoff_min = 0.0
     sorted_burns = sorted(result.burns, key=lambda item: item.index)
+    r, v = _initial_state_km(config)
+    state_elapsed_s = 0.0
+    mass = float(config["initial"]["m0_kg"])
     for burn_position, burn in enumerate(sorted_burns):
-        total_duration_min = max(0.0, float(burn.total_burn_time_min))
-        effective_settle_min = min(settle_duration_min, total_duration_min) if include_settling else settle_duration_min
-        orbit_control_duration_min = max(0.0, total_duration_min - effective_settle_min)
-        # Align the finite-burn center with the impulse event, then process maneuvers sequentially.
-        burn_start_min = max(previous_cutoff_min, float(burn.elapsed_min) - 0.5 * total_duration_min)
-        settle_end_min = burn_start_min + effective_settle_min
-        cutoff_min = settle_end_min + orbit_control_duration_min
+        initial_start_s = max(state_elapsed_s, float(burn.elapsed_min) * 60.0 - float(burn.total_burn_time_min) * 60.0)
+        initial_yaw_deg = float(burn.alpha_deg)
         target_post_a_km = float(burn.target_post_a_km if burn.target_post_a_km is not None else burn.post_a_km)
         remaining = sorted_burns[burn_position + 1 :]
         m1 = float(remaining[0].propellant_kg) if len(remaining) >= 1 else 0.0
         m2 = float(remaining[1].propellant_kg) if len(remaining) >= 2 else 0.0
-        trim_dv_mps = _terminal_inclination_trim_delta_v_mps(config, np.asarray([0.0, 7.5, 0.0]), burn.post_i_deg)
-        m3 = _propellant_for_delta_v(float(burn.post_mass_kg or config["initial"]["m0_kg"]), trim_dv_mps, float(engine["Isp_set_s"]))
         is_last = burn_position == len(sorted_burns) - 1
-        objective_delta_g = float(burn.propellant_kg) + m3 if is_last else float(burn.propellant_kg) + m1 + m2 + m3
+        formula = "m + m3" if is_last else "m + m1 + m2 + m3"
+        yaw_low, yaw_high = _continuous_yaw_bounds_for_burn(config, sorted_burns, burn_position, burn)
+        coarse = _search_continuous_thrust_burn(
+            config,
+            r,
+            v,
+            state_elapsed_s,
+            mass,
+            burn,
+            target_post_a_km,
+            initial_start_s,
+            initial_yaw_deg,
+            m1,
+            m2,
+            formula,
+            time_window_s=time_window_s,
+            yaw_window_deg=yaw_window_deg,
+            time_step_s=coarse_time_step_s,
+            yaw_step_deg=coarse_yaw_step_deg,
+            yaw_low=yaw_low,
+            yaw_high=yaw_high,
+            nominal_start_s=initial_start_s,
+            nominal_yaw_deg=initial_yaw_deg,
+        )
+        fine_center_start = coarse["burn_start_s"] if coarse is not None else initial_start_s
+        fine_center_yaw = coarse["yaw_angle_deg"] if coarse is not None else initial_yaw_deg
+        fine = _search_continuous_thrust_burn(
+            config,
+            r,
+            v,
+            state_elapsed_s,
+            mass,
+            burn,
+            target_post_a_km,
+            fine_center_start,
+            fine_center_yaw,
+            m1,
+            m2,
+            formula,
+            time_window_s=fine_time_window_s,
+            yaw_window_deg=fine_yaw_window_deg,
+            time_step_s=time_step_s,
+            yaw_step_deg=yaw_step_deg,
+            yaw_low=yaw_low,
+            yaw_high=yaw_high,
+            nominal_start_s=initial_start_s,
+            nominal_yaw_deg=initial_yaw_deg,
+        )
+        best = fine or coarse
+        if best is None:
+            best = _continuous_thrust_fallback_candidate(
+                config,
+                r,
+                v,
+                state_elapsed_s,
+                mass,
+                burn,
+                target_post_a_km,
+                initial_start_s,
+                initial_yaw_deg,
+                m1,
+                m2,
+                formula,
+            )
+        search_evaluations = int(best.get("search_evaluations", 0))
+        if coarse is not None:
+            search_evaluations += int(coarse.get("search_evaluations", 0))
         parameters.append(
             ContinuousThrustManeuverParameter(
                 maneuver_index=int(burn.index),
-                burn_start_min=burn_start_min,
-                settle_end_min=settle_end_min,
-                cutoff_min=cutoff_min,
-                yaw_angle_deg=float(burn.alpha_deg),
+                initial_burn_start_min=initial_start_s / 60.0,
+                initial_yaw_angle_deg=initial_yaw_deg,
+                burn_start_min=float(best["burn_start_s"]) / 60.0,
+                settle_end_min=float(best["settle_end_s"]) / 60.0,
+                cutoff_min=float(best["cutoff_s"]) / 60.0,
+                yaw_angle_deg=float(best["yaw_angle_deg"]),
+                ignition_longitude_deg_e=float(best["ignition_longitude_deg_e"]),
+                cutoff_longitude_deg_e=float(best["cutoff_longitude_deg_e"]),
+                delta_v_mps=float(best["delta_v_mps"]),
                 target_post_a_km=target_post_a_km,
-                total_burn_time_min=total_duration_min,
-                settle_duration_min=effective_settle_min,
-                orbit_control_duration_min=orbit_control_duration_min,
-                propellant_kg=float(burn.propellant_kg),
+                total_burn_time_min=float(best["total_burn_time_s"]) / 60.0,
+                settle_duration_min=float(best["settle_duration_s"]) / 60.0,
+                orbit_control_duration_min=float(best["orbit_control_duration_s"]) / 60.0,
+                propellant_kg=float(best["propellant_kg"]),
                 future_apogee_raise_propellant_kg=m1,
                 future_perigee_lower_propellant_kg=m2,
-                trim_propellant_kg=m3,
-                objective_delta_g_kg=objective_delta_g,
-                objective_formula="m + m3" if is_last else "m + m1 + m2 + m3",
+                trim_propellant_kg=float(best["trim_propellant_kg"]),
+                objective_delta_g_kg=float(best["objective_delta_g_kg"]),
+                objective_formula=formula,
+                post_a_km=float(best["post_a_km"]),
+                post_e=float(best["post_e"]),
+                post_i_deg=float(best["post_i_deg"]),
+                post_mass_kg=float(best["post_mass_kg"]),
+                duration_ok=bool(best["duration_ok"]),
+                longitude_ok=bool(best["longitude_ok"]),
+                search_evaluations=search_evaluations,
             )
         )
-        previous_cutoff_min = cutoff_min
-    failed_constraints = [str(check.get("item", "")) for check in result.checks if not bool(check.get("passed"))]
+        r = np.asarray(best["r_cutoff"], dtype=float)
+        v = np.asarray(best["v_cutoff"], dtype=float)
+        state_elapsed_s = float(best["cutoff_s"])
+        mass = float(best["post_mass_kg"])
+    failed_constraints = _continuous_thrust_failed_constraints(config, parameters)
     return ContinuousThrustOptimizationResult(
         parameters=parameters,
         total_propellant_kg=sum(item.propellant_kg for item in parameters),
         objective_delta_g_kg=sum(item.objective_delta_g_kg for item in parameters),
-        time_step_s=10.0,
-        yaw_step_deg=0.05,
+        time_step_s=time_step_s,
+        yaw_step_deg=yaw_step_deg,
         hard_constraint_passed=not failed_constraints,
-        failed_constraints=[item for item in failed_constraints if item],
+        failed_constraints=failed_constraints,
     )
+
+
+def _search_continuous_thrust_burn(
+    config: dict[str, Any],
+    r: np.ndarray,
+    v: np.ndarray,
+    state_elapsed_s: float,
+    mass_kg: float,
+    burn: DesignManeuverBurn,
+    target_post_a_km: float,
+    center_start_s: float,
+    center_yaw_deg: float,
+    future_m1_kg: float,
+    future_m2_kg: float,
+    objective_formula: str,
+    *,
+    time_window_s: float,
+    yaw_window_deg: float,
+    time_step_s: float,
+    yaw_step_deg: float,
+    yaw_low: float,
+    yaw_high: float,
+    nominal_start_s: float,
+    nominal_yaw_deg: float,
+) -> dict[str, Any] | None:
+    start_low = max(float(state_elapsed_s), float(center_start_s) - float(time_window_s))
+    start_high = max(start_low, float(center_start_s) + float(time_window_s))
+    starts = _grid_values_around(float(center_start_s), start_low, start_high, float(time_step_s))
+    yaw_values = _grid_values_around(
+        float(center_yaw_deg),
+        max(float(yaw_low), float(center_yaw_deg) - float(yaw_window_deg)),
+        min(float(yaw_high), float(center_yaw_deg) + float(yaw_window_deg)),
+        float(yaw_step_deg),
+    )
+    best: dict[str, Any] | None = None
+    evaluations = 0
+    state_cache: dict[float, tuple[np.ndarray, np.ndarray]] = {}
+    for start_s in starts:
+        state_key = round(float(start_s), 6)
+        if state_key not in state_cache:
+            state_cache[state_key] = _propagate_state_to_elapsed(config, r, v, state_elapsed_s, float(start_s))
+        r_start, v_start = state_cache[state_key]
+        for yaw_deg in yaw_values:
+            evaluations += 1
+            candidate = _evaluate_continuous_thrust_candidate(
+                config,
+                r_start,
+                v_start,
+                float(start_s),
+                mass_kg,
+                burn,
+                target_post_a_km,
+                float(yaw_deg),
+                future_m1_kg,
+                future_m2_kg,
+                objective_formula,
+            )
+            if candidate is None:
+                continue
+            candidate["seed_time_offset_s"] = abs(float(start_s) - float(nominal_start_s))
+            candidate["seed_yaw_offset_deg"] = abs(float(yaw_deg) - float(nominal_yaw_deg))
+            candidate["search_evaluations"] = evaluations
+            if best is None or _continuous_candidate_score(candidate) < _continuous_candidate_score(best):
+                best = candidate
+    if best is not None:
+        best["search_evaluations"] = evaluations
+    return best
+
+
+def _evaluate_continuous_thrust_candidate(
+    config: dict[str, Any],
+    r_start: np.ndarray,
+    v_start: np.ndarray,
+    burn_start_s: float,
+    mass_kg: float,
+    burn: DesignManeuverBurn,
+    target_post_a_km: float,
+    yaw_angle_deg: float,
+    future_m1_kg: float,
+    future_m2_kg: float,
+    objective_formula: str,
+) -> dict[str, Any] | None:
+    total_burn_s = max(0.0, float(burn.total_burn_time_min) * 60.0)
+    dv_mps: float | None = None
+    propellant_kg = 0.0
+    r_cutoff_pre = r_start
+    v_cutoff_pre = v_start
+    for _iteration in range(8):
+        cutoff_guess_s = float(burn_start_s) + total_burn_s
+        r_cutoff_pre, v_cutoff_pre = _propagate_state_to_elapsed(config, r_start, v_start, burn_start_s, cutoff_guess_s)
+        dv_mps = _solve_dv_for_target_a(r_cutoff_pre, v_cutoff_pre, yaw_angle_deg, target_post_a_km)
+        if dv_mps is None or not math.isfinite(dv_mps):
+            return None
+        burn_time = _burn_time_for_delta_v(config, mass_kg, max(0.0, float(dv_mps)))
+        next_total_burn_s = max(0.0, float(burn_time["total_burn_time_min"]) * 60.0)
+        propellant_kg = max(0.0, float(burn_time["propellant_kg"]))
+        if abs(next_total_burn_s - total_burn_s) <= 1.0:
+            total_burn_s = next_total_burn_s
+            break
+        total_burn_s = 0.5 * total_burn_s + 0.5 * next_total_burn_s
+    if dv_mps is None or propellant_kg >= mass_kg:
+        return None
+    engine = config["engine"]
+    burn_limit = config["burn_limit"]
+    use_settling = bool(engine.get("use_settling", True))
+    include_settling = bool(burn_limit.get("include_settling_in_burn_time", True))
+    settle_duration_s = float(engine.get("tau_set_s", 0.0)) if use_settling else 0.0
+    if include_settling:
+        settle_duration_s = min(settle_duration_s, total_burn_s)
+    orbit_control_duration_s = max(0.0, total_burn_s - settle_duration_s)
+    cutoff_s = float(burn_start_s) + total_burn_s
+    r_cutoff_pre, v_cutoff_pre = _propagate_state_to_elapsed(config, r_start, v_start, burn_start_s, cutoff_s)
+    r_cutoff = r_cutoff_pre
+    v_cutoff = v_cutoff_pre + (float(dv_mps) / 1000.0) * _local_horizontal_direction(r_cutoff_pre, yaw_angle_deg)
+    post_a, post_e, post_i_rad, *_ = _rv_to_coe(r_cutoff, v_cutoff, mu=float(config["earth"]["mu_km3_s2"]))
+    post_i_deg = math.degrees(post_i_rad)
+    trim_dv_mps = _terminal_inclination_trim_delta_v_mps(config, v_cutoff, post_i_deg)
+    trim_propellant_kg = _propellant_for_delta_v(
+        max(1.0, float(mass_kg) - propellant_kg),
+        trim_dv_mps,
+        float(config["engine"]["Isp_set_s"]),
+    )
+    objective_delta_g_kg = propellant_kg + trim_propellant_kg
+    if objective_formula != "m + m3":
+        objective_delta_g_kg += float(future_m1_kg) + float(future_m2_kg)
+    ignition_longitude = _longitude_deg(config, r_start, burn_start_s)
+    cutoff_longitude = _longitude_deg(config, r_cutoff, cutoff_s)
+    terminal_lon_excess_deg = 0.0
+    if objective_formula == "m + m3":
+        terminal_lon_excess_deg = abs(_wrap180(cutoff_longitude - float(config["target"]["lon_degE"])))
+    return {
+        "burn_start_s": float(burn_start_s),
+        "settle_end_s": float(burn_start_s) + settle_duration_s,
+        "cutoff_s": cutoff_s,
+        "yaw_angle_deg": float(yaw_angle_deg),
+        "ignition_longitude_deg_e": ignition_longitude,
+        "cutoff_longitude_deg_e": cutoff_longitude,
+        "delta_v_mps": float(dv_mps),
+        "total_burn_time_s": total_burn_s,
+        "settle_duration_s": settle_duration_s,
+        "orbit_control_duration_s": orbit_control_duration_s,
+        "propellant_kg": propellant_kg,
+        "trim_propellant_kg": trim_propellant_kg,
+        "objective_delta_g_kg": objective_delta_g_kg,
+        "terminal_lon_excess_deg": terminal_lon_excess_deg,
+        "post_a_km": float(post_a),
+        "post_e": float(post_e),
+        "post_i_deg": post_i_deg,
+        "post_mass_kg": max(1.0, float(mass_kg) - propellant_kg),
+        "duration_ok": total_burn_s <= float(config["burn_limit"]["max_total_burn_time_min"]) * 60.0 + 1.0e-9,
+        "longitude_ok": _in_window(ignition_longitude, config["longitude"]["planning_window_degE"]),
+        "r_cutoff": r_cutoff,
+        "v_cutoff": v_cutoff,
+        "pulse_time_offset_s": abs(float(burn_start_s) - float(burn.elapsed_min) * 60.0),
+        "pulse_yaw_offset_deg": abs(float(yaw_angle_deg) - float(burn.alpha_deg)),
+    }
+
+
+def _continuous_thrust_fallback_candidate(
+    config: dict[str, Any],
+    r: np.ndarray,
+    v: np.ndarray,
+    state_elapsed_s: float,
+    mass_kg: float,
+    burn: DesignManeuverBurn,
+    target_post_a_km: float,
+    initial_start_s: float,
+    initial_yaw_deg: float,
+    future_m1_kg: float,
+    future_m2_kg: float,
+    objective_formula: str,
+) -> dict[str, Any]:
+    start_s = max(float(state_elapsed_s), float(initial_start_s))
+    r_start, v_start = _propagate_state_to_elapsed(config, r, v, state_elapsed_s, start_s)
+    candidate = _evaluate_continuous_thrust_candidate(
+        config,
+        r_start,
+        v_start,
+        start_s,
+        mass_kg,
+        burn,
+        target_post_a_km,
+        initial_yaw_deg,
+        future_m1_kg,
+        future_m2_kg,
+        objective_formula,
+    )
+    if candidate is not None:
+        candidate["search_evaluations"] = 0
+        return candidate
+    total_burn_s = max(0.0, float(burn.total_burn_time_min) * 60.0)
+    cutoff_s = start_s + total_burn_s
+    r_cutoff, v_cutoff = _propagate_state_to_elapsed(config, r_start, v_start, start_s, cutoff_s)
+    return {
+        "burn_start_s": start_s,
+        "settle_end_s": start_s,
+        "cutoff_s": cutoff_s,
+        "yaw_angle_deg": float(initial_yaw_deg),
+        "ignition_longitude_deg_e": _longitude_deg(config, r_start, start_s),
+        "cutoff_longitude_deg_e": _longitude_deg(config, r_cutoff, cutoff_s),
+        "delta_v_mps": float(burn.delta_v_mps),
+        "total_burn_time_s": total_burn_s,
+        "settle_duration_s": 0.0,
+        "orbit_control_duration_s": total_burn_s,
+        "propellant_kg": float(burn.propellant_kg),
+        "trim_propellant_kg": 0.0,
+        "objective_delta_g_kg": float(burn.propellant_kg) + future_m1_kg + future_m2_kg,
+        "terminal_lon_excess_deg": abs(_wrap180(_longitude_deg(config, r_cutoff, cutoff_s) - float(config["target"]["lon_degE"])))
+        if objective_formula == "m + m3"
+        else 0.0,
+        "post_a_km": float(burn.post_a_km),
+        "post_e": float(burn.post_e),
+        "post_i_deg": float(burn.post_i_deg),
+        "post_mass_kg": max(1.0, mass_kg - float(burn.propellant_kg)),
+        "duration_ok": bool(burn.duration_ok),
+        "longitude_ok": bool(burn.longitude_ok),
+        "r_cutoff": r_cutoff,
+        "v_cutoff": v_cutoff,
+        "pulse_time_offset_s": 0.0,
+        "pulse_yaw_offset_deg": 0.0,
+        "search_evaluations": 0,
+    }
+
+
+def _continuous_candidate_score(candidate: dict[str, Any]) -> tuple[float, float, float, float, float, float]:
+    invalid_penalty = 0.0
+    if not bool(candidate.get("duration_ok", False)):
+        invalid_penalty += 1.0
+    if not bool(candidate.get("longitude_ok", False)):
+        invalid_penalty += 1.0
+    continuity_penalty = (
+        float(candidate["objective_delta_g_kg"])
+        + 200.0 * float(candidate.get("seed_yaw_offset_deg", 0.0))
+        + 5.0 * float(candidate.get("seed_time_offset_s", 0.0)) / 60.0
+    )
+    return (
+        invalid_penalty,
+        float(candidate.get("terminal_lon_excess_deg", 0.0)),
+        continuity_penalty,
+        float(candidate["objective_delta_g_kg"]),
+        float(candidate.get("propellant_kg", 0.0)),
+        float(candidate.get("pulse_time_offset_s", 0.0)),
+    )
+
+
+def _continuous_yaw_bounds_for_burn(
+    config: dict[str, Any],
+    burns: list[DesignManeuverBurn],
+    burn_position: int,
+    burn: DesignManeuverBurn,
+) -> tuple[float, float]:
+    if burn_position == len(burns) - 1 and burn.apsis == "P":
+        return _number_pair(config["alpha"]["tail_perigee_bounds_deg"], [-180.0, 180.0])
+    if burn.burn_type == "tail_fixed" and burn.apsis == "A":
+        return _number_pair(config["alpha"]["tail_apogee_bounds_deg"], [-20.0, 40.0])
+    if burn.burn_type == "front":
+        return _number_pair(config["alpha"]["front_bounds_deg"], [-20.0, 40.0])
+    return _number_pair(config["alpha"]["standard_bounds_deg"], [-30.0, 40.0])
+
+
+def _continuous_thrust_failed_constraints(
+    config: dict[str, Any],
+    parameters: list[ContinuousThrustManeuverParameter],
+) -> list[str]:
+    failed: list[str] = []
+    if not parameters:
+        return ["连续推力参数"]
+    tolerance = config["terminal_tolerance"]
+    target = config["target"]
+    if not all(item.longitude_ok for item in parameters):
+        failed.append("点火经度")
+    if not all(item.duration_ok for item in parameters):
+        failed.append("总点火时长")
+    final = parameters[-1]
+    if abs(_wrap180(final.cutoff_longitude_deg_e - float(target["lon_degE"]))) > float(tolerance["lon_deg"]):
+        failed.append("终端经度误差")
+    # The local-search objective includes m3, the planned 10 N circularization/inclination trim.
+    terminal_i_after_trim = float(target["i_deg"]) if final.trim_propellant_kg >= 0.0 else final.post_i_deg
+    if abs(terminal_i_after_trim - float(target["i_deg"])) > float(tolerance["i_deg"]):
+        failed.append("终端倾角误差")
+    if not all(item.search_evaluations >= 0 and math.isfinite(item.objective_delta_g_kg) for item in parameters):
+        failed.append("推进剂最小")
+    return failed
+
+
+def _grid_values_around(center: float, low: float, high: float, step: float) -> list[float]:
+    if high < low:
+        return []
+    step = max(1.0e-9, float(step))
+    start_index = math.ceil((float(low) - float(center)) / step - 1.0e-9)
+    end_index = math.floor((float(high) - float(center)) / step + 1.0e-9)
+    values = [float(center) + index * step for index in range(start_index, end_index + 1)]
+    clipped = [min(float(high), max(float(low), value)) for value in values]
+    if not clipped or abs(clipped[0] - float(low)) > 1.0e-9:
+        clipped.insert(0, float(low))
+    if abs(clipped[-1] - float(high)) > 1.0e-9:
+        clipped.append(float(high))
+    unique: list[float] = []
+    previous: float | None = None
+    for value in clipped:
+        rounded = round(float(value), 9)
+        if previous is None or abs(rounded - previous) > 1.0e-9:
+            unique.append(rounded)
+            previous = rounded
+    return unique
 
 
 def find_feasible_q_sequences(payload: dict[str, Any] | None) -> list[dict[str, Any]]:
@@ -3214,6 +3632,43 @@ def _next_apsis(
         mu=mu,
     )
     return next_elapsed, next_r, next_v
+
+
+def _propagate_state_to_elapsed(
+    config: dict[str, Any],
+    r: np.ndarray,
+    v: np.ndarray,
+    from_elapsed_s: float,
+    to_elapsed_s: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    dt = float(to_elapsed_s) - float(from_elapsed_s)
+    if abs(dt) <= 1.0e-9:
+        return np.asarray(r, dtype=float).copy(), np.asarray(v, dtype=float).copy()
+    earth = config["earth"]
+    mu = float(earth["mu_km3_s2"])
+    a, e, inc, raan, argp, mean_anomaly, _true_anomaly = _rv_to_coe(np.asarray(r, dtype=float), np.asarray(v, dtype=float), mu=mu)
+    if bool(earth["use_J2"]):
+        raan_dot, argp_dot, mean_dot = _j2_rates(
+            a,
+            e,
+            inc,
+            mu=mu,
+            radius=float(earth["Re_km"]),
+            j2=float(earth["J2"]),
+        )
+    else:
+        raan_dot = 0.0
+        argp_dot = 0.0
+        mean_dot = math.sqrt(mu / a**3)
+    return _coe_to_rv(
+        a,
+        e,
+        inc,
+        (raan + raan_dot * dt) % (2.0 * math.pi),
+        (argp + argp_dot * dt) % (2.0 * math.pi),
+        (mean_anomaly + mean_dot * dt) % (2.0 * math.pi),
+        mu=mu,
+    )
 
 
 def _longitude_deg(config: dict[str, Any], r: np.ndarray, elapsed_s: float) -> float:

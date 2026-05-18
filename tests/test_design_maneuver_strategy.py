@@ -80,8 +80,12 @@ def test_continuous_thrust_parameter_optimizer_uses_pulse_targets() -> None:
         pulse_result.burns[0].target_post_a_km or pulse_result.burns[0].post_a_km
     )
     assert first.cutoff_min > first.burn_start_min
+    assert first.search_evaluations > 0
     assert first.objective_formula == "m + m1 + m2 + m3"
     assert continuous_result.parameters[-1].objective_formula == "m + m3"
+    assert continuous_result.parameters[-1].cutoff_longitude_deg_e == pytest.approx(
+        pulse_result.config["target"]["lon_degE"], abs=pulse_result.config["terminal_tolerance"]["lon_deg"]
+    )
     assert continuous_result.objective_delta_g_kg >= continuous_result.total_propellant_kg
 
 

@@ -418,6 +418,10 @@
 - 提交：`4239688`
 - 影响文件：`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
 
-## 2026-05-18T20:53:37+08:00 | Add continuous thrust parameter UI
+## 2026-05-18T20:53:40+08:00 | Add continuous thrust parameter UI
+- 提交：`071358d`
+- 影响文件：`src/smart/services/design_maneuver_strategy.py`、`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-18T21:20:14+08:00 | Implement continuous thrust local search
 - 提交：`本次提交`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。

@@ -872,7 +872,10 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                         f"m={parameter.propellant_kg:.3f}, "
                         f"m1={parameter.future_apogee_raise_propellant_kg:.3f}, "
                         f"m2={parameter.future_perigee_lower_propellant_kg:.3f}, "
-                        f"m3={parameter.trim_propellant_kg:.3f}"
+                        f"m3={parameter.trim_propellant_kg:.3f}; "
+                        f"初值 t={parameter.initial_burn_start_min:.2f} min, "
+                        f"δ={parameter.initial_yaw_angle_deg:.2f} deg; "
+                        f"评估 {parameter.search_evaluations} 组"
                     )
                 )
 
