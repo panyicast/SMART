@@ -24,6 +24,27 @@ from smart.ui.widgets.spinboxes import NoWheelComboBox, NoWheelDateTimeEdit, NoW
 BEIJING_QT_TIMEZONE_ID = b"Asia/Shanghai"
 
 
+class _ArrowNoWheelComboBox(NoWheelComboBox):
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
+        super().paintEvent(event)
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        color = QtGui.QColor("#66d9ea" if self.isEnabled() else "#5d7684")
+        painter.setBrush(color)
+        painter.setPen(QtCore.Qt.PenStyle.NoPen)
+        center_x = self.width() - 16
+        center_y = self.height() // 2 + 1
+        triangle = QtGui.QPolygon(
+            [
+                QtCore.QPoint(center_x - 5, center_y - 3),
+                QtCore.QPoint(center_x + 5, center_y - 3),
+                QtCore.QPoint(center_x, center_y + 4),
+            ]
+        )
+        painter.drawPolygon(triangle)
+        painter.end()
+
+
 def _perigee_altitude_km(a_km: float, e: float, re_km: float) -> float:
     return float(a_km) * (1.0 - float(e)) - float(re_km)
 
@@ -318,7 +339,6 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._burn_table.setMinimumHeight(180)
         burn_layout.addWidget(self._burn_table)
         burn_layout.addWidget(self._build_perigee_target_controls())
-        burn_layout.addWidget(self._build_q_candidate_controls())
         layout.addWidget(burn_card, 2)
 
         bottom_row = QtWidgets.QHBoxLayout()
@@ -371,6 +391,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._mv1_hp_target_edit = QtWidgets.QLineEdit()
         self._mv1_hp_target_edit.setPlaceholderText("不约束")
         self._mv1_hp_target_edit.setMinimumHeight(36)
+        self._mv1_hp_target_edit.setMinimumWidth(96)
         self._mv1_hp_target_edit.setValidator(QtGui.QDoubleValidator(0.0, 1.0e7, 6, self))
         self._mv1_hp_target_edit.returnPressed.connect(self._apply_perigee_target_constraints)
         row.addWidget(self._mv1_hp_target_edit, 1)
@@ -381,39 +402,42 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._mv2_hp_target_edit = QtWidgets.QLineEdit()
         self._mv2_hp_target_edit.setPlaceholderText("不约束")
         self._mv2_hp_target_edit.setMinimumHeight(36)
+        self._mv2_hp_target_edit.setMinimumWidth(96)
         self._mv2_hp_target_edit.setValidator(QtGui.QDoubleValidator(0.0, 1.0e7, 6, self))
         self._mv2_hp_target_edit.returnPressed.connect(self._apply_perigee_target_constraints)
         row.addWidget(self._mv2_hp_target_edit, 1)
+
+        self._q_sequence_user_label = QtWidgets.QLabel("q 序列")
+        self._q_sequence_user_label.setProperty("role", "cardCaption")
+        row.addWidget(self._q_sequence_user_label)
+
+        self._q_sequence_combo = _ArrowNoWheelComboBox()
+        self._q_sequence_combo.setObjectName("designManeuverQSequenceCombo")
+        self._q_sequence_combo.setMinimumHeight(36)
+        self._q_sequence_combo.setMinimumWidth(108)
+        self._q_sequence_combo.setStyleSheet(
+            """
+            QComboBox#designManeuverQSequenceCombo {
+                padding-right: 28px;
+            }
+            QComboBox#designManeuverQSequenceCombo::drop-down {
+                subcontrol-origin: padding;
+                subcontrol-position: top right;
+                width: 28px;
+                border-left: 1px solid #25586a;
+            }
+            QComboBox#designManeuverQSequenceCombo::down-arrow {
+                image: none;
+            }
+            """
+        )
+        self._q_sequence_combo.addItem("", None)
+        row.addWidget(self._q_sequence_combo, 1)
 
         self._apply_hp_targets_button = QtWidgets.QPushButton("应用并重算")
         self._apply_hp_targets_button.setProperty("variant", "primaryAction")
         self._apply_hp_targets_button.clicked.connect(self._apply_perigee_target_constraints)
         row.addWidget(self._apply_hp_targets_button)
-        return holder
-
-    def _build_q_candidate_controls(self) -> QtWidgets.QWidget:
-        holder = QtWidgets.QWidget()
-        layout = QtWidgets.QVBoxLayout(holder)
-        layout.setContentsMargins(0, 6, 0, 0)
-        layout.setSpacing(8)
-
-        self._q_candidate_header_label = QtWidgets.QLabel("可选 q 序列")
-        self._q_candidate_header_label.setProperty("role", "cardCaption")
-        layout.addWidget(self._q_candidate_header_label)
-
-        row = QtWidgets.QHBoxLayout()
-        row.setSpacing(10)
-        self._q_sequence_user_label = QtWidgets.QLabel("q 序列")
-        self._q_sequence_user_label.setProperty("role", "cardCaption")
-        row.addWidget(self._q_sequence_user_label)
-
-        self._q_sequence_combo = NoWheelComboBox()
-        self._q_sequence_combo.setMinimumHeight(36)
-        self._q_sequence_combo.addItem("", None)
-        self._q_sequence_combo.activated.connect(self._apply_selected_q_sequence)
-        row.addWidget(self._q_sequence_combo, 1)
-
-        layout.addLayout(row)
         return holder
 
     def _build_summary_card(self) -> QtWidgets.QFrame:
@@ -930,15 +954,25 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             return
         try:
             fixed_hp = self._perigee_target_constraints_from_fields()
+            q_values = self._selected_q_sequence_values()
         except ValueError as exc:
             self._set_status("statusDisconnected", str(exc))
             return
         config = self.config()
         config["hard_constraint_planner"]["fixed_hp_targets_km"] = fixed_hp
+        if q_values:
+            config["apsis"]["pattern_mode"] = "user"
+            config["hard_constraint_planner"]["q_AA_user"] = q_values[:-1]
+            config["hard_constraint_planner"]["q_AP_user"] = q_values[-1]
+        else:
+            config["apsis"]["pattern_mode"] = "auto"
+            config["hard_constraint_planner"]["q_AA_user"] = []
+            config["hard_constraint_planner"]["q_AP_user"] = None
         config["distribution"]["first_post_a_control_km"] = None
         self._config = normalize_design_maneuver_strategy_payload(config)
         self._refresh_config_overview()
         self._sync_perigee_target_fields(self._config)
+        self._sync_q_sequence_field(self._config)
         self.config_changed.emit(self._config)
         self.run_planner()
 
@@ -966,42 +1000,6 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         if any(value < 1 for value in values[:-1]) or values[-1] < 0:
             raise ValueError("A-A q 必须大于等于 1，终端 A-P q 必须大于等于 0。")
         return values
-
-    def _apply_selected_q_sequence(self) -> None:
-        if self._planning_busy:
-            return
-        try:
-            q_values = self._selected_q_sequence_values()
-        except ValueError as exc:
-            self._set_status("statusDisconnected", str(exc))
-            return
-        if not q_values:
-            self._clear_q_sequence_constraints(run=True)
-            return
-        config = self.config()
-        config["apsis"]["pattern_mode"] = "user"
-        config["hard_constraint_planner"]["q_AA_user"] = q_values[:-1]
-        config["hard_constraint_planner"]["q_AP_user"] = q_values[-1]
-        config["distribution"]["first_post_a_control_km"] = None
-        self._config = normalize_design_maneuver_strategy_payload(config)
-        self._refresh_config_overview()
-        self._sync_q_sequence_field(self._config)
-        self.config_changed.emit(self._config)
-        self.run_planner()
-
-    def _clear_q_sequence_constraints(self, run: bool = False) -> None:
-        if self._planning_busy:
-            return
-        config = self.config()
-        config["apsis"]["pattern_mode"] = "auto"
-        config["hard_constraint_planner"]["q_AA_user"] = []
-        config["hard_constraint_planner"]["q_AP_user"] = None
-        self._config = normalize_design_maneuver_strategy_payload(config)
-        self._refresh_config_overview()
-        self._sync_q_sequence_field(self._config)
-        self.config_changed.emit(self._config)
-        if run:
-            self.run_planner()
 
     def _set_planning_busy(self, busy: bool, message: str = "") -> None:
         self._planning_busy = busy
@@ -1151,7 +1149,6 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._mv1_hp_target_edit.setPlaceholderText("不约束")
         self._mv2_hp_target_edit.setPlaceholderText("不约束")
         self._apply_hp_targets_button.setText("应用并重算")
-        self._q_candidate_header_label.setText("可选 q 序列")
         self._q_sequence_user_label.setText("q 序列")
         self._check_header_label.setText(t("design_maneuver.check_header"))
         self._future_header_label.setText(t("design_maneuver.future_header"))

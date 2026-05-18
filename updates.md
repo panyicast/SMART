@@ -402,6 +402,10 @@
 - 提交：`3727f52`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
 
-## 2026-05-18T15:37:17+08:00 | Simplify feasible q selection UI
+## 2026-05-18T15:37:20+08:00 | Simplify feasible q selection UI
+- 提交：`22f1113`
+- 影响文件：`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-18T15:45:04+08:00 | Apply q selection with perigee controls
 - 提交：`本次提交`
 - 影响文件：`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。

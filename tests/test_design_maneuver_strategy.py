@@ -287,7 +287,8 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path, monkeyp
     replans: list[bool] = []
     page.run_planner = lambda: replans.append(True)  # type: ignore[method-assign]
     page._q_sequence_combo.setCurrentIndex(1)
-    page._apply_selected_q_sequence()
+    assert replans == []
+    page._apply_hp_targets_button.click()
     assert replans == [True]
     q_values = [int(value) for value in candidate_q.split(",")]
     q_config = page.config()
@@ -296,7 +297,8 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path, monkeyp
     assert q_config["hard_constraint_planner"]["q_AP_user"] == q_values[-1]
     replans.clear()
     page._q_sequence_combo.setCurrentIndex(0)
-    page._apply_selected_q_sequence()
+    assert replans == []
+    page._apply_hp_targets_button.click()
     assert replans == [True]
     cleared_q_config = page.config()
     assert cleared_q_config["apsis"]["pattern_mode"] == "auto"
