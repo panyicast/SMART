@@ -201,8 +201,8 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._updating_burn_table = False
         self._planning_busy = False
         root = QtWidgets.QVBoxLayout(self)
-        root.setContentsMargins(24, 24, 24, 24)
-        root.setSpacing(18)
+        root.setContentsMargins(20, 16, 20, 16)
+        root.setSpacing(8)
 
         eyebrow = QtWidgets.QLabel("SMART · DESIGN MANEUVER STRATEGY")
         eyebrow.setProperty("role", "pageEyebrow")
@@ -218,14 +218,15 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         accent_rule.setMaximumWidth(220)
         root.addWidget(accent_rule)
 
-        splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
-        splitter.setChildrenCollapsible(False)
-        root.addWidget(splitter, 1)
-        splitter.addWidget(self._build_config_panel())
-        splitter.addWidget(self._build_result_panel())
-        splitter.setStretchFactor(0, 3)
-        splitter.setStretchFactor(1, 4)
-        splitter.setSizes([680, 860])
+        top_row = QtWidgets.QHBoxLayout()
+        top_row.setSpacing(18)
+        top_row.addWidget(self._build_config_panel(), 1)
+        top_row.addWidget(self._build_config_overview_card(), 1)
+        root.addLayout(top_row, 0)
+
+        root.addWidget(self._build_result_panel(), 0)
+        root.addLayout(self._build_bottom_panel(), 0)
+        root.addStretch(1)
 
         self._status_label = QtWidgets.QLabel()
         self._status_label.setWordWrap(True)
@@ -236,32 +237,29 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self.refresh_from_workspace()
 
     def _build_config_panel(self) -> QtWidgets.QWidget:
-        panel = QtWidgets.QWidget()
-        self._config_panel = panel
-        layout = QtWidgets.QVBoxLayout(panel)
-        self._config_panel_layout = layout
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(14)
-
-        layout.addWidget(self._build_config_overview_card())
-
         button_card = QtWidgets.QFrame()
+        self._config_panel = button_card
         button_card.setProperty("role", "card")
+        button_card.setMaximumHeight(320)
         button_layout = QtWidgets.QVBoxLayout(button_card)
-        button_layout.setContentsMargins(18, 18, 18, 18)
-        button_layout.setSpacing(10)
+        self._config_panel_layout = button_layout
+        button_layout.setContentsMargins(18, 14, 18, 14)
+        button_layout.setSpacing(8)
         self._config_path_label = QtWidgets.QLabel()
         self._config_path_label.setProperty("role", "cardCaption")
         self._config_path_label.setWordWrap(True)
+        self._config_path_label.setMaximumHeight(34)
         button_layout.addWidget(self._config_path_label)
 
         self._parameter_config_button = QtWidgets.QPushButton()
         self._parameter_config_button.setProperty("variant", "primaryAction")
+        self._parameter_config_button.setFixedHeight(42)
         self._parameter_config_button.clicked.connect(self._open_parameter_config_dialog)
         button_layout.addWidget(self._parameter_config_button)
 
         self._advanced_settings_button = QtWidgets.QPushButton()
         self._advanced_settings_button.setProperty("variant", "secondary")
+        self._advanced_settings_button.setFixedHeight(36)
         self._advanced_settings_button.clicked.connect(self._open_advanced_settings_dialog)
         button_layout.addWidget(self._advanced_settings_button)
 
@@ -269,19 +267,23 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         row.setSpacing(10)
         self._reload_button = QtWidgets.QPushButton()
         self._reload_button.setProperty("variant", "secondary")
+        self._reload_button.setFixedHeight(36)
         self._reload_button.clicked.connect(self.refresh_from_workspace)
         row.addWidget(self._reload_button)
         self._save_button = QtWidgets.QPushButton()
         self._save_button.setProperty("variant", "secondary")
+        self._save_button.setFixedHeight(36)
         self._save_button.clicked.connect(self.save_config)
         row.addWidget(self._save_button)
         button_layout.addLayout(row)
         self._plan_button = QtWidgets.QPushButton()
         self._plan_button.setProperty("variant", "primaryAction")
+        self._plan_button.setFixedHeight(42)
         self._plan_button.clicked.connect(self.run_planner)
         button_layout.addWidget(self._plan_button)
         self._find_feasible_q_button = QtWidgets.QPushButton()
         self._find_feasible_q_button.setProperty("variant", "secondary")
+        self._find_feasible_q_button.setFixedHeight(36)
         self._find_feasible_q_button.clicked.connect(self.find_feasible_q_sequences)
         button_layout.addWidget(self._find_feasible_q_button)
         self._progress_bar = QtWidgets.QProgressBar()
@@ -290,94 +292,88 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._progress_bar.setFormat("等待计算")
         self._progress_bar.hide()
         button_layout.addWidget(self._progress_bar)
-        layout.addWidget(button_card)
-        layout.addStretch(1)
-        layout.addWidget(self._build_summary_card())
-        return panel
+        return button_card
 
     def _build_config_overview_card(self) -> QtWidgets.QFrame:
         card = QtWidgets.QFrame()
         card.setProperty("role", "card")
+        card.setMaximumHeight(320)
         layout = QtWidgets.QVBoxLayout(card)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(10)
+        layout.setContentsMargins(18, 14, 18, 14)
+        layout.setSpacing(8)
         self._config_overview_header_label = QtWidgets.QLabel("当前配置")
         self._config_overview_header_label.setProperty("role", "cardTitle")
         layout.addWidget(self._config_overview_header_label)
         self._config_overview_table = QtWidgets.QTableWidget(0, 2)
         self._setup_readonly_table(self._config_overview_table)
         self._config_overview_table.horizontalHeader().setStretchLastSection(True)
-        self._config_overview_table.setMinimumHeight(220)
+        self._config_overview_table.setMinimumHeight(150)
+        self._config_overview_table.setMaximumHeight(230)
         layout.addWidget(self._config_overview_table)
         return card
 
     def _build_result_panel(self) -> QtWidgets.QWidget:
-        scroll = QtWidgets.QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
-        scroll.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Expanding)
-
-        panel = QtWidgets.QWidget()
-        self._result_panel = panel
-        scroll.setWidget(panel)
-
-        layout = QtWidgets.QVBoxLayout(panel)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(14)
-
         burn_card = QtWidgets.QFrame()
+        self._result_panel = burn_card
         burn_card.setProperty("role", "card")
         burn_layout = QtWidgets.QVBoxLayout(burn_card)
-        burn_layout.setContentsMargins(18, 18, 18, 18)
-        burn_layout.setSpacing(10)
+        burn_layout.setContentsMargins(14, 10, 14, 10)
+        burn_layout.setSpacing(6)
         self._burn_header_label = QtWidgets.QLabel()
         self._burn_header_label.setProperty("role", "cardTitle")
         burn_layout.addWidget(self._burn_header_label)
         self._burn_table = QtWidgets.QTableWidget(0, 14)
         self._setup_readonly_table(self._burn_table)
         self._burn_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
-        self._burn_table.setMinimumHeight(180)
+        self._burn_table.verticalHeader().setDefaultSectionSize(24)
+        self._burn_table.setMinimumHeight(150)
+        self._burn_table.setMaximumHeight(210)
         burn_layout.addWidget(self._burn_table)
         burn_layout.addWidget(self._build_perigee_target_controls())
-        layout.addWidget(burn_card, 2)
+        return burn_card
 
+    def _build_bottom_panel(self) -> QtWidgets.QHBoxLayout:
         bottom_row = QtWidgets.QHBoxLayout()
-        bottom_row.setSpacing(14)
+        bottom_row.setSpacing(10)
+        bottom_row.addWidget(self._build_summary_card(), 2)
+
         check_card = QtWidgets.QFrame()
         check_card.setProperty("role", "card")
+        check_card.setMaximumHeight(150)
         check_layout = QtWidgets.QVBoxLayout(check_card)
-        check_layout.setContentsMargins(18, 18, 18, 18)
-        check_layout.setSpacing(10)
+        check_layout.setContentsMargins(12, 10, 12, 10)
+        check_layout.setSpacing(6)
         self._check_header_label = QtWidgets.QLabel()
         self._check_header_label.setProperty("role", "cardTitle")
         check_layout.addWidget(self._check_header_label)
         self._check_table = QtWidgets.QTableWidget(0, 4)
         self._setup_readonly_table(self._check_table)
         self._check_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
-        self._check_table.setMinimumHeight(120)
+        self._check_table.setMinimumHeight(70)
+        self._check_table.setMaximumHeight(95)
         check_layout.addWidget(self._check_table)
         bottom_row.addWidget(check_card, 3)
 
         future_card = QtWidgets.QFrame()
         future_card.setProperty("role", "card")
+        future_card.setMaximumHeight(150)
         future_layout = QtWidgets.QVBoxLayout(future_card)
-        future_layout.setContentsMargins(18, 18, 18, 18)
-        future_layout.setSpacing(10)
+        future_layout.setContentsMargins(12, 10, 12, 10)
+        future_layout.setSpacing(6)
         self._future_header_label = QtWidgets.QLabel()
         self._future_header_label.setProperty("role", "cardTitle")
         future_layout.addWidget(self._future_header_label)
         self._future_slot_label = QtWidgets.QLabel()
         self._future_slot_label.setProperty("role", "pageBody")
         self._future_slot_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self._future_slot_label.setMinimumHeight(120)
+        self._future_slot_label.setMinimumHeight(38)
         future_layout.addWidget(self._future_slot_label, 1)
         self._warning_label = QtWidgets.QLabel()
         self._warning_label.setProperty("role", "statusDisconnected")
         self._warning_label.setWordWrap(True)
         future_layout.addWidget(self._warning_label)
         bottom_row.addWidget(future_card, 2)
-        layout.addLayout(bottom_row, 1)
-        return scroll
+        return bottom_row
 
     def _build_perigee_target_controls(self) -> QtWidgets.QWidget:
         holder = QtWidgets.QWidget()
@@ -443,16 +439,18 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
     def _build_summary_card(self) -> QtWidgets.QFrame:
         self._summary_card = QtWidgets.QFrame()
         self._summary_card.setProperty("role", "card")
+        self._summary_card.setMaximumHeight(150)
         summary_layout = QtWidgets.QVBoxLayout(self._summary_card)
-        summary_layout.setContentsMargins(18, 18, 18, 18)
-        summary_layout.setSpacing(10)
+        summary_layout.setContentsMargins(12, 10, 12, 10)
+        summary_layout.setSpacing(6)
         self._summary_header_label = QtWidgets.QLabel()
         self._summary_header_label.setProperty("role", "cardTitle")
         summary_layout.addWidget(self._summary_header_label)
         self._summary_table = QtWidgets.QTableWidget(0, 2)
         self._setup_readonly_table(self._summary_table)
         self._summary_table.horizontalHeader().setStretchLastSection(True)
-        self._summary_table.setMinimumHeight(150)
+        self._summary_table.setMinimumHeight(70)
+        self._summary_table.setMaximumHeight(95)
         summary_layout.addWidget(self._summary_table)
         return self._summary_card
 
@@ -1180,6 +1178,8 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
     def _setup_readonly_table(table: QtWidgets.QTableWidget) -> None:
         table.setAlternatingRowColors(True)
         table.verticalHeader().setVisible(False)
+        table.verticalHeader().setDefaultSectionSize(26)
+        table.horizontalHeader().setFixedHeight(30)
         table.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
         table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
 

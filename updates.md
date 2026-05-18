@@ -406,6 +406,10 @@
 - 提交：`22f1113`
 - 影响文件：`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
 
-## 2026-05-18T15:45:04+08:00 | Apply q selection with perigee controls
+## 2026-05-18T15:45:07+08:00 | Apply q selection with perigee controls
+- 提交：`499b1a9`
+- 影响文件：`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-18T15:57:52+08:00 | Compact design maneuver page layout
 - 提交：`本次提交`
 - 影响文件：`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。

@@ -202,9 +202,13 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path, monkeyp
     assert page._find_feasible_q_button.text() == "查找全部可行q"
     assert page._find_feasible_q_button.property("variant") == "secondary"
     assert page._progress_bar.isHidden()
-    assert page._summary_card.parent() is page._config_panel
-    assert page._config_panel_layout.indexOf(page._summary_card) == page._config_panel_layout.count() - 1
-    assert page._result_panel.layout().indexOf(page._summary_card) == -1
+    assert page._summary_card.parent() is not page._config_panel
+    assert page._config_panel.maximumHeight() <= 320
+    assert page._config_overview_table.maximumHeight() <= 230
+    assert page._burn_table.maximumHeight() <= 210
+    perigee_layout = page._mv1_hp_target_label.parentWidget().layout()
+    assert perigee_layout.indexOf(page._q_sequence_combo) >= 0
+    assert perigee_layout.indexOf(page._apply_hp_targets_button) >= 0
     assert not hasattr(page, "_v51_user_constraints_header_label")
     assert not hasattr(page, "_v51_hp_targets_edit")
     assert has_icon("nav.design_maneuver_strategy")
