@@ -11,6 +11,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from smart.services.design_maneuver_strategy import (
     DesignManeuverResult,
     default_design_maneuver_strategy_payload,
+    find_feasible_q_sequences as service_find_feasible_q_sequences,
     initial_design_maneuver_subsatellite_longitude_deg_e,
     normalize_design_maneuver_strategy_payload,
     plan_design_maneuver_strategy,
@@ -258,6 +259,10 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._plan_button.setProperty("variant", "primaryAction")
         self._plan_button.clicked.connect(self.run_planner)
         button_layout.addWidget(self._plan_button)
+        self._find_feasible_q_button = QtWidgets.QPushButton()
+        self._find_feasible_q_button.setProperty("variant", "secondary")
+        self._find_feasible_q_button.clicked.connect(self.find_feasible_q_sequences)
+        button_layout.addWidget(self._find_feasible_q_button)
         self._progress_bar = QtWidgets.QProgressBar()
         self._progress_bar.setRange(0, 0)
         self._progress_bar.setTextVisible(True)
@@ -695,6 +700,21 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         finally:
             self._set_planning_busy(False)
 
+    def find_feasible_q_sequences(self) -> None:
+        if self._planning_busy:
+            return
+        self._set_planning_busy(True, "正在查找全部可行 q 序列...")
+        try:
+            if self.save_config() is None:
+                return
+            candidates = service_find_feasible_q_sequences(self._config)
+            self._set_q_candidate_rows_from_candidates(candidates)
+            self._set_status("statusReady", f"可行 q 序列查找完成，共 {len(candidates)} 组。")
+        except Exception as exc:
+            self._set_status("statusDisconnected", f"可行 q 序列查找失败：{exc}")
+        finally:
+            self._set_planning_busy(False)
+
     def config(self) -> dict[str, Any]:
         config = normalize_design_maneuver_strategy_payload(self._config)
         if hasattr(self, "_mv1_hp_target_edit"):
@@ -826,6 +846,9 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
     def _set_q_candidate_rows(self, result: DesignManeuverResult) -> None:
         diagnostics = result.summary.get("phase_diagnostics", {})
         candidates = diagnostics.get("feasible_q_sequences", []) if isinstance(diagnostics, dict) else []
+        self._set_q_candidate_rows_from_candidates(candidates)
+
+    def _set_q_candidate_rows_from_candidates(self, candidates: Any) -> None:
         self._q_candidate_table.setRowCount(0)
         if not isinstance(candidates, list):
             return
@@ -997,6 +1020,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             self._reload_button,
             self._save_button,
             self._plan_button,
+            self._find_feasible_q_button,
             self._burn_table,
             self._mv1_hp_target_edit,
             self._mv2_hp_target_edit,
@@ -1083,6 +1107,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             self._reload_button,
             self._save_button,
             self._plan_button,
+            self._find_feasible_q_button,
             self._mv1_hp_target_edit,
             self._mv2_hp_target_edit,
             self._apply_hp_targets_button,
@@ -1115,6 +1140,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._reload_button.setText(f"+  {t('design_maneuver.reload_button')}")
         self._save_button.setText(t("design_maneuver.save_button"))
         self._plan_button.setText(t("design_maneuver.plan_button"))
+        self._find_feasible_q_button.setText("查找全部可行q")
         self._summary_header_label.setText(t("design_maneuver.summary_header"))
         self._burn_header_label.setText(t("design_maneuver.burn_header"))
         self._mv1_hp_target_label.setText("第一次目标近地点高度/km")

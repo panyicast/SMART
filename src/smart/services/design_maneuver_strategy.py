@@ -555,6 +555,92 @@ def initial_design_maneuver_subsatellite_longitude_deg_e(payload: dict[str, Any]
     return _longitude_deg(config, r, 0.0)
 
 
+def find_feasible_q_sequences(payload: dict[str, Any] | None) -> list[dict[str, Any]]:
+    config = normalize_design_maneuver_strategy_payload(payload)
+    initial = config["initial"]
+    earth = config["earth"]
+    target = config["target"]
+    hard_cfg = config["hard_constraint_planner"]
+    count_cfg = config["maneuver_count"]
+    supersync = config["supersynchronous_transfer"]
+
+    a0 = float(initial["a_km"])
+    e0 = float(initial["e"])
+    i_target = float(target["i_deg"])
+    a_target = float(target["a_km"])
+    re_km = float(earth["Re_km"])
+    r_a0 = a0 * (1.0 + e0)
+    orbit_type = _classify_orbit(config, r_a0, a_target)
+    if orbit_type != "supersynchronous_transfer" or not bool(hard_cfg["enabled"]):
+        raise RuntimeError("独立 q 序列扫描仅支持 V5.1 超同步硬约束规划。")
+
+    _dv_tail_apogee_est, _dv_tail_perigee_est = _estimate_tail_delta_v(config, orbit_type)
+    dv_total_est = _estimate_total_delta_v(
+        config,
+        orbit_type,
+        dv_tail_apogee_est=_dv_tail_apogee_est,
+        dv_tail_perigee_est=_dv_tail_perigee_est,
+    )
+    design_dv = _estimate_design_single_burn_dv(config, float(initial["m0_kg"]))
+    recommended_count = _recommend_count(config, orbit_type, dv_total_est, design_dv)
+    user_count = int(count_cfg["user"])
+    actual_count = user_count if user_count > 0 else recommended_count
+    actual_count = max(2, actual_count)
+    if bool(supersync["tail_fixed_enabled"]):
+        actual_count = max(actual_count, int(supersync["tail_fixed_count"]))
+
+    first_elapsed, first_r, first_v, first_lon = _find_initial_burn_event(config, *_initial_state_km(config), "A")
+    reference = _v51_apogee_to_rp_i(config, first_r, first_v, a_target, i_target)
+    if reference is None:
+        raise RuntimeError("首个远地点无法一次完成目标近地点与倾角参考解。")
+
+    raw_design_dv = max(1.0, float(config["burn_limit"]["design_dv_per_burn_mps"]))
+    v51_recommended_total = max(2, int(math.ceil(float(reference["dv_mps"]) / raw_design_dv)) + 1)
+    q_aa_user = [int(value) for value in hard_cfg.get("q_AA_user", [])]
+    sequence_drives_count = str(config["apsis"].get("pattern_mode", "auto")) == "user" and bool(q_aa_user)
+    if sequence_drives_count:
+        total_count = len(q_aa_user) + 2
+    else:
+        total_count = actual_count if user_count > 0 else v51_recommended_total
+    total_count = max(2, total_count)
+    front_count = max(0, total_count - 2)
+
+    fixed_rp: dict[int, float] = {}
+    for key, hp in hard_cfg.get("fixed_hp_targets_km", {}).items():
+        index = int(key)
+        if 1 <= index <= front_count:
+            fixed_rp[index] = re_km + float(hp)
+    manual_first_control = _first_post_a_control_km(config)
+    if manual_first_control is not None and front_count >= 1:
+        pre_a_first, *_ = _rv_to_coe(first_r, first_v)
+        target_post_a_first = pre_a_first + manual_first_control
+        fixed_rp[1] = 2.0 * target_post_a_first - float(np.linalg.norm(first_r))
+    _v51_validate_fixed_rp(config, fixed_rp, front_count)
+
+    q_aa_candidates = _v51_q_aa_candidates(config, front_count)
+    q_ap_candidates = (
+        [int(hard_cfg["q_AP_user"])]
+        if hard_cfg.get("q_AP_user") is not None
+        else [int(value) for value in hard_cfg.get("q_AP_candidates", [0, 1, 2])]
+    )
+    starts = _v51_template_points(config, front_count, fixed_rp)
+    bounds = _v51_variable_bounds(config, front_count, fixed_rp)
+    variable_indices = [index for index in range(1, front_count + 1) if index not in fixed_rp]
+    return _v51_scan_feasible_q_sequences(
+        config,
+        first=(first_elapsed, first_r, first_v, first_lon),
+        fixed_rp=fixed_rp,
+        variable_indices=variable_indices,
+        bounds=bounds,
+        starts=starts,
+        q_aa_candidates=q_aa_candidates,
+        q_ap_candidates=q_ap_candidates,
+        front_count=front_count,
+        scan_all_q=True,
+        ignore_terminal_i=True,
+    )
+
+
 def _plan_v51_hard_constrained(
     config: dict[str, Any],
     *,
@@ -1298,8 +1384,12 @@ def _v51_feasibility_violations(config: dict[str, Any], rec: dict[str, Any]) -> 
     }
 
 
-def _v51_is_feasible(config: dict[str, Any], rec: dict[str, Any]) -> bool:
-    return all(value <= 1.0e-9 for value in _v51_feasibility_violations(config, rec).values())
+def _v51_is_feasible(config: dict[str, Any], rec: dict[str, Any], *, ignore_terminal_i: bool = False) -> bool:
+    violations = _v51_feasibility_violations(config, rec)
+    if ignore_terminal_i:
+        violations = dict(violations)
+        violations["terminal_i_excess_deg"] = 0.0
+    return all(value <= 1.0e-9 for value in violations.values())
 
 
 def _v51_rank_record(config: dict[str, Any], rec: dict[str, Any]) -> tuple[float, ...]:
@@ -1538,6 +1628,8 @@ def _v51_scan_feasible_q_sequences(
     q_aa_candidates: list[tuple[int, ...]],
     q_ap_candidates: list[int],
     front_count: int,
+    scan_all_q: bool = False,
+    ignore_terminal_i: bool = False,
 ) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     phase_starts_by_q: dict[tuple[int, ...], list[np.ndarray]] = {}
@@ -1549,15 +1641,18 @@ def _v51_scan_feasible_q_sequences(
         )
         for q_aa in q_aa_candidates
     )
-    q_score_limit = 4000.0
-    q_scan_limit = max(10, int(config["hard_constraint_planner"]["prefilter_top_k"]))
-    q_aa_to_scan = [
-        q_aa
-        for score, q_aa in q_ranked
-        if score <= q_score_limit
-    ][:q_scan_limit]
-    if not q_aa_to_scan:
-        q_aa_to_scan = [q_aa for _score, q_aa in q_ranked[:q_scan_limit]]
+    if scan_all_q:
+        q_aa_to_scan = [q_aa for _score, q_aa in q_ranked]
+    else:
+        q_score_limit = 4000.0
+        q_scan_limit = max(10, int(config["hard_constraint_planner"]["prefilter_top_k"]))
+        q_aa_to_scan = [
+            q_aa
+            for score, q_aa in q_ranked
+            if score <= q_score_limit
+        ][:q_scan_limit]
+        if not q_aa_to_scan:
+            q_aa_to_scan = [q_aa for _score, q_aa in q_ranked[:q_scan_limit]]
     for q_aa in q_aa_to_scan:
         phase_starts = phase_starts_by_q.get(q_aa)
         if phase_starts is None:
@@ -1615,7 +1710,11 @@ def _v51_scan_feasible_q_sequences(
                                 q_ap=q_ap,
                             )
                         )
-            feasible_records = [rec for rec in records if rec.get("success") and _v51_is_feasible(config, rec)]
+            feasible_records = [
+                rec
+                for rec in records
+                if rec.get("success") and _v51_is_feasible(config, rec, ignore_terminal_i=ignore_terminal_i)
+            ]
             if not feasible_records:
                 continue
             seen.add(key)

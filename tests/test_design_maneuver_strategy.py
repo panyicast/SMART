@@ -13,6 +13,7 @@ from smart.services.design_maneuver_strategy import (
 from smart.services.project_workspace import ProjectWorkspace
 from smart.ui.i18n import I18nManager
 from smart.ui.nav_icons import has_icon
+import smart.ui.widgets.design_maneuver_strategy_page as design_page_module
 from smart.ui.widgets.design_maneuver_strategy_page import (
     DesignManeuverStrategyPage,
     _DesignManeuverSettingsDialog,
@@ -171,7 +172,7 @@ def test_standard_design_planner_honors_user_count() -> None:
     assert result.burns[-1].burn_type == "normal"
 
 
-def test_design_maneuver_strategy_page_uses_independent_config(tmp_path) -> None:
+def test_design_maneuver_strategy_page_uses_independent_config(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     workspace = ProjectWorkspace()
     workspace.create_project("design-maneuver-page", tmp_path)
@@ -182,6 +183,8 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path) -> None
     assert page._advanced_settings_button.text() == "高级设置"
     assert not hasattr(page, "_import_baseline_button")
     assert page._plan_button.property("variant") == "primaryAction"
+    assert page._find_feasible_q_button.text() == "查找全部可行q"
+    assert page._find_feasible_q_button.property("variant") == "secondary"
     assert page._progress_bar.isHidden()
     assert page._summary_card.parent() is page._config_panel
     assert page._config_panel_layout.indexOf(page._summary_card) == page._config_panel_layout.count() - 1
@@ -220,6 +223,24 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path) -> None
     assert workspace.design_maneuver_strategy_path().name == "design_maneuver_strategy.json"
     assert workspace.maneuver_strategy_path().name == "maneuver_strategy.json"
     assert workspace.load_design_maneuver_strategy()["hard_constraint_planner"]["fixed_hp_targets_km"]["1"] == 3400.0
+
+    def fake_find_feasible_q_sequences(config):
+        assert config["hard_constraint_planner"]["fixed_hp_targets_km"]["1"] == 3400.0
+        return [
+            {
+                "q_sequence": [2, 3, 1, 0],
+                "max_burn_duration_min": 37.5,
+                "lon_error_deg": 0.0042,
+                "hp_targets_km": [3400.0, 8200.0, 17680.0],
+            }
+        ]
+
+    monkeypatch.setattr(design_page_module, "service_find_feasible_q_sequences", fake_find_feasible_q_sequences)
+    page._find_feasible_q_button.click()
+    assert page._q_candidate_table.rowCount() == 1
+    assert page._q_candidate_table.item(0, 0).text() == "2,3,1,0"
+    assert page._q_candidate_table.item(0, 1).text() == "37.50"
+    assert "共 1 组" in page._status_label.text()
 
     page.run_planner()
     assert page._summary_table.rowCount() > 0
