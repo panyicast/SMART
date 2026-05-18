@@ -557,6 +557,17 @@ def initial_design_maneuver_subsatellite_longitude_deg_e(payload: dict[str, Any]
 
 def find_feasible_q_sequences(payload: dict[str, Any] | None) -> list[dict[str, Any]]:
     config = normalize_design_maneuver_strategy_payload(payload)
+    q_aa_user_for_count = [int(value) for value in config["hard_constraint_planner"].get("q_AA_user", [])]
+    if (
+        str(config["apsis"].get("pattern_mode", "auto")) == "user"
+        and q_aa_user_for_count
+        and int(config["maneuver_count"].get("user", 0)) <= 0
+    ):
+        config["maneuver_count"]["user"] = len(q_aa_user_for_count) + 2
+        config["planner"]["maneuver_count_user"] = len(q_aa_user_for_count) + 2
+    config["apsis"]["pattern_mode"] = "auto"
+    config["hard_constraint_planner"]["q_AA_user"] = []
+    config["hard_constraint_planner"]["q_AP_user"] = None
     initial = config["initial"]
     earth = config["earth"]
     target = config["target"]

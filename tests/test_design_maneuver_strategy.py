@@ -7,6 +7,7 @@ from PySide6 import QtCore, QtWidgets
 import smart.services.design_maneuver_strategy as design_strategy
 from smart.services.design_maneuver_strategy import (
     default_design_maneuver_strategy_payload,
+    find_feasible_q_sequences,
     normalize_design_maneuver_strategy_payload,
     plan_design_maneuver_strategy,
 )
@@ -61,6 +62,21 @@ def test_supersynchronous_design_planner_outputs_fixed_tail() -> None:
     assert result.checks[-1]["item"] == "终端经度误差"
     assert all(0.0 <= burn.longitude_deg_e < 360.0 for burn in result.burns)
     assert result.checks
+
+
+def test_feasible_q_scan_ignores_current_user_q_constraint() -> None:
+    payload = default_design_maneuver_strategy_payload()
+    payload["apsis"]["pattern_mode"] = "user"
+    payload["hard_constraint_planner"]["q_AA_user"] = [3, 3, 3]
+    payload["hard_constraint_planner"]["q_AP_user"] = 0
+    payload["maneuver_count"]["user"] = 5
+    payload["planner"]["maneuver_count_user"] = 5
+
+    feasible = find_feasible_q_sequences(payload)
+    q_sequences = [item["q_sequence"] for item in feasible]
+
+    assert [3, 3, 2, 0] in q_sequences
+    assert [3, 3, 3, 0] in q_sequences
 
 
 def test_design_planner_phase_q_search_hits_f4_terminal_longitude() -> None:
