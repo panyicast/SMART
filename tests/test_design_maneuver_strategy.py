@@ -9,6 +9,7 @@ from smart.services.design_maneuver_strategy import (
     default_design_maneuver_strategy_payload,
     find_feasible_q_sequences,
     normalize_design_maneuver_strategy_payload,
+    optimize_continuous_thrust_model_parameters,
     plan_design_maneuver_strategy,
 )
 from smart.services.project_workspace import ProjectWorkspace
@@ -62,6 +63,26 @@ def test_supersynchronous_design_planner_outputs_fixed_tail() -> None:
     assert result.checks[-1]["item"] == "终端经度误差"
     assert all(0.0 <= burn.longitude_deg_e < 360.0 for burn in result.burns)
     assert result.checks
+
+
+def test_continuous_thrust_parameter_optimizer_uses_pulse_targets() -> None:
+    pulse_result = plan_design_maneuver_strategy(default_design_maneuver_strategy_payload())
+    continuous_result = optimize_continuous_thrust_model_parameters(pulse_result)
+
+    assert continuous_result.time_step_s == pytest.approx(10.0)
+    assert continuous_result.yaw_step_deg == pytest.approx(0.05)
+    assert continuous_result.hard_constraint_passed is True
+    assert len(continuous_result.parameters) == len(pulse_result.burns)
+    first = continuous_result.parameters[0]
+    assert first.maneuver_index == pulse_result.burns[0].index
+    assert first.yaw_angle_deg == pytest.approx(pulse_result.burns[0].alpha_deg)
+    assert first.target_post_a_km == pytest.approx(
+        pulse_result.burns[0].target_post_a_km or pulse_result.burns[0].post_a_km
+    )
+    assert first.cutoff_min > first.burn_start_min
+    assert first.objective_formula == "m + m1 + m2 + m3"
+    assert continuous_result.parameters[-1].objective_formula == "m + m3"
+    assert continuous_result.objective_delta_g_kg >= continuous_result.total_propellant_kg
 
 
 def test_feasible_q_scan_ignores_current_user_q_constraint() -> None:
@@ -209,6 +230,8 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path, monkeyp
     assert page._config_overview_table.maximumHeight() <= 118
     assert page._config_overview_table.rowCount() == 4
     assert page._burn_table.maximumHeight() <= 210
+    assert page._continuous_thrust_button.text() == "优化连续推力模型参数"
+    assert page._continuous_thrust_table.columnCount() == 6
     perigee_layout = page._mv1_hp_target_label.parentWidget().layout()
     assert perigee_layout.indexOf(page._q_sequence_combo) >= 0
     assert perigee_layout.indexOf(page._apply_hp_targets_button) >= 0
@@ -267,6 +290,11 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path, monkeyp
 
     page.run_planner()
     assert page._burn_table.rowCount() == 6
+    page._continuous_thrust_button.click()
+    assert page._continuous_thrust_table.rowCount() == 5
+    assert page._continuous_thrust_table.item(0, 0).text() == "MV1"
+    assert page._continuous_thrust_table.item(0, 5).text()
+    assert "连续推力参数优化完成" in page._status_label.text()
     assert page._burn_table.columnCount() == 14
     assert page._burn_table.horizontalHeaderItem(4).text() == "星下点经度/degE"
     assert page._burn_table.horizontalHeaderItem(9).text() == "计算的变轨推力偏航角/deg"
@@ -316,8 +344,6 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path, monkeyp
     assert replans == [True]
     assert page.config()["hard_constraint_planner"]["fixed_hp_targets_km"]["1"] == pytest.approx(6100.0)
     assert page.config()["distribution"]["first_post_a_control_km"] is None
-    assert page._status_label.text() == "硬约束全部通过"
-    assert page._status_label.property("role") == "statusReady"
     assert workspace.design_maneuver_results_path().exists()
 
     reloaded_page = DesignManeuverStrategyPage(I18nManager("zh"), workspace)

@@ -9,11 +9,13 @@ from typing import Any
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from smart.services.design_maneuver_strategy import (
+    ContinuousThrustOptimizationResult,
     DesignManeuverResult,
     default_design_maneuver_strategy_payload,
     find_feasible_q_sequences as service_find_feasible_q_sequences,
     initial_design_maneuver_subsatellite_longitude_deg_e,
     normalize_design_maneuver_strategy_payload,
+    optimize_continuous_thrust_model_parameters,
     plan_design_maneuver_strategy,
 )
 from smart.services.earth_orientation import format_utc, parse_utc
@@ -198,6 +200,8 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._i18n = i18n
         self._workspace = workspace
         self._config = default_design_maneuver_strategy_payload()
+        self._last_result: DesignManeuverResult | None = None
+        self._continuous_thrust_result: ContinuousThrustOptimizationResult | None = None
         self._updating_burn_table = False
         self._planning_busy = False
         root = QtWidgets.QVBoxLayout(self)
@@ -220,7 +224,13 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
 
         top_row = QtWidgets.QHBoxLayout()
         top_row.setSpacing(18)
-        top_row.addWidget(self._build_config_panel(), 1)
+        left_stack = QtWidgets.QWidget()
+        left_layout = QtWidgets.QVBoxLayout(left_stack)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(8)
+        left_layout.addWidget(self._build_config_panel())
+        left_layout.addWidget(self._build_continuous_thrust_card())
+        top_row.addWidget(left_stack, 1)
         top_row.addWidget(self._build_config_overview_card(), 1)
         root.addLayout(top_row, 0)
 
@@ -313,6 +323,41 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._config_overview_table.setMinimumHeight(104)
         self._config_overview_table.setMaximumHeight(118)
         layout.addWidget(self._config_overview_table)
+        return card
+
+    def _build_continuous_thrust_card(self) -> QtWidgets.QFrame:
+        card = QtWidgets.QFrame()
+        card.setProperty("role", "card")
+        card.setMaximumHeight(176)
+        layout = QtWidgets.QVBoxLayout(card)
+        layout.setContentsMargins(14, 10, 14, 10)
+        layout.setSpacing(7)
+
+        header_row = QtWidgets.QHBoxLayout()
+        header_row.setSpacing(8)
+        self._continuous_thrust_header_label = QtWidgets.QLabel("连续推力模型参数")
+        self._continuous_thrust_header_label.setProperty("role", "cardTitle")
+        header_row.addWidget(self._continuous_thrust_header_label)
+        header_row.addStretch(1)
+        self._continuous_thrust_button = QtWidgets.QPushButton("优化连续推力模型参数")
+        self._continuous_thrust_button.setProperty("variant", "secondary")
+        self._continuous_thrust_button.setFixedHeight(34)
+        self._continuous_thrust_button.clicked.connect(self.run_continuous_thrust_optimization)
+        header_row.addWidget(self._continuous_thrust_button)
+        layout.addLayout(header_row)
+
+        self._continuous_thrust_hint_label = QtWidgets.QLabel("变量：点火开始时间 t、偏航角 δ；步长 10s / 0.05deg")
+        self._continuous_thrust_hint_label.setProperty("role", "cardCaption")
+        self._continuous_thrust_hint_label.setWordWrap(True)
+        layout.addWidget(self._continuous_thrust_hint_label)
+
+        self._continuous_thrust_table = QtWidgets.QTableWidget(0, 6)
+        self._setup_readonly_table(self._continuous_thrust_table)
+        self._continuous_thrust_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
+        self._continuous_thrust_table.horizontalHeader().setStretchLastSection(True)
+        self._continuous_thrust_table.verticalHeader().setDefaultSectionSize(22)
+        self._continuous_thrust_table.setMaximumHeight(72)
+        layout.addWidget(self._continuous_thrust_table)
         return card
 
     def _build_result_panel(self) -> QtWidgets.QWidget:
@@ -661,6 +706,34 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         finally:
             self._set_planning_busy(False)
 
+    def run_continuous_thrust_optimization(self) -> None:
+        if self._planning_busy:
+            return
+        if self._last_result is None:
+            loaded = self._load_archived_result()
+            if loaded is not True or self._last_result is None:
+                self._set_status("statusDisconnected", "请先生成脉冲规划，再优化连续推力模型参数。")
+                return
+        self._set_planning_busy(True, "正在优化连续推力模型参数...")
+        try:
+            continuous_result = optimize_continuous_thrust_model_parameters(self._last_result)
+            self._continuous_thrust_result = continuous_result
+            self._set_continuous_thrust_rows(continuous_result)
+            if continuous_result.hard_constraint_passed:
+                self._set_status(
+                    "statusReady",
+                    f"连续推力参数优化完成，硬约束全部通过，ΔG={continuous_result.objective_delta_g_kg:.3f} kg",
+                )
+            else:
+                self._set_status(
+                    "statusDisconnected",
+                    "连续推力参数优化后未通过硬约束：" + "、".join(continuous_result.failed_constraints),
+                )
+        except Exception as exc:
+            self._set_status("statusDisconnected", f"连续推力参数优化失败：{exc}")
+        finally:
+            self._set_planning_busy(False)
+
     def config(self) -> dict[str, Any]:
         config = normalize_design_maneuver_strategy_payload(self._config)
         if hasattr(self, "_mv1_hp_target_edit"):
@@ -694,6 +767,9 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
 
     def _set_result(self, result: DesignManeuverResult) -> None:
         self._config = result.config
+        self._last_result = result
+        self._continuous_thrust_result = None
+        self._continuous_thrust_table.setRowCount(0)
         self._updating_burn_table = True
         self._burn_table.setRowCount(0)
         self._burn_table.insertRow(0)
@@ -770,6 +846,35 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             self._set_status("statusDisconnected", "未通过硬约束：" + "、".join(item for item in failed if item))
         else:
             self._set_status("statusReady", "硬约束全部通过")
+
+    def _set_continuous_thrust_rows(self, result: ContinuousThrustOptimizationResult) -> None:
+        self._continuous_thrust_table.setRowCount(0)
+        for parameter in result.parameters:
+            row = self._continuous_thrust_table.rowCount()
+            self._continuous_thrust_table.insertRow(row)
+            self._set_row_values(
+                self._continuous_thrust_table,
+                row,
+                (
+                    f"MV{parameter.maneuver_index}",
+                    f"{parameter.burn_start_min:.2f}",
+                    f"{parameter.yaw_angle_deg:.2f}",
+                    f"{parameter.cutoff_min:.2f}",
+                    f"{parameter.target_post_a_km:.2f}",
+                    f"{parameter.objective_delta_g_kg:.2f}",
+                ),
+            )
+            formula_item = self._continuous_thrust_table.item(row, 5)
+            if formula_item is not None:
+                formula_item.setToolTip(
+                    (
+                        f"{parameter.objective_formula}; "
+                        f"m={parameter.propellant_kg:.3f}, "
+                        f"m1={parameter.future_apogee_raise_propellant_kg:.3f}, "
+                        f"m2={parameter.future_perigee_lower_propellant_kg:.3f}, "
+                        f"m3={parameter.trim_propellant_kg:.3f}"
+                    )
+                )
 
     def _set_q_candidate_rows_from_candidates(self, candidates: Any) -> None:
         if not hasattr(self, "_q_sequence_combo"):
@@ -937,7 +1042,9 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             self._save_button,
             self._plan_button,
             self._find_feasible_q_button,
+            self._continuous_thrust_button,
             self._burn_table,
+            self._continuous_thrust_table,
             self._mv1_hp_target_edit,
             self._mv2_hp_target_edit,
             self._apply_hp_targets_button,
@@ -952,7 +1059,10 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
 
     def _clear_results(self) -> None:
         self._updating_burn_table = True
+        self._last_result = None
+        self._continuous_thrust_result = None
         self._burn_table.setRowCount(0)
+        self._continuous_thrust_table.setRowCount(0)
         if hasattr(self, "_q_sequence_combo"):
             blocker = QtCore.QSignalBlocker(self._q_sequence_combo)
             self._q_sequence_combo.clear()
@@ -1020,10 +1130,12 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             self._save_button,
             self._plan_button,
             self._find_feasible_q_button,
+            self._continuous_thrust_button,
             self._mv1_hp_target_edit,
             self._mv2_hp_target_edit,
             self._apply_hp_targets_button,
             self._q_sequence_combo,
+            self._continuous_thrust_table,
         ):
             widget.setEnabled(enabled)
 
@@ -1054,6 +1166,9 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._save_button.setText(t("design_maneuver.save_button"))
         self._plan_button.setText(t("design_maneuver.plan_button"))
         self._find_feasible_q_button.setText("查找全部可行q")
+        self._continuous_thrust_header_label.setText("连续推力模型参数")
+        self._continuous_thrust_button.setText("优化连续推力模型参数")
+        self._continuous_thrust_hint_label.setText("变量：点火开始时间 t、偏航角 δ；步长 10s / 0.05deg")
         self._burn_header_label.setText(t("design_maneuver.burn_header"))
         self._mv1_hp_target_label.setText("第一次目标近地点高度/km")
         self._mv2_hp_target_label.setText("第二次目标近地点高度/km")
@@ -1062,6 +1177,9 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._apply_hp_targets_button.setText("应用并重算")
         self._q_sequence_user_label.setText("q 序列")
         self._config_overview_table.setHorizontalHeaderLabels(["项目", "数值"])
+        self._continuous_thrust_table.setHorizontalHeaderLabels(
+            ["变轨", "开始/min", "偏航/deg", "熄火/min", "目标a/km", "ΔG/kg"]
+        )
         self._burn_table.setHorizontalHeaderLabels(
             [
                 "",

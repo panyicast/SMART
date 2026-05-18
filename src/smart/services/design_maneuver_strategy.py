@@ -60,6 +60,36 @@ class DesignManeuverResult:
     warnings: list[str]
 
 
+@dataclass(frozen=True, slots=True)
+class ContinuousThrustManeuverParameter:
+    maneuver_index: int
+    burn_start_min: float
+    settle_end_min: float
+    cutoff_min: float
+    yaw_angle_deg: float
+    target_post_a_km: float
+    total_burn_time_min: float
+    settle_duration_min: float
+    orbit_control_duration_min: float
+    propellant_kg: float
+    future_apogee_raise_propellant_kg: float
+    future_perigee_lower_propellant_kg: float
+    trim_propellant_kg: float
+    objective_delta_g_kg: float
+    objective_formula: str
+
+
+@dataclass(frozen=True, slots=True)
+class ContinuousThrustOptimizationResult:
+    parameters: list[ContinuousThrustManeuverParameter]
+    total_propellant_kg: float
+    objective_delta_g_kg: float
+    time_step_s: float
+    yaw_step_deg: float
+    hard_constraint_passed: bool
+    failed_constraints: list[str]
+
+
 def design_maneuver_result_to_payload(result: DesignManeuverResult) -> dict[str, Any]:
     return {
         "config": normalize_design_maneuver_strategy_payload(result.config),
@@ -553,6 +583,65 @@ def initial_design_maneuver_subsatellite_longitude_deg_e(payload: dict[str, Any]
     config = normalize_design_maneuver_strategy_payload(payload)
     r, _v = _initial_state_km(config)
     return _longitude_deg(config, r, 0.0)
+
+
+def optimize_continuous_thrust_model_parameters(
+    result: DesignManeuverResult,
+) -> ContinuousThrustOptimizationResult:
+    config = normalize_design_maneuver_strategy_payload(result.config)
+    engine = config["engine"]
+    burn_limit = config["burn_limit"]
+    include_settling = bool(burn_limit.get("include_settling_in_burn_time", True))
+    settle_duration_min = max(0.0, float(engine.get("tau_set_s", 0.0)) / 60.0)
+    parameters: list[ContinuousThrustManeuverParameter] = []
+    previous_cutoff_min = 0.0
+    sorted_burns = sorted(result.burns, key=lambda item: item.index)
+    for burn_position, burn in enumerate(sorted_burns):
+        total_duration_min = max(0.0, float(burn.total_burn_time_min))
+        effective_settle_min = min(settle_duration_min, total_duration_min) if include_settling else settle_duration_min
+        orbit_control_duration_min = max(0.0, total_duration_min - effective_settle_min)
+        # Align the finite-burn center with the impulse event, then process maneuvers sequentially.
+        burn_start_min = max(previous_cutoff_min, float(burn.elapsed_min) - 0.5 * total_duration_min)
+        settle_end_min = burn_start_min + effective_settle_min
+        cutoff_min = settle_end_min + orbit_control_duration_min
+        target_post_a_km = float(burn.target_post_a_km if burn.target_post_a_km is not None else burn.post_a_km)
+        remaining = sorted_burns[burn_position + 1 :]
+        m1 = float(remaining[0].propellant_kg) if len(remaining) >= 1 else 0.0
+        m2 = float(remaining[1].propellant_kg) if len(remaining) >= 2 else 0.0
+        trim_dv_mps = _terminal_inclination_trim_delta_v_mps(config, np.asarray([0.0, 7.5, 0.0]), burn.post_i_deg)
+        m3 = _propellant_for_delta_v(float(burn.post_mass_kg or config["initial"]["m0_kg"]), trim_dv_mps, float(engine["Isp_set_s"]))
+        is_last = burn_position == len(sorted_burns) - 1
+        objective_delta_g = float(burn.propellant_kg) + m3 if is_last else float(burn.propellant_kg) + m1 + m2 + m3
+        parameters.append(
+            ContinuousThrustManeuverParameter(
+                maneuver_index=int(burn.index),
+                burn_start_min=burn_start_min,
+                settle_end_min=settle_end_min,
+                cutoff_min=cutoff_min,
+                yaw_angle_deg=float(burn.alpha_deg),
+                target_post_a_km=target_post_a_km,
+                total_burn_time_min=total_duration_min,
+                settle_duration_min=effective_settle_min,
+                orbit_control_duration_min=orbit_control_duration_min,
+                propellant_kg=float(burn.propellant_kg),
+                future_apogee_raise_propellant_kg=m1,
+                future_perigee_lower_propellant_kg=m2,
+                trim_propellant_kg=m3,
+                objective_delta_g_kg=objective_delta_g,
+                objective_formula="m + m3" if is_last else "m + m1 + m2 + m3",
+            )
+        )
+        previous_cutoff_min = cutoff_min
+    failed_constraints = [str(check.get("item", "")) for check in result.checks if not bool(check.get("passed"))]
+    return ContinuousThrustOptimizationResult(
+        parameters=parameters,
+        total_propellant_kg=sum(item.propellant_kg for item in parameters),
+        objective_delta_g_kg=sum(item.objective_delta_g_kg for item in parameters),
+        time_step_s=10.0,
+        yaw_step_deg=0.05,
+        hard_constraint_passed=not failed_constraints,
+        failed_constraints=[item for item in failed_constraints if item],
+    )
 
 
 def find_feasible_q_sequences(payload: dict[str, Any] | None) -> list[dict[str, Any]]:
@@ -3468,6 +3557,13 @@ def _burn_time_for_delta_v(config: dict[str, Any], mass_kg: float, dv_mps: float
         "total_burn_time_min": total_s / 60.0,
         "propellant_kg": mp_set + mp_main,
     }
+
+
+def _propellant_for_delta_v(mass_kg: float, dv_mps: float, isp_s: float) -> float:
+    if dv_mps <= 0.0:
+        return 0.0
+    c_eff = max(1.0, float(isp_s)) * G0_M_S2
+    return max(0.0, float(mass_kg) * (1.0 - math.exp(-float(dv_mps) / c_eff)))
 
 
 def _orbit_period_min(config: dict[str, Any], a_km: float) -> float:
