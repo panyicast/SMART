@@ -225,7 +225,6 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         root.addLayout(top_row, 0)
 
         root.addWidget(self._build_result_panel(), 0)
-        root.addLayout(self._build_bottom_panel(), 0)
         root.addStretch(1)
 
         self._status_label = QtWidgets.QLabel()
@@ -240,52 +239,56 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         button_card = QtWidgets.QFrame()
         self._config_panel = button_card
         button_card.setProperty("role", "card")
-        button_card.setMaximumHeight(320)
+        button_card.setMaximumHeight(178)
         button_layout = QtWidgets.QVBoxLayout(button_card)
         self._config_panel_layout = button_layout
-        button_layout.setContentsMargins(18, 14, 18, 14)
-        button_layout.setSpacing(8)
+        button_layout.setContentsMargins(14, 10, 14, 10)
+        button_layout.setSpacing(7)
         self._config_path_label = QtWidgets.QLabel()
         self._config_path_label.setProperty("role", "cardCaption")
         self._config_path_label.setWordWrap(True)
-        self._config_path_label.setMaximumHeight(34)
+        self._config_path_label.setMaximumHeight(26)
         button_layout.addWidget(self._config_path_label)
+
+        button_grid = QtWidgets.QGridLayout()
+        button_grid.setHorizontalSpacing(8)
+        button_grid.setVerticalSpacing(8)
 
         self._parameter_config_button = QtWidgets.QPushButton()
         self._parameter_config_button.setProperty("variant", "primaryAction")
-        self._parameter_config_button.setFixedHeight(42)
+        self._parameter_config_button.setFixedHeight(38)
         self._parameter_config_button.clicked.connect(self._open_parameter_config_dialog)
-        button_layout.addWidget(self._parameter_config_button)
+        button_grid.addWidget(self._parameter_config_button, 0, 0)
 
         self._advanced_settings_button = QtWidgets.QPushButton()
         self._advanced_settings_button.setProperty("variant", "secondary")
-        self._advanced_settings_button.setFixedHeight(36)
+        self._advanced_settings_button.setFixedHeight(38)
         self._advanced_settings_button.clicked.connect(self._open_advanced_settings_dialog)
-        button_layout.addWidget(self._advanced_settings_button)
-
-        row = QtWidgets.QHBoxLayout()
-        row.setSpacing(10)
+        button_grid.addWidget(self._advanced_settings_button, 0, 1)
+        self._plan_button = QtWidgets.QPushButton()
+        self._plan_button.setProperty("variant", "primaryAction")
+        self._plan_button.setFixedHeight(38)
+        self._plan_button.clicked.connect(self.run_planner)
+        button_grid.addWidget(self._plan_button, 0, 2)
         self._reload_button = QtWidgets.QPushButton()
         self._reload_button.setProperty("variant", "secondary")
         self._reload_button.setFixedHeight(36)
         self._reload_button.clicked.connect(self.refresh_from_workspace)
-        row.addWidget(self._reload_button)
+        button_grid.addWidget(self._reload_button, 1, 0)
         self._save_button = QtWidgets.QPushButton()
         self._save_button.setProperty("variant", "secondary")
         self._save_button.setFixedHeight(36)
         self._save_button.clicked.connect(self.save_config)
-        row.addWidget(self._save_button)
-        button_layout.addLayout(row)
-        self._plan_button = QtWidgets.QPushButton()
-        self._plan_button.setProperty("variant", "primaryAction")
-        self._plan_button.setFixedHeight(42)
-        self._plan_button.clicked.connect(self.run_planner)
-        button_layout.addWidget(self._plan_button)
+        button_grid.addWidget(self._save_button, 1, 1)
         self._find_feasible_q_button = QtWidgets.QPushButton()
         self._find_feasible_q_button.setProperty("variant", "secondary")
         self._find_feasible_q_button.setFixedHeight(36)
         self._find_feasible_q_button.clicked.connect(self.find_feasible_q_sequences)
-        button_layout.addWidget(self._find_feasible_q_button)
+        button_grid.addWidget(self._find_feasible_q_button, 1, 2)
+        for column in range(3):
+            button_grid.setColumnStretch(column, 1)
+        button_layout.addLayout(button_grid)
+
         self._progress_bar = QtWidgets.QProgressBar()
         self._progress_bar.setRange(0, 0)
         self._progress_bar.setTextVisible(True)
@@ -297,18 +300,18 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
     def _build_config_overview_card(self) -> QtWidgets.QFrame:
         card = QtWidgets.QFrame()
         card.setProperty("role", "card")
-        card.setMaximumHeight(320)
+        card.setMaximumHeight(178)
         layout = QtWidgets.QVBoxLayout(card)
-        layout.setContentsMargins(18, 14, 18, 14)
-        layout.setSpacing(8)
+        layout.setContentsMargins(14, 10, 14, 10)
+        layout.setSpacing(7)
         self._config_overview_header_label = QtWidgets.QLabel("当前配置")
         self._config_overview_header_label.setProperty("role", "cardTitle")
         layout.addWidget(self._config_overview_header_label)
         self._config_overview_table = QtWidgets.QTableWidget(0, 2)
         self._setup_readonly_table(self._config_overview_table)
         self._config_overview_table.horizontalHeader().setStretchLastSection(True)
-        self._config_overview_table.setMinimumHeight(150)
-        self._config_overview_table.setMaximumHeight(230)
+        self._config_overview_table.setMinimumHeight(104)
+        self._config_overview_table.setMaximumHeight(118)
         layout.addWidget(self._config_overview_table)
         return card
 
@@ -331,49 +334,6 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         burn_layout.addWidget(self._burn_table)
         burn_layout.addWidget(self._build_perigee_target_controls())
         return burn_card
-
-    def _build_bottom_panel(self) -> QtWidgets.QHBoxLayout:
-        bottom_row = QtWidgets.QHBoxLayout()
-        bottom_row.setSpacing(10)
-        bottom_row.addWidget(self._build_summary_card(), 2)
-
-        check_card = QtWidgets.QFrame()
-        check_card.setProperty("role", "card")
-        check_card.setMaximumHeight(150)
-        check_layout = QtWidgets.QVBoxLayout(check_card)
-        check_layout.setContentsMargins(12, 10, 12, 10)
-        check_layout.setSpacing(6)
-        self._check_header_label = QtWidgets.QLabel()
-        self._check_header_label.setProperty("role", "cardTitle")
-        check_layout.addWidget(self._check_header_label)
-        self._check_table = QtWidgets.QTableWidget(0, 4)
-        self._setup_readonly_table(self._check_table)
-        self._check_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
-        self._check_table.setMinimumHeight(70)
-        self._check_table.setMaximumHeight(95)
-        check_layout.addWidget(self._check_table)
-        bottom_row.addWidget(check_card, 3)
-
-        future_card = QtWidgets.QFrame()
-        future_card.setProperty("role", "card")
-        future_card.setMaximumHeight(150)
-        future_layout = QtWidgets.QVBoxLayout(future_card)
-        future_layout.setContentsMargins(12, 10, 12, 10)
-        future_layout.setSpacing(6)
-        self._future_header_label = QtWidgets.QLabel()
-        self._future_header_label.setProperty("role", "cardTitle")
-        future_layout.addWidget(self._future_header_label)
-        self._future_slot_label = QtWidgets.QLabel()
-        self._future_slot_label.setProperty("role", "pageBody")
-        self._future_slot_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self._future_slot_label.setMinimumHeight(38)
-        future_layout.addWidget(self._future_slot_label, 1)
-        self._warning_label = QtWidgets.QLabel()
-        self._warning_label.setProperty("role", "statusDisconnected")
-        self._warning_label.setWordWrap(True)
-        future_layout.addWidget(self._warning_label)
-        bottom_row.addWidget(future_card, 2)
-        return bottom_row
 
     def _build_perigee_target_controls(self) -> QtWidgets.QWidget:
         holder = QtWidgets.QWidget()
@@ -435,24 +395,6 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._apply_hp_targets_button.clicked.connect(self._apply_perigee_target_constraints)
         row.addWidget(self._apply_hp_targets_button)
         return holder
-
-    def _build_summary_card(self) -> QtWidgets.QFrame:
-        self._summary_card = QtWidgets.QFrame()
-        self._summary_card.setProperty("role", "card")
-        self._summary_card.setMaximumHeight(150)
-        summary_layout = QtWidgets.QVBoxLayout(self._summary_card)
-        summary_layout.setContentsMargins(12, 10, 12, 10)
-        summary_layout.setSpacing(6)
-        self._summary_header_label = QtWidgets.QLabel()
-        self._summary_header_label.setProperty("role", "cardTitle")
-        summary_layout.addWidget(self._summary_header_label)
-        self._summary_table = QtWidgets.QTableWidget(0, 2)
-        self._setup_readonly_table(self._summary_table)
-        self._summary_table.horizontalHeader().setStretchLastSection(True)
-        self._summary_table.setMinimumHeight(70)
-        self._summary_table.setMaximumHeight(95)
-        summary_layout.addWidget(self._summary_table)
-        return self._summary_card
 
     @classmethod
     def _engine_burn_specs(cls) -> tuple[_NumberSpec, ...]:
@@ -656,7 +598,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._clear_results()
         archived_loaded = self._load_archived_result()
         if archived_loaded is True:
-            self._set_status("statusReady", self._i18n.t("design_maneuver.status.loaded_with_result"))
+            return
         elif archived_loaded is False:
             self._set_status("statusReady", self._i18n.t("design_maneuver.status.loaded"))
 
@@ -698,7 +640,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                     self._i18n.t("design_maneuver.status.result_save_failed", error=str(exc)),
                 )
                 return
-            self._set_status("statusReady", self._i18n.t("design_maneuver.status.plan_done", path=str(path)))
+            self._set_constraint_status(result.checks)
         except Exception as exc:
             self._set_status("statusDisconnected", self._i18n.t("design_maneuver.status.plan_failed", error=str(exc)))
         finally:
@@ -752,21 +694,6 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
 
     def _set_result(self, result: DesignManeuverResult) -> None:
         self._config = result.config
-        summary_rows = [
-            ("初始远地点高度", f"{result.summary['initial_apogee_altitude_km']:.3f} km"),
-            ("同步轨道高度", f"{result.summary['sync_altitude_km']:.3f} km"),
-            ("轨道类型", str(result.summary["orbit_type"])),
-            ("粗估总 Δv", f"{result.summary['estimated_total_delta_v_mps']:.3f} m/s"),
-            ("单次设计 Δv", f"{result.summary['design_single_burn_delta_v_mps']:.3f} m/s"),
-            ("自动推荐次数", str(result.summary["recommended_count"])),
-            ("用户指定次数", str(result.summary["user_count"])),
-            ("实际采用次数", str(result.summary["actual_count"])),
-            ("点火结构", str(result.summary["apsis_pattern"])),
-            ("回归圈数", str(result.summary.get("q_sequence", ""))),
-            ("均匀性离散度", f"{result.summary['uniform_spread_mps']:.3f} m/s"),
-        ]
-        self._set_two_column_rows(self._summary_table, summary_rows)
-
         self._updating_burn_table = True
         self._burn_table.setRowCount(0)
         self._burn_table.insertRow(0)
@@ -830,27 +757,19 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._sync_perigee_target_fields(config)
         self._sync_q_sequence_field(config)
         self._set_q_candidate_rows(result)
-
-        self._check_table.setRowCount(0)
-        for check in result.checks:
-            row = self._check_table.rowCount()
-            self._check_table.insertRow(row)
-            self._set_row_values(
-                self._check_table,
-                row,
-                (
-                    str(check["item"]),
-                    str(check["requirement"]),
-                    str(check["result"]),
-                    "是" if bool(check["passed"]) else "否",
-                ),
-            )
-        self._warning_label.setText("\n".join(result.warnings) if result.warnings else "无警告")
+        self._set_constraint_status(result.checks)
 
     def _set_q_candidate_rows(self, result: DesignManeuverResult) -> None:
         diagnostics = result.summary.get("phase_diagnostics", {})
         candidates = diagnostics.get("feasible_q_sequences", []) if isinstance(diagnostics, dict) else []
         self._set_q_candidate_rows_from_candidates(candidates)
+
+    def _set_constraint_status(self, checks: list[dict[str, Any]]) -> None:
+        failed = [str(check.get("item", "")) for check in checks if not bool(check.get("passed"))]
+        if failed:
+            self._set_status("statusDisconnected", "未通过硬约束：" + "、".join(item for item in failed if item))
+        else:
+            self._set_status("statusReady", "硬约束全部通过")
 
     def _set_q_candidate_rows_from_candidates(self, candidates: Any) -> None:
         if not hasattr(self, "_q_sequence_combo"):
@@ -1023,8 +942,6 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             self._mv2_hp_target_edit,
             self._apply_hp_targets_button,
             self._q_sequence_combo,
-            self._check_table,
-            self._summary_table,
         ):
             widget.setEnabled(not busy)
         if busy:
@@ -1035,16 +952,13 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
 
     def _clear_results(self) -> None:
         self._updating_burn_table = True
-        self._summary_table.setRowCount(0)
         self._burn_table.setRowCount(0)
         if hasattr(self, "_q_sequence_combo"):
             blocker = QtCore.QSignalBlocker(self._q_sequence_combo)
             self._q_sequence_combo.clear()
             self._q_sequence_combo.addItem("", None)
             del blocker
-        self._check_table.setRowCount(0)
         self._updating_burn_table = False
-        self._warning_label.setText("--")
 
     def _refresh_config_overview(self) -> None:
         config = normalize_design_maneuver_strategy_payload(self._config)
@@ -1079,7 +993,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                 ),
             ),
         ]
-        self._set_two_column_rows(self._config_overview_table, rows)
+        self._set_two_column_rows(self._config_overview_table, rows[:4])
 
     def _set_two_column_rows(self, table: QtWidgets.QTableWidget, rows: list[tuple[str, str]]) -> None:
         table.setRowCount(0)
@@ -1140,7 +1054,6 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._save_button.setText(t("design_maneuver.save_button"))
         self._plan_button.setText(t("design_maneuver.plan_button"))
         self._find_feasible_q_button.setText("查找全部可行q")
-        self._summary_header_label.setText(t("design_maneuver.summary_header"))
         self._burn_header_label.setText(t("design_maneuver.burn_header"))
         self._mv1_hp_target_label.setText("第一次目标近地点高度/km")
         self._mv2_hp_target_label.setText("第二次目标近地点高度/km")
@@ -1148,11 +1061,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._mv2_hp_target_edit.setPlaceholderText("不约束")
         self._apply_hp_targets_button.setText("应用并重算")
         self._q_sequence_user_label.setText("q 序列")
-        self._check_header_label.setText(t("design_maneuver.check_header"))
-        self._future_header_label.setText(t("design_maneuver.future_header"))
-        self._future_slot_label.setText(t("design_maneuver.future_placeholder"))
         self._config_overview_table.setHorizontalHeaderLabels(["项目", "数值"])
-        self._summary_table.setHorizontalHeaderLabels(["项目", "数值"])
         self._burn_table.setHorizontalHeaderLabels(
             [
                 "",
@@ -1171,7 +1080,6 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                 "控后近地点高度/km",
             ]
         )
-        self._check_table.setHorizontalHeaderLabels(["检查项", "要求", "结果", "通过"])
         self._refresh_config_path_label()
 
     @staticmethod

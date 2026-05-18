@@ -202,9 +202,12 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path, monkeyp
     assert page._find_feasible_q_button.text() == "查找全部可行q"
     assert page._find_feasible_q_button.property("variant") == "secondary"
     assert page._progress_bar.isHidden()
-    assert page._summary_card.parent() is not page._config_panel
-    assert page._config_panel.maximumHeight() <= 320
-    assert page._config_overview_table.maximumHeight() <= 230
+    assert not hasattr(page, "_summary_card")
+    assert not hasattr(page, "_summary_table")
+    assert not hasattr(page, "_check_table")
+    assert page._config_panel.maximumHeight() <= 178
+    assert page._config_overview_table.maximumHeight() <= 118
+    assert page._config_overview_table.rowCount() == 4
     assert page._burn_table.maximumHeight() <= 210
     perigee_layout = page._mv1_hp_target_label.parentWidget().layout()
     assert perigee_layout.indexOf(page._q_sequence_combo) >= 0
@@ -263,7 +266,6 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path, monkeyp
     assert "共 1 组" in page._status_label.text()
 
     page.run_planner()
-    assert page._summary_table.rowCount() > 0
     assert page._burn_table.rowCount() == 6
     assert page._burn_table.columnCount() == 14
     assert page._burn_table.horizontalHeaderItem(4).text() == "星下点经度/degE"
@@ -314,13 +316,13 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path, monkeyp
     assert replans == [True]
     assert page.config()["hard_constraint_planner"]["fixed_hp_targets_km"]["1"] == pytest.approx(6100.0)
     assert page.config()["distribution"]["first_post_a_control_km"] is None
-    assert page._check_table.rowCount() > 0
+    assert page._status_label.text() == "硬约束全部通过"
+    assert page._status_label.property("role") == "statusReady"
     assert workspace.design_maneuver_results_path().exists()
 
     reloaded_page = DesignManeuverStrategyPage(I18nManager("zh"), workspace)
-    assert reloaded_page._summary_table.rowCount() > 0
     assert reloaded_page._burn_table.rowCount() == 6
-    assert reloaded_page._check_table.rowCount() > 0
+    assert reloaded_page._status_label.text() == "硬约束全部通过"
 
     beijing_tz = QtCore.QTimeZone(b"Asia/Shanghai")
     parameter_dialog = _DesignManeuverSettingsDialog(

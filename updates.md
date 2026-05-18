@@ -410,6 +410,10 @@
 - 提交：`499b1a9`
 - 影响文件：`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
 
-## 2026-05-18T15:57:52+08:00 | Compact design maneuver page layout
+## 2026-05-18T15:57:55+08:00 | Compact design maneuver page layout
+- 提交：`d575700`
+- 影响文件：`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-18T16:10:25+08:00 | Compress design maneuver controls
 - 提交：`本次提交`
 - 影响文件：`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
