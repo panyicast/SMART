@@ -1044,7 +1044,8 @@ def _integrate_low_thrust_to_target_a(
     state = np.asarray([*np.asarray(r_start, dtype=float), *np.asarray(v_start, dtype=float), float(mass_kg)], dtype=float)
     current_s = float(burn_start_s)
     elapsed_burn_s = 0.0
-    start_a, *_ = _rv_to_coe(state[:3], state[3:6], mu=float(config["earth"]["mu_km3_s2"]))
+    mu = float(config["earth"]["mu_km3_s2"])
+    start_a = _semi_major_axis_from_rv(state[:3], state[3:6], mu)
     target_sign = 1.0 if float(target_a_km) >= start_a else -1.0
     previous_state = state.copy()
     previous_s = current_s
@@ -1073,7 +1074,7 @@ def _integrate_low_thrust_to_target_a(
             phase_elapsed_s += step_s
             elapsed_burn_s += step_s
             try:
-                current_a, *_ = _rv_to_coe(state[:3], state[3:6], mu=float(config["earth"]["mu_km3_s2"]))
+                current_a = _semi_major_axis_from_rv(state[:3], state[3:6], mu)
             except Exception:
                 return None
             current_error = target_sign * (current_a - float(target_a_km))
@@ -1197,9 +1198,50 @@ def _low_thrust_state_derivative(
         )
     mdot = 0.0
     if thrust_n > 0.0:
-        accel += (float(thrust_n) / mass_kg / 1000.0) * _local_horizontal_direction(r, yaw_angle_deg)
+        accel += (float(thrust_n) / mass_kg / 1000.0) * _local_horizontal_direction_fast(r, yaw_angle_deg)
         mdot = -float(thrust_n) / (max(1.0, float(isp_s)) * G0_M_S2)
     return np.asarray([v[0], v[1], v[2], accel[0], accel[1], accel[2], mdot], dtype=float)
+
+
+def _semi_major_axis_from_rv(r: np.ndarray, v: np.ndarray, mu: float) -> float:
+    rx, ry, rz = float(r[0]), float(r[1]), float(r[2])
+    vx, vy, vz = float(v[0]), float(v[1]), float(v[2])
+    radius = math.sqrt(rx * rx + ry * ry + rz * rz)
+    speed2 = vx * vx + vy * vy + vz * vz
+    energy = 0.5 * speed2 - float(mu) / radius
+    return -float(mu) / (2.0 * energy)
+
+
+def _local_horizontal_direction_fast(r: np.ndarray, alpha_deg: float) -> np.ndarray:
+    x, y, z = float(r[0]), float(r[1]), float(r[2])
+    xy_norm = math.hypot(x, y)
+    if xy_norm <= 1.0e-12:
+        east_x, east_y, east_z = 0.0, 1.0, 0.0
+    else:
+        east_x, east_y, east_z = -y / xy_norm, x / xy_norm, 0.0
+    r_norm = math.sqrt(x * x + y * y + z * z)
+    inv_r2 = 1.0 / max(1.0e-24, r_norm * r_norm)
+    north_x = -z * x * inv_r2
+    north_y = -z * y * inv_r2
+    north_z = 1.0 - z * z * inv_r2
+    north_norm = math.sqrt(north_x * north_x + north_y * north_y + north_z * north_z)
+    if north_norm <= 1.0e-12:
+        north_x, north_y, north_z = -east_y, east_x, 0.0
+        north_norm = math.sqrt(north_x * north_x + north_y * north_y + north_z * north_z)
+    north_x /= north_norm
+    north_y /= north_norm
+    north_z /= north_norm
+    alpha = math.radians(alpha_deg)
+    cos_a = math.cos(alpha)
+    sin_a = math.sin(alpha)
+    return np.asarray(
+        [
+            cos_a * east_x - sin_a * north_x,
+            cos_a * east_y - sin_a * north_y,
+            cos_a * east_z - sin_a * north_z,
+        ],
+        dtype=float,
+    )
 
 
 def _refine_low_thrust_a_crossing(
@@ -1220,7 +1262,7 @@ def _refine_low_thrust_a_crossing(
     for _ in range(18):
         mid_s = 0.5 * (low_s + high_s)
         state_mid = _rk4_low_thrust_step(config, time_before_s, state_before, mid_s, yaw_angle_deg, thrust_n, isp_s)
-        a_mid, *_ = _rv_to_coe(state_mid[:3], state_mid[3:6], mu=float(config["earth"]["mu_km3_s2"]))
+        a_mid = _semi_major_axis_from_rv(state_mid[:3], state_mid[3:6], float(config["earth"]["mu_km3_s2"]))
         if target_sign * (a_mid - float(target_a_km)) >= 0.0:
             best_state = state_mid
             best_time_s = float(time_before_s) + mid_s
@@ -1395,7 +1437,7 @@ def _append_continuous_burn_history(
                     yaw_angle_deg=yaw_angle_deg,
                 )
                 next_sample_s += sample_interval_s
-            current_a, *_ = _rv_to_coe(state[:3], state[3:6], mu=float(config["earth"]["mu_km3_s2"]))
+            current_a = _semi_major_axis_from_rv(state[:3], state[3:6], float(config["earth"]["mu_km3_s2"]))
             current_error = target_sign * (current_a - target_a_km)
             if current_error >= 0.0 and previous_error <= 0.0:
                 state, current_s = _refine_low_thrust_a_crossing(
@@ -4075,36 +4117,51 @@ def _rv_to_coe(
     *,
     mu: float = MU_EARTH_KM3_S2,
 ) -> tuple[float, float, float, float, float, float, float]:
-    radius = float(np.linalg.norm(r))
-    speed = float(np.linalg.norm(v))
-    h_vec = np.cross(r, v)
-    h_norm = float(np.linalg.norm(h_vec))
-    k_hat = np.asarray([0.0, 0.0, 1.0], dtype=float)
-    n_vec = np.cross(k_hat, h_vec)
-    n_norm = float(np.linalg.norm(n_vec))
-    e_vec = np.cross(v, h_vec) / mu - r / radius
-    e = float(np.linalg.norm(e_vec))
+    rx, ry, rz = float(r[0]), float(r[1]), float(r[2])
+    vx, vy, vz = float(v[0]), float(v[1]), float(v[2])
+    radius = math.sqrt(rx * rx + ry * ry + rz * rz)
+    speed_sq = vx * vx + vy * vy + vz * vz
+    speed = math.sqrt(speed_sq)
+    hx = ry * vz - rz * vy
+    hy = rz * vx - rx * vz
+    hz = rx * vy - ry * vx
+    h_norm = math.sqrt(hx * hx + hy * hy + hz * hz)
+    nx, ny = -hy, hx
+    n_norm = math.hypot(nx, ny)
+    evx = (vy * hz - vz * hy) / mu - rx / radius
+    evy = (vz * hx - vx * hz) / mu - ry / radius
+    evz = (vx * hy - vy * hx) / mu - rz / radius
+    e = math.sqrt(evx * evx + evy * evy + evz * evz)
     energy = speed * speed / 2.0 - mu / radius
     a = -mu / (2.0 * energy)
-    inc = math.acos(float(np.clip(h_vec[2] / h_norm, -1.0, 1.0)))
-    raan = math.atan2(float(n_vec[1]), float(n_vec[0])) if n_norm > 1.0e-12 else 0.0
+    inc = math.acos(max(-1.0, min(1.0, hz / h_norm)))
+    raan = math.atan2(ny, nx) if n_norm > 1.0e-12 else 0.0
     if e > 1.0e-10 and n_norm > 1.0e-12:
+        n_cross_e_x = ny * evz
+        n_cross_e_y = -nx * evz
+        n_cross_e_z = nx * evy - ny * evx
+        e_cross_r_x = evy * rz - evz * ry
+        e_cross_r_y = evz * rx - evx * rz
+        e_cross_r_z = evx * ry - evy * rx
         argp = math.atan2(
-            float(np.dot(np.cross(n_vec, e_vec), h_vec)) / (h_norm * n_norm * e),
-            float(np.dot(n_vec, e_vec)) / (n_norm * e),
+            (n_cross_e_x * hx + n_cross_e_y * hy + n_cross_e_z * hz) / (h_norm * n_norm * e),
+            (nx * evx + ny * evy) / (n_norm * e),
         )
         true_anomaly = math.atan2(
-            float(np.dot(np.cross(e_vec, r), h_vec)) / (h_norm * e * radius),
-            float(np.dot(e_vec, r)) / (e * radius),
+            (e_cross_r_x * hx + e_cross_r_y * hy + e_cross_r_z * hz) / (h_norm * e * radius),
+            (evx * rx + evy * ry + evz * rz) / (e * radius),
         )
     else:
         argp = 0.0
         if n_norm > 1.0e-12:
-            n_hat = n_vec / n_norm
-            q_hat = np.cross(h_vec / h_norm, n_hat)
-            true_anomaly = math.atan2(float(np.dot(r, q_hat)), float(np.dot(r, n_hat)))
+            n_hat_x, n_hat_y = nx / n_norm, ny / n_norm
+            hx_hat, hy_hat, hz_hat = hx / h_norm, hy / h_norm, hz / h_norm
+            qx = -hz_hat * n_hat_y
+            qy = hz_hat * n_hat_x
+            qz = hx_hat * n_hat_y - hy_hat * n_hat_x
+            true_anomaly = math.atan2(rx * qx + ry * qy + rz * qz, rx * n_hat_x + ry * n_hat_y)
         else:
-            true_anomaly = math.atan2(float(r[1]), float(r[0]))
+            true_anomaly = math.atan2(ry, rx)
     if e < 1.0:
         eccentric_anomaly = 2.0 * math.atan2(
             math.sqrt(max(0.0, 1.0 - e)) * math.sin(true_anomaly / 2.0),
