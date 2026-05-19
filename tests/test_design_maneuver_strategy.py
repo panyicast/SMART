@@ -74,7 +74,8 @@ def test_continuous_thrust_parameter_optimizer_uses_pulse_targets(tmp_path: Path
 
     assert continuous_result.time_step_s == pytest.approx(10.0)
     assert continuous_result.yaw_step_deg == pytest.approx(0.05)
-    assert continuous_result.hard_constraint_passed is True
+    assert continuous_result.hard_constraint_passed is False
+    assert "终端偏心率误差" in continuous_result.failed_constraints
     assert len(continuous_result.parameters) == len(pulse_result.burns)
     first = continuous_result.parameters[0]
     assert first.maneuver_index == pulse_result.burns[0].index
@@ -95,6 +96,7 @@ def test_continuous_thrust_parameter_optimizer_uses_pulse_targets(tmp_path: Path
         pulse_result.config["target"]["lon_degE"], abs=pulse_result.config["terminal_tolerance"]["lon_deg"]
     )
     assert continuous_result.parameters[-1].post_i_deg == pytest.approx(pulse_result.config["target"]["i_deg"])
+    assert abs(continuous_result.parameters[-1].post_e - pulse_result.config["target"]["e"]) > pulse_result.config["terminal_tolerance"]["e"]
     assert continuous_result.parameters[-1].propellant_kg > pulse_result.burns[-1].propellant_kg
     assert continuous_result.orbit_history_rows
     assert continuous_result.orbit_history_rows[-1]["phase"] in {"settle", "orbit_control"}
@@ -250,7 +252,7 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path, monkeyp
     assert page._config_overview_table.rowCount() == 4
     assert page._burn_table.maximumHeight() <= 210
     assert page._continuous_thrust_button.text() == "优化连续推力模型参数"
-    assert page._continuous_thrust_table.columnCount() == 13
+    assert page._continuous_thrust_table.columnCount() == 14
     assert page._result_panel.layout().indexOf(page._continuous_thrust_table.parentWidget()) >= 0
     perigee_layout = page._mv1_hp_target_label.parentWidget().layout()
     assert perigee_layout.indexOf(page._q_sequence_combo) >= 0
@@ -313,24 +315,27 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path, monkeyp
     page._continuous_thrust_button.click()
     assert page._continuous_thrust_table.rowCount() == 5
     assert page._continuous_thrust_table.item(0, 0).text().startswith("MV1 / ")
-    assert page._continuous_thrust_table.horizontalHeaderItem(12).text() == "控后近地点高度/km"
-    assert page._continuous_thrust_table.item(0, 10).text()
-    assert "连续推力参数优化完成" in page._status_label.text()
-    assert page._burn_table.columnCount() == 14
+    assert page._continuous_thrust_table.horizontalHeaderItem(8).text() == "点火结束点偏心率"
+    assert page._continuous_thrust_table.horizontalHeaderItem(13).text() == "控后近地点高度/km"
+    assert page._continuous_thrust_table.item(0, 11).text()
+    assert "连续推力参数优化后未通过硬约束" in page._status_label.text()
+    assert page._burn_table.columnCount() == 15
     assert page._burn_table.horizontalHeaderItem(4).text() == "星下点经度/degE"
-    assert page._burn_table.horizontalHeaderItem(9).text() == "计算的变轨推力偏航角/deg"
-    assert page._burn_table.horizontalHeaderItem(13).text() == "控后近地点高度/km"
+    assert page._burn_table.horizontalHeaderItem(8).text() == "控后偏心率"
+    assert page._burn_table.horizontalHeaderItem(10).text() == "计算的变轨推力偏航角/deg"
+    assert page._burn_table.horizontalHeaderItem(14).text() == "控后近地点高度/km"
     assert page._burn_table.item(0, 0).text() == "分离点"
     assert page._burn_table.item(0, 1).text() == "0.00"
-    assert page._burn_table.item(0, 13).text() == "200.00"
+    assert page._burn_table.item(0, 8).text()
+    assert page._burn_table.item(0, 14).text() == "200.00"
     assert page._burn_table.item(0, 4).text()
     assert page._burn_table.item(0, 4).text().count(".") == 1
     assert len(page._burn_table.item(0, 4).text().split(".")[1]) == 2
     assert page._burn_table.item(1, 0).text() == "MV1"
     assert len(page._burn_table.item(1, 1).text().split(".")[1]) == 2
-    assert len(page._burn_table.item(1, 9).text().split(".")[1]) == 2
-    assert not page._burn_table.item(1, 13).flags() & QtCore.Qt.ItemFlag.ItemIsEditable
-    assert not page._burn_table.item(2, 13).flags() & QtCore.Qt.ItemFlag.ItemIsEditable
+    assert len(page._burn_table.item(1, 10).text().split(".")[1]) == 2
+    assert not page._burn_table.item(1, 14).flags() & QtCore.Qt.ItemFlag.ItemIsEditable
+    assert not page._burn_table.item(2, 14).flags() & QtCore.Qt.ItemFlag.ItemIsEditable
     assert page._burn_table.editTriggers() == QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers
     assert page._mv1_hp_target_edit.text() == "3400"
     assert page._mv2_hp_target_edit.text() == ""

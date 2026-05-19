@@ -438,6 +438,10 @@
 - 提交：`c391790`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
 
-## 2026-05-19T16:31:52+08:00 | Apply final continuous thrust inclination trim
-- 提交：`本次提交`
+## 2026-05-19T16:31:55+08:00 | Apply final continuous thrust inclination trim
+- 提交：`5c9e119`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-19T16:45:56+08:00 | Report continuous thrust eccentricity constraint
+- 提交：`本次提交`
+- 影响文件：`src/smart/services/design_maneuver_strategy.py`、`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。

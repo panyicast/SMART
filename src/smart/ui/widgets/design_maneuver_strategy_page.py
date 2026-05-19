@@ -351,7 +351,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._continuous_thrust_hint_label.setWordWrap(True)
         layout.addWidget(self._continuous_thrust_hint_label)
 
-        self._continuous_thrust_table = QtWidgets.QTableWidget(0, 13)
+        self._continuous_thrust_table = QtWidgets.QTableWidget(0, 14)
         self._setup_readonly_table(self._continuous_thrust_table)
         self._continuous_thrust_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
         self._continuous_thrust_table.horizontalHeader().setStretchLastSection(True)
@@ -370,7 +370,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._burn_header_label = QtWidgets.QLabel()
         self._burn_header_label.setProperty("role", "cardTitle")
         burn_layout.addWidget(self._burn_header_label)
-        self._burn_table = QtWidgets.QTableWidget(0, 14)
+        self._burn_table = QtWidgets.QTableWidget(0, 15)
         self._setup_readonly_table(self._burn_table)
         self._burn_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
         self._burn_table.verticalHeader().setDefaultSectionSize(24)
@@ -801,6 +801,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                 f"{float(initial['a_km']):.2f}",
                 f"{period_min:.2f}",
                 f"{float(initial['i_deg']):.2f}",
+                f"{float(initial['e']):.6f}",
                 "0.00",
                 "0.00",
                 "0.00",
@@ -821,6 +822,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                 f"{burn.post_a_km:.2f}",
                 f"{burn.orbit_period_min:.2f}",
                 f"{burn.post_i_deg:.2f}",
+                f"{burn.post_e:.6f}",
                 f"{burn.delta_v_mps:.2f}",
                 f"{burn.alpha_deg:.2f}",
                 f"{burn.total_burn_time_min:.2f}",
@@ -874,6 +876,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                     f"{parameter.ignition_longitude_deg_e:.2f}",
                     f"{parameter.cutoff_longitude_deg_e:.2f}",
                     f"{parameter.post_i_deg:.2f}",
+                    f"{parameter.post_e:.6f}",
                     f"{parameter.yaw_angle_deg:.2f}",
                     f"{parameter.delta_v_mps:.2f}",
                     f"{parameter.propellant_kg:.2f}",
@@ -881,7 +884,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                     f"{_perigee_altitude_km(parameter.post_a_km, parameter.post_e, re_km):.2f}",
                 ),
             )
-            formula_item = self._continuous_thrust_table.item(row, 10)
+            formula_item = self._continuous_thrust_table.item(row, 11)
             if formula_item is not None:
                 formula_item.setToolTip(
                     (
@@ -1208,6 +1211,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                 "点火开始点经度/degE",
                 "点火结束点经度/degE",
                 "点火结束点倾角/deg",
+                "点火结束点偏心率",
                 "偏航角/deg",
                 "总速度增量/(m/s)",
                 "总推进剂消耗/kg",
@@ -1225,6 +1229,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                 "控后半长轴/km",
                 "轨道周期/min",
                 "轨道倾角/deg",
+                "控后偏心率",
                 "速度增量/(m/s)",
                 "计算的变轨推力偏航角/deg",
                 "点火时长/min",
