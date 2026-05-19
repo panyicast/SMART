@@ -230,7 +230,6 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(8)
         left_layout.addWidget(self._build_config_panel())
-        left_layout.addWidget(self._build_continuous_thrust_card())
         top_row.addWidget(left_stack, 1)
         top_row.addWidget(self._build_config_overview_card(), 1)
         root.addLayout(top_row, 0)
@@ -329,7 +328,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
     def _build_continuous_thrust_card(self) -> QtWidgets.QFrame:
         card = QtWidgets.QFrame()
         card.setProperty("role", "card")
-        card.setMaximumHeight(176)
+        card.setMaximumHeight(260)
         layout = QtWidgets.QVBoxLayout(card)
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(7)
@@ -352,12 +351,12 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._continuous_thrust_hint_label.setWordWrap(True)
         layout.addWidget(self._continuous_thrust_hint_label)
 
-        self._continuous_thrust_table = QtWidgets.QTableWidget(0, 6)
+        self._continuous_thrust_table = QtWidgets.QTableWidget(0, 13)
         self._setup_readonly_table(self._continuous_thrust_table)
         self._continuous_thrust_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
         self._continuous_thrust_table.horizontalHeader().setStretchLastSection(True)
         self._continuous_thrust_table.verticalHeader().setDefaultSectionSize(22)
-        self._continuous_thrust_table.setMaximumHeight(72)
+        self._continuous_thrust_table.setMaximumHeight(146)
         layout.addWidget(self._continuous_thrust_table)
         return card
 
@@ -379,6 +378,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._burn_table.setMaximumHeight(210)
         burn_layout.addWidget(self._burn_table)
         burn_layout.addWidget(self._build_perigee_target_controls())
+        burn_layout.addWidget(self._build_continuous_thrust_card())
         return burn_card
 
     def _build_perigee_target_controls(self) -> QtWidgets.QWidget:
@@ -857,6 +857,8 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
 
     def _set_continuous_thrust_rows(self, result: ContinuousThrustOptimizationResult) -> None:
         self._continuous_thrust_table.setRowCount(0)
+        config = normalize_design_maneuver_strategy_payload(self._last_result.config if self._last_result else self._config)
+        re_km = float(config["earth"]["Re_km"])
         for parameter in result.parameters:
             row = self._continuous_thrust_table.rowCount()
             self._continuous_thrust_table.insertRow(row)
@@ -864,15 +866,22 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                 self._continuous_thrust_table,
                 row,
                 (
-                    f"MV{parameter.maneuver_index}",
+                    f"MV{parameter.maneuver_index} / {parameter.flight_revolution}",
+                    parameter.position_label,
                     f"{parameter.burn_start_min:.2f}",
-                    f"{parameter.yaw_angle_deg:.2f}",
                     f"{parameter.cutoff_min:.2f}",
-                    f"{parameter.target_post_a_km:.2f}",
-                    f"{parameter.objective_delta_g_kg:.2f}",
+                    f"{parameter.total_burn_time_min:.2f}",
+                    f"{parameter.ignition_longitude_deg_e:.2f}",
+                    f"{parameter.cutoff_longitude_deg_e:.2f}",
+                    f"{parameter.post_i_deg:.2f}",
+                    f"{parameter.yaw_angle_deg:.2f}",
+                    f"{parameter.delta_v_mps:.2f}",
+                    f"{parameter.propellant_kg:.2f}",
+                    f"{parameter.post_mass_kg:.2f}",
+                    f"{_perigee_altitude_km(parameter.post_a_km, parameter.post_e, re_km):.2f}",
                 ),
             )
-            formula_item = self._continuous_thrust_table.item(row, 5)
+            formula_item = self._continuous_thrust_table.item(row, 10)
             if formula_item is not None:
                 formula_item.setToolTip(
                     (
@@ -881,6 +890,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                         f"m1={parameter.future_apogee_raise_propellant_kg:.3f}, "
                         f"m2={parameter.future_perigee_lower_propellant_kg:.3f}, "
                         f"m3={parameter.trim_propellant_kg:.3f}; "
+                        f"ΔG={parameter.objective_delta_g_kg:.3f} kg; "
                         f"初值 t={parameter.initial_burn_start_min:.2f} min, "
                         f"δ={parameter.initial_yaw_angle_deg:.2f} deg; "
                         f"评估 {parameter.search_evaluations} 组"
@@ -1189,7 +1199,21 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._q_sequence_user_label.setText("q 序列")
         self._config_overview_table.setHorizontalHeaderLabels(["项目", "数值"])
         self._continuous_thrust_table.setHorizontalHeaderLabels(
-            ["变轨", "开始/min", "偏航/deg", "熄火/min", "目标a/km", "ΔG/kg"]
+            [
+                "变轨/飞行圈次",
+                "位置",
+                "点火开始点航时/min",
+                "点火结束点航时/min",
+                "点火总时长/min",
+                "点火开始点经度/degE",
+                "点火结束点经度/degE",
+                "点火结束点倾角/deg",
+                "偏航角/deg",
+                "总速度增量/(m/s)",
+                "总推进剂消耗/kg",
+                "控后卫星质量/kg",
+                "控后近地点高度/km",
+            ]
         )
         self._burn_table.setHorizontalHeaderLabels(
             [

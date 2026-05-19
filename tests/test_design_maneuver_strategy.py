@@ -78,6 +78,11 @@ def test_continuous_thrust_parameter_optimizer_uses_pulse_targets(tmp_path: Path
     assert len(continuous_result.parameters) == len(pulse_result.burns)
     first = continuous_result.parameters[0]
     assert first.maneuver_index == pulse_result.burns[0].index
+    assert first.flight_revolution == pulse_result.burns[0].flight_revolution
+    assert first.position_label == (
+        pulse_result.burns[0].position_label
+        or ("远地点" if pulse_result.burns[0].apsis == "A" else "近地点")
+    )
     assert first.yaw_angle_deg == pytest.approx(pulse_result.burns[0].alpha_deg)
     assert first.target_post_a_km == pytest.approx(
         pulse_result.burns[0].target_post_a_km or pulse_result.burns[0].post_a_km
@@ -243,7 +248,8 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path, monkeyp
     assert page._config_overview_table.rowCount() == 4
     assert page._burn_table.maximumHeight() <= 210
     assert page._continuous_thrust_button.text() == "优化连续推力模型参数"
-    assert page._continuous_thrust_table.columnCount() == 6
+    assert page._continuous_thrust_table.columnCount() == 13
+    assert page._result_panel.layout().indexOf(page._continuous_thrust_table.parentWidget()) >= 0
     perigee_layout = page._mv1_hp_target_label.parentWidget().layout()
     assert perigee_layout.indexOf(page._q_sequence_combo) >= 0
     assert perigee_layout.indexOf(page._apply_hp_targets_button) >= 0
@@ -304,8 +310,9 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path, monkeyp
     assert page._burn_table.rowCount() == 6
     page._continuous_thrust_button.click()
     assert page._continuous_thrust_table.rowCount() == 5
-    assert page._continuous_thrust_table.item(0, 0).text() == "MV1"
-    assert page._continuous_thrust_table.item(0, 5).text()
+    assert page._continuous_thrust_table.item(0, 0).text().startswith("MV1 / ")
+    assert page._continuous_thrust_table.horizontalHeaderItem(12).text() == "控后近地点高度/km"
+    assert page._continuous_thrust_table.item(0, 10).text()
     assert "连续推力参数优化完成" in page._status_label.text()
     assert page._burn_table.columnCount() == 14
     assert page._burn_table.horizontalHeaderItem(4).text() == "星下点经度/degE"

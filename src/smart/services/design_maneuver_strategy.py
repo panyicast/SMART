@@ -65,6 +65,8 @@ class DesignManeuverResult:
 @dataclass(frozen=True, slots=True)
 class ContinuousThrustManeuverParameter:
     maneuver_index: int
+    flight_revolution: int
+    position_label: str
     initial_burn_start_min: float
     initial_yaw_angle_deg: float
     burn_start_min: float
@@ -819,6 +821,8 @@ def optimize_continuous_thrust_model_parameters(
         parameters.append(
             ContinuousThrustManeuverParameter(
                 maneuver_index=int(burn.index),
+                flight_revolution=int(burn.flight_revolution),
+                position_label=burn.position_label or ("远地点" if burn.apsis == "A" else "近地点"),
                 initial_burn_start_min=initial_start_s / 60.0,
                 initial_yaw_angle_deg=initial_yaw_deg,
                 burn_start_min=float(best["burn_start_s"]) / 60.0,
