@@ -714,8 +714,6 @@ def optimize_continuous_thrust_model_parameters(
         is_last = burn_position == len(sorted_burns) - 1
         formula = "m + m3" if is_last else "m + m1 + m2 + m3"
         yaw_low, yaw_high = _continuous_yaw_bounds_for_burn(config, sorted_burns, burn_position, burn)
-        maneuver_time_window_s = max(time_window_s, 1440.0 * 60.0) if is_last else time_window_s
-        maneuver_coarse_time_step_s = max(coarse_time_step_s, 1800.0) if is_last else coarse_time_step_s
         coarse = _search_continuous_thrust_burn(
             config,
             r,
@@ -729,9 +727,9 @@ def optimize_continuous_thrust_model_parameters(
             m1,
             m2,
             formula,
-            time_window_s=maneuver_time_window_s,
+            time_window_s=time_window_s,
             yaw_window_deg=yaw_window_deg,
-            time_step_s=maneuver_coarse_time_step_s,
+            time_step_s=coarse_time_step_s,
             yaw_step_deg=coarse_yaw_step_deg,
             yaw_low=yaw_low,
             yaw_high=yaw_high,
@@ -826,7 +824,7 @@ def optimize_continuous_thrust_model_parameters(
         displayed_propellant_kg = float(best["propellant_kg"])
         displayed_post_i_deg = float(best["post_i_deg"])
         displayed_post_mass_kg = float(best["post_mass_kg"])
-        if formula == "m + m3" and trim_propellant_kg > 0.0:
+        if str(burn.apsis).upper() == "A" and trim_propellant_kg > 0.0:
             displayed_delta_v_mps += trim_delta_v_mps
             displayed_propellant_kg += trim_propellant_kg
             displayed_post_i_deg = float(config["target"]["i_deg"])
@@ -907,6 +905,8 @@ def _search_continuous_thrust_burn(
 ) -> dict[str, Any] | None:
     start_low = max(float(state_elapsed_s), float(center_start_s) - float(time_window_s))
     start_high = max(start_low, float(center_start_s) + float(time_window_s))
+    if str(burn.apsis).upper() == "P":
+        start_high = max(start_low, min(start_high, float(burn.elapsed_min) * 60.0))
     starts = _grid_values_around(float(center_start_s), start_low, start_high, float(time_step_s))
     yaw_values = _grid_values_around(
         float(center_yaw_deg),
@@ -987,11 +987,15 @@ def _evaluate_continuous_thrust_candidate(
     post_a, post_e, post_i_rad, *_ = _rv_to_coe(r_cutoff, v_cutoff, mu=float(config["earth"]["mu_km3_s2"]))
     post_i_deg = math.degrees(post_i_rad)
     target_i_deg = float(burn.post_i_deg)
-    trim_dv_mps = _inclination_trim_delta_v_mps(
-        v_cutoff,
-        post_i_deg,
-        target_i_deg,
-        float(config["terminal_tolerance"]["i_deg"]),
+    trim_dv_mps = (
+        _inclination_trim_delta_v_mps(
+            v_cutoff,
+            post_i_deg,
+            target_i_deg,
+            float(config["terminal_tolerance"]["i_deg"]),
+        )
+        if str(burn.apsis).upper() == "A"
+        else 0.0
     )
     trim_propellant_kg = _propellant_for_delta_v(
         max(1.0, float(burn_result["post_mass_kg"])),
@@ -1010,7 +1014,16 @@ def _evaluate_continuous_thrust_candidate(
     terminal_i_error_abs_deg = 0.0
     terminal_e_excess = 0.0
     terminal_e_error_abs = 0.0
+    apsis_timing_error_s = 0.0
+    if str(burn.apsis).upper() == "P":
+        pulse_time_s = float(burn.elapsed_min) * 60.0
+        if pulse_time_s < float(burn_start_s):
+            apsis_timing_error_s = float(burn_start_s) - pulse_time_s
+        elif pulse_time_s > cutoff_s:
+            apsis_timing_error_s = pulse_time_s - cutoff_s
     apogee_radius_error_km = 0.0
+    inclination_error_deg = abs(post_i_deg - target_i_deg)
+    inclination_excess_deg = max(0.0, inclination_error_deg - float(config["terminal_tolerance"]["i_deg"]))
     if str(burn.apsis).upper() == "A":
         target_ra_km = float(burn.post_a_km) * (1.0 + float(burn.post_e))
         apogee_radius_error_km = abs(float(post_a) * (1.0 + float(post_e)) - target_ra_km)
@@ -1039,7 +1052,10 @@ def _evaluate_continuous_thrust_candidate(
         "terminal_i_error_abs_deg": terminal_i_error_abs_deg,
         "terminal_e_excess": terminal_e_excess,
         "terminal_e_error_abs": terminal_e_error_abs,
+        "apsis_timing_error_s": apsis_timing_error_s,
         "apogee_radius_error_km": apogee_radius_error_km,
+        "inclination_error_deg": inclination_error_deg,
+        "inclination_excess_deg": inclination_excess_deg,
         "post_a_km": float(post_a),
         "post_e": float(post_e),
         "post_i_deg": post_i_deg,
@@ -1166,6 +1182,8 @@ def _continuous_control_target(
 ) -> tuple[str, float]:
     if str(burn.apsis).upper() == "A":
         return "rp", float(burn.post_a_km) * (1.0 - float(burn.post_e))
+    if str(burn.apsis).upper() == "P":
+        return "ra", float(burn.post_a_km) * (1.0 + float(burn.post_e))
     return "a", float(target_post_a_km)
 
 
@@ -1389,10 +1407,19 @@ def _continuous_thrust_fallback_candidate(
     )
     terminal_e_error_abs = abs(float(burn.post_e) - float(config["target"]["e"])) if objective_formula == "m + m3" else 0.0
     terminal_e_excess = max(0.0, terminal_e_error_abs - float(config["terminal_tolerance"]["e"]))
+    apsis_timing_error_s = 0.0
+    if str(burn.apsis).upper() == "P":
+        pulse_time_s = float(burn.elapsed_min) * 60.0
+        if pulse_time_s < start_s:
+            apsis_timing_error_s = start_s - pulse_time_s
+        elif pulse_time_s > cutoff_s:
+            apsis_timing_error_s = pulse_time_s - cutoff_s
     apogee_radius_error_km = 0.0
     if str(burn.apsis).upper() == "A":
         target_ra_km = float(burn.post_a_km) * (1.0 + float(burn.post_e))
         apogee_radius_error_km = abs(target_ra_km - float(burn.post_a_km) * (1.0 + float(burn.post_e)))
+    inclination_error_deg = 0.0
+    inclination_excess_deg = 0.0
     return {
         "burn_start_s": start_s,
         "settle_end_s": start_s,
@@ -1415,7 +1442,10 @@ def _continuous_thrust_fallback_candidate(
         "terminal_i_error_abs_deg": terminal_i_error_abs_deg,
         "terminal_e_excess": terminal_e_excess,
         "terminal_e_error_abs": terminal_e_error_abs,
+        "apsis_timing_error_s": apsis_timing_error_s,
         "apogee_radius_error_km": apogee_radius_error_km,
+        "inclination_error_deg": inclination_error_deg,
+        "inclination_excess_deg": inclination_excess_deg,
         "post_a_km": float(burn.post_a_km),
         "post_e": float(burn.post_e),
         "post_i_deg": float(burn.post_i_deg),
@@ -1665,13 +1695,20 @@ def _continuous_candidate_score(candidate: dict[str, Any]) -> tuple[float, float
         invalid_penalty += 1.0
     if not bool(candidate.get("longitude_ok", False)):
         invalid_penalty += 1.0
+    if float(candidate.get("apsis_timing_error_s", 0.0)) > 0.0:
+        invalid_penalty += 1.0
     if float(candidate.get("terminal_e_excess", 0.0)) > 0.0:
+        invalid_penalty += 1.0
+    if float(candidate.get("inclination_excess_deg", 0.0)) > 0.0:
         invalid_penalty += 1.0
     continuity_penalty = (
         float(candidate["objective_delta_g_kg"])
-        + 1.0e4 * float(candidate.get("apogee_radius_error_km", 0.0))
+        + 1.0e6 * float(candidate.get("inclination_excess_deg", 0.0))
+        + 1.0e3 * float(candidate.get("inclination_error_deg", 0.0))
+        + 1.0e2 * float(candidate.get("apogee_radius_error_km", 0.0))
         + 1.0e6 * float(candidate.get("terminal_e_excess", 0.0))
         + 1.0e3 * float(candidate.get("terminal_e_error_abs", 0.0))
+        + 1.0e3 * float(candidate.get("apsis_timing_error_s", 0.0))
         + 200.0 * float(candidate.get("seed_yaw_offset_deg", 0.0))
         + 5.0 * float(candidate.get("seed_time_offset_s", 0.0)) / 60.0
     )
@@ -1679,9 +1716,10 @@ def _continuous_candidate_score(candidate: dict[str, Any]) -> tuple[float, float
         invalid_penalty,
         float(candidate.get("terminal_lon_excess_deg", 0.0)),
         float(candidate.get("terminal_e_excess", 0.0)),
+        float(candidate.get("apsis_timing_error_s", 0.0)),
+        float(candidate.get("inclination_excess_deg", 0.0)),
         float(candidate.get("apogee_radius_error_km", 0.0)),
         continuity_penalty,
-        float(candidate["objective_delta_g_kg"]),
     )
 
 
@@ -1691,8 +1729,9 @@ def _continuous_yaw_bounds_for_burn(
     burn_position: int,
     burn: DesignManeuverBurn,
 ) -> tuple[float, float]:
-    if burn_position == len(burns) - 1 and burn.apsis == "P":
-        return _number_pair(config["alpha"]["tail_perigee_bounds_deg"], [-180.0, 180.0])
+    del burns, burn_position
+    if str(burn.apsis).upper() == "P":
+        return (float(burn.alpha_deg), float(burn.alpha_deg))
     if burn.burn_type == "tail_fixed" and burn.apsis == "A":
         return _number_pair(config["alpha"]["tail_apogee_bounds_deg"], [-20.0, 40.0])
     if burn.burn_type == "front":

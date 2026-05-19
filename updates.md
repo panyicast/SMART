@@ -454,6 +454,10 @@
 - 提交：`1619fb5`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
 
-## 2026-05-19T17:13:46+08:00 | Stabilize apogee burns in continuous thrust search
+## 2026-05-19T17:13:50+08:00 | Stabilize apogee burns in continuous thrust search
+- 提交：`daa1bff`
+- 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-19T17:42:39+08:00 | Align final perigee low-thrust burn
 - 提交：`本次提交`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。

@@ -75,7 +75,9 @@ def test_continuous_thrust_parameter_optimizer_uses_pulse_targets(tmp_path: Path
     assert continuous_result.time_step_s == pytest.approx(10.0)
     assert continuous_result.yaw_step_deg == pytest.approx(0.05)
     assert continuous_result.hard_constraint_passed is False
-    assert "终端偏心率误差" in continuous_result.failed_constraints
+    assert "终端经度误差" in continuous_result.failed_constraints
+    assert "终端偏心率误差" not in continuous_result.failed_constraints
+    assert "终端倾角误差" not in continuous_result.failed_constraints
     assert len(continuous_result.parameters) == len(pulse_result.burns)
     first = continuous_result.parameters[0]
     assert first.maneuver_index == pulse_result.burns[0].index
@@ -97,12 +99,20 @@ def test_continuous_thrust_parameter_optimizer_uses_pulse_targets(tmp_path: Path
     assert first.search_evaluations > 0
     assert first.objective_formula == "m + m1 + m2 + m3"
     assert continuous_result.parameters[-1].objective_formula == "m + m3"
-    assert continuous_result.parameters[-1].cutoff_longitude_deg_e == pytest.approx(
-        pulse_result.config["target"]["lon_degE"], abs=pulse_result.config["terminal_tolerance"]["lon_deg"]
+    final_pulse = pulse_result.burns[-1]
+    final_continuous = continuous_result.parameters[-1]
+    assert final_continuous.cutoff_min == pytest.approx(final_pulse.elapsed_min, abs=0.02)
+    assert final_continuous.yaw_angle_deg == pytest.approx(final_pulse.alpha_deg)
+    assert final_continuous.post_i_deg == pytest.approx(pulse_result.config["target"]["i_deg"], abs=0.01)
+    assert final_continuous.post_e == pytest.approx(pulse_result.config["target"]["e"], abs=pulse_result.config["terminal_tolerance"]["e"])
+    assert final_continuous.post_a_km * (1.0 - final_continuous.post_e) - re_km == pytest.approx(
+        final_pulse.post_a_km * (1.0 - final_pulse.post_e) - re_km,
+        abs=0.02,
     )
-    assert continuous_result.parameters[-1].post_i_deg == pytest.approx(pulse_result.config["target"]["i_deg"])
-    assert abs(continuous_result.parameters[-1].post_e - pulse_result.config["target"]["e"]) > pulse_result.config["terminal_tolerance"]["e"]
-    assert continuous_result.parameters[-1].propellant_kg > pulse_result.burns[-1].propellant_kg
+    assert final_continuous.post_a_km * (1.0 + final_continuous.post_e) - re_km == pytest.approx(
+        final_pulse.post_a_km * (1.0 + final_pulse.post_e) - re_km,
+        abs=0.02,
+    )
     assert continuous_result.orbit_history_rows
     assert continuous_result.orbit_history_rows[-1]["phase"] in {"settle", "orbit_control"}
     history_path = export_continuous_thrust_orbit_history_csv(continuous_result, tmp_path / "ct_history.csv")
