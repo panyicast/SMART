@@ -470,6 +470,10 @@
 - 提交：`f58eeac`
 - 影响文件：`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
 
-## 2026-05-19T21:58:35+08:00 | Document continuous thrust optimization algorithm
-- 提交：`本次提交`
+## 2026-05-19T21:58:42+08:00 | Document continuous thrust optimization algorithm
+- 提交：`b3b70c1`
 - 影响文件：`doc/design_continuous_thrust_parameter_optimization_algorithm.md`、`HANDOFF.md`。
+
+## 2026-05-19T22:10:39+08:00 | Implement continuous thrust chain optimizer
+- 提交：`本次提交`
+- 影响文件：`src/smart/services/design_continuous_thrust_optimizer.py`、`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。

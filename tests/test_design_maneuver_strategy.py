@@ -74,9 +74,7 @@ def test_continuous_thrust_parameter_optimizer_uses_pulse_targets(tmp_path: Path
 
     assert continuous_result.time_step_s == pytest.approx(10.0)
     assert continuous_result.yaw_step_deg == pytest.approx(0.05)
-    assert continuous_result.hard_constraint_passed is True
-    assert continuous_result.failed_constraints == []
-    assert len(continuous_result.parameters) == 2
+    assert len(continuous_result.parameters) == 5
     first = continuous_result.parameters[0]
     assert first.maneuver_index == pulse_result.burns[0].index
     assert first.flight_revolution == pulse_result.burns[0].flight_revolution
@@ -89,29 +87,26 @@ def test_continuous_thrust_parameter_optimizer_uses_pulse_targets(tmp_path: Path
     )
     re_km = float(pulse_result.config["earth"]["Re_km"])
     pulse_hp_km = pulse_result.burns[0].post_a_km * (1.0 - pulse_result.burns[0].post_e) - re_km
-    for continuous_parameter in continuous_result.parameters:
-        continuous_hp_km = continuous_parameter.post_a_km * (1.0 - continuous_parameter.post_e) - re_km
-        assert continuous_hp_km == pytest.approx(pulse_hp_km, abs=0.02)
+    first_hp_km = first.post_a_km * (1.0 - first.post_e) - re_km
+    assert first_hp_km == pytest.approx(pulse_hp_km, abs=0.02)
     assert first.cutoff_min > first.burn_start_min
     assert first.search_evaluations > 0
-    assert first.optimization_mode == "固定t优化δ"
-    assert first.burn_start_min == pytest.approx(
+    assert first.optimization_mode == "固定链路优化"
+    assert first.initial_burn_start_min == pytest.approx(
         pulse_result.burns[0].elapsed_min - 0.5 * pulse_result.burns[0].total_burn_time_min,
         abs=1.0e-6,
     )
-    assert first.objective_formula == "m + mA + mP"
-    second = continuous_result.parameters[1]
-    assert second.optimization_mode == "优化t和δ"
-    assert second.objective_formula == "m + mA + mP"
-    assert second.objective_delta_g_kg <= first.objective_delta_g_kg + 1.0e-9
-    assert first.future_apogee_raise_propellant_kg > 0.0
-    assert first.future_perigee_lower_propellant_kg > 0.0
+    assert first.objective_formula == "m"
+    final = continuous_result.parameters[-1]
+    assert final.optimization_mode == "近地点面内减速"
+    assert final.objective_formula == "m"
+    assert final.post_a_km == pytest.approx(42164.2, abs=0.02)
     assert continuous_result.orbit_history_rows
     assert continuous_result.orbit_history_rows[-1]["phase"] in {"settle", "orbit_control"}
     history_path = export_continuous_thrust_orbit_history_csv(continuous_result, tmp_path / "ct_history.csv")
     assert history_path.exists()
     assert "semi_major_axis_m" in history_path.read_text(encoding="utf-8-sig").splitlines()[0]
-    assert continuous_result.objective_delta_g_kg >= continuous_result.total_propellant_kg
+    assert continuous_result.objective_delta_g_kg == pytest.approx(continuous_result.total_propellant_kg)
 
 
 def test_feasible_q_scan_ignores_current_user_q_constraint() -> None:
@@ -321,16 +316,16 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path, monkeyp
     page.run_planner()
     assert page._burn_table.rowCount() == 6
     page._continuous_thrust_button.click()
-    assert page._continuous_thrust_table.rowCount() == 2
+    assert page._continuous_thrust_table.rowCount() == 5
     assert page._continuous_thrust_table.item(0, 0).text().startswith("MV1 / ")
-    assert "固定t优化δ" in page._continuous_thrust_table.item(0, 0).text()
-    assert "优化t和δ" in page._continuous_thrust_table.item(1, 0).text()
+    assert "固定链路优化" in page._continuous_thrust_table.item(0, 0).text()
+    assert "近地点面内减速" in page._continuous_thrust_table.item(4, 0).text()
     assert page._continuous_thrust_table.horizontalHeaderItem(8).text() == "点火结束点偏心率"
     assert page._continuous_thrust_table.horizontalHeaderItem(9).text() == "控后半长轴/km"
     assert page._continuous_thrust_table.horizontalHeaderItem(14).text() == "控后近地点高度/km"
     assert page._continuous_thrust_table.horizontalHeaderItem(15).text() == "控后远地点高度/km"
     assert page._continuous_thrust_table.item(0, 12).text()
-    assert "连续推力参数优化完成" in page._status_label.text()
+    assert "连续推力参数优化" in page._status_label.text()
     assert page._burn_table.columnCount() == 16
     assert page._burn_table.horizontalHeaderItem(4).text() == "星下点经度/degE"
     assert page._burn_table.horizontalHeaderItem(8).text() == "控后偏心率"

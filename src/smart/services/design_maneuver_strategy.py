@@ -675,6 +675,10 @@ def export_continuous_thrust_orbit_history_csv(
 def optimize_continuous_thrust_model_parameters(
     result: DesignManeuverResult,
 ) -> ContinuousThrustOptimizationResult:
+    from smart.services.design_continuous_thrust_optimizer import optimize_continuous_thrust_chain_parameters
+
+    return optimize_continuous_thrust_chain_parameters(result)
+
     config = normalize_design_maneuver_strategy_payload(result.config)
     continuous_cfg = config["continuous_thrust_optimizer"]
     time_step_s = max(1.0, float(continuous_cfg["time_step_s"]))
