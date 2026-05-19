@@ -450,6 +450,10 @@
 - 提交：`09f9c49`
 - 影响文件：`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
 
-## 2026-05-19T17:01:42+08:00 | Use perigee targets for apogee low-thrust burns
+## 2026-05-19T17:01:46+08:00 | Use perigee targets for apogee low-thrust burns
+- 提交：`1619fb5`
+- 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-19T17:13:46+08:00 | Stabilize apogee burns in continuous thrust search
 - 提交：`本次提交`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。

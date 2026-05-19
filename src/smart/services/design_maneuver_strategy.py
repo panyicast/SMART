@@ -1010,6 +1010,10 @@ def _evaluate_continuous_thrust_candidate(
     terminal_i_error_abs_deg = 0.0
     terminal_e_excess = 0.0
     terminal_e_error_abs = 0.0
+    apogee_radius_error_km = 0.0
+    if str(burn.apsis).upper() == "A":
+        target_ra_km = float(burn.post_a_km) * (1.0 + float(burn.post_e))
+        apogee_radius_error_km = abs(float(post_a) * (1.0 + float(post_e)) - target_ra_km)
     if objective_formula == "m + m3":
         terminal_i_error_abs_deg = abs(post_i_deg - target_i_deg)
         terminal_i_excess_deg = max(0.0, terminal_i_error_abs_deg - float(config["terminal_tolerance"]["i_deg"]))
@@ -1035,6 +1039,7 @@ def _evaluate_continuous_thrust_candidate(
         "terminal_i_error_abs_deg": terminal_i_error_abs_deg,
         "terminal_e_excess": terminal_e_excess,
         "terminal_e_error_abs": terminal_e_error_abs,
+        "apogee_radius_error_km": apogee_radius_error_km,
         "post_a_km": float(post_a),
         "post_e": float(post_e),
         "post_i_deg": post_i_deg,
@@ -1384,6 +1389,10 @@ def _continuous_thrust_fallback_candidate(
     )
     terminal_e_error_abs = abs(float(burn.post_e) - float(config["target"]["e"])) if objective_formula == "m + m3" else 0.0
     terminal_e_excess = max(0.0, terminal_e_error_abs - float(config["terminal_tolerance"]["e"]))
+    apogee_radius_error_km = 0.0
+    if str(burn.apsis).upper() == "A":
+        target_ra_km = float(burn.post_a_km) * (1.0 + float(burn.post_e))
+        apogee_radius_error_km = abs(target_ra_km - float(burn.post_a_km) * (1.0 + float(burn.post_e)))
     return {
         "burn_start_s": start_s,
         "settle_end_s": start_s,
@@ -1406,6 +1415,7 @@ def _continuous_thrust_fallback_candidate(
         "terminal_i_error_abs_deg": terminal_i_error_abs_deg,
         "terminal_e_excess": terminal_e_excess,
         "terminal_e_error_abs": terminal_e_error_abs,
+        "apogee_radius_error_km": apogee_radius_error_km,
         "post_a_km": float(burn.post_a_km),
         "post_e": float(burn.post_e),
         "post_i_deg": float(burn.post_i_deg),
@@ -1659,6 +1669,7 @@ def _continuous_candidate_score(candidate: dict[str, Any]) -> tuple[float, float
         invalid_penalty += 1.0
     continuity_penalty = (
         float(candidate["objective_delta_g_kg"])
+        + 1.0e4 * float(candidate.get("apogee_radius_error_km", 0.0))
         + 1.0e6 * float(candidate.get("terminal_e_excess", 0.0))
         + 1.0e3 * float(candidate.get("terminal_e_error_abs", 0.0))
         + 200.0 * float(candidate.get("seed_yaw_offset_deg", 0.0))
@@ -1668,9 +1679,9 @@ def _continuous_candidate_score(candidate: dict[str, Any]) -> tuple[float, float
         invalid_penalty,
         float(candidate.get("terminal_lon_excess_deg", 0.0)),
         float(candidate.get("terminal_e_excess", 0.0)),
+        float(candidate.get("apogee_radius_error_km", 0.0)),
         continuity_penalty,
         float(candidate["objective_delta_g_kg"]),
-        float(candidate.get("propellant_kg", 0.0)),
     )
 
 
