@@ -80,7 +80,7 @@
     "max_uniform_dv_spread_mps": 70.0,
     "dv_min_per_burn_mps": 20.0,
     "front_dv_total_user_mps": 0.0,
-    "first_post_a_control_km": 1966.0,
+    "first_post_a_control_km": null,
     "tail_dv_est_user_mps": 625.0,
     "standard_terminal_reserve_mps": 0.0,
     "allow_small_dv_correction": true,
@@ -104,7 +104,7 @@
     "terminal_reserve_mps": 0.0
   },
   "apsis": {
-    "pattern_mode": "auto",
+    "pattern_mode": "user",
     "pattern_user": "",
     "q_AA_default": 3,
     "q_sequence_user": [],
@@ -168,6 +168,19 @@
     "correction_weight": 100.0,
     "random_seed": 7
   },
+  "continuous_thrust_optimizer": {
+    "time_step_s": 10.0,
+    "yaw_step_deg": 0.05,
+    "time_window_min": 40.0,
+    "yaw_window_deg": 10.0,
+    "coarse_time_step_s": 300.0,
+    "coarse_yaw_step_deg": 2.0,
+    "fine_time_window_min": 2.0,
+    "fine_yaw_window_deg": 0.25,
+    "search_integration_step_s": 300.0,
+    "final_integration_step_s": 10.0,
+    "history_sample_interval_s": 60.0
+  },
   "hard_constraint_planner": {
     "enabled": true,
     "q_AA_user": [
@@ -175,15 +188,14 @@
       3,
       2
     ],
-    "q_AP_user": null,
+    "q_AP_user": 0,
     "q_AP_candidates": [
       0,
       1,
       2
     ],
     "fixed_hp_targets_km": {
-      "1": 3933.0,
-      "2": 8360.0
+      "1": 3933.0
     },
     "hard_raw_window": true,
     "hard_planning_window": true,

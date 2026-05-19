@@ -245,6 +245,9 @@ Latest editable-cell affordance run: 7 design maneuver tests passed.
 Current V5.1 performance optimization is complete. Profiling showed the default one-free-variable perigee search ran bounded scalar optimization and then repeated Powell multi-starts; the Powell pass was redundant for 1D. `_v51_optimize_sequence()` now returns after bounded scalar optimization when there is exactly one variable. Default planning smoke dropped from about 37.7 s under cProfile / 1.83 s wall after the change; design maneuver tests dropped from about 76-84 s to 7.70 s while preserving the default result (`q=3,3,2,0`, propellant `2596.404635868783 kg`, hard constraints feasible).
 Latest V5.1 performance run: cProfile completed; 7 design maneuver tests passed in 7.70 s.
 
+Current F4 project output checkpoint is complete. The F4 design maneuver configuration now uses user apsis mode with `q_AP_user=0`, keeps only the first fixed perigee-height target, adds continuous-thrust optimizer sampling/search settings, refreshes `design_maneuver_results.json`, updates the project timestamp, and adds `data/design_continuous_thrust_orbit_history.csv`.
+Latest F4 project output checkpoint: no regression tests run; data/config checkpoint only.
+
 Next minimum task: run the page on the real F4 project and confirm the operator-facing advanced settings values match the desired mission sequence and perigee-height targets.
 
 ## Working Rule
