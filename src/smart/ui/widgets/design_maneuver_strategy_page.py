@@ -52,6 +52,10 @@ def _perigee_altitude_km(a_km: float, e: float, re_km: float) -> float:
     return float(a_km) * (1.0 - float(e)) - float(re_km)
 
 
+def _apogee_altitude_km(a_km: float, e: float, re_km: float) -> float:
+    return float(a_km) * (1.0 + float(e)) - float(re_km)
+
+
 def _format_config_text_value(section: str, key: str, value: Any) -> str:
     if value in (None, ""):
         return ""
@@ -351,7 +355,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._continuous_thrust_hint_label.setWordWrap(True)
         layout.addWidget(self._continuous_thrust_hint_label)
 
-        self._continuous_thrust_table = QtWidgets.QTableWidget(0, 14)
+        self._continuous_thrust_table = QtWidgets.QTableWidget(0, 15)
         self._setup_readonly_table(self._continuous_thrust_table)
         self._continuous_thrust_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
         self._continuous_thrust_table.horizontalHeader().setStretchLastSection(True)
@@ -370,7 +374,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._burn_header_label = QtWidgets.QLabel()
         self._burn_header_label.setProperty("role", "cardTitle")
         burn_layout.addWidget(self._burn_header_label)
-        self._burn_table = QtWidgets.QTableWidget(0, 15)
+        self._burn_table = QtWidgets.QTableWidget(0, 16)
         self._setup_readonly_table(self._burn_table)
         self._burn_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
         self._burn_table.verticalHeader().setDefaultSectionSize(24)
@@ -808,6 +812,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                 "0.00",
                 f"{float(initial['m0_kg']):.2f}",
                 f"{_perigee_altitude_km(float(initial['a_km']), float(initial['e']), re_km):.2f}",
+                f"{_apogee_altitude_km(float(initial['a_km']), float(initial['e']), re_km):.2f}",
             ),
         )
         for burn in result.burns:
@@ -829,6 +834,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                 f"{burn.propellant_kg:.2f}",
                 f"{burn.post_mass_kg:.2f}",
                 f"{_perigee_altitude_km(burn.post_a_km, burn.post_e, re_km):.2f}",
+                f"{_apogee_altitude_km(burn.post_a_km, burn.post_e, re_km):.2f}",
             )
             self._set_row_values(self._burn_table, row, values)
             for column in range(self._burn_table.columnCount()):
@@ -882,6 +888,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                     f"{parameter.propellant_kg:.2f}",
                     f"{parameter.post_mass_kg:.2f}",
                     f"{_perigee_altitude_km(parameter.post_a_km, parameter.post_e, re_km):.2f}",
+                    f"{_apogee_altitude_km(parameter.post_a_km, parameter.post_e, re_km):.2f}",
                 ),
             )
             formula_item = self._continuous_thrust_table.item(row, 11)
@@ -1217,6 +1224,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                 "总推进剂消耗/kg",
                 "控后卫星质量/kg",
                 "控后近地点高度/km",
+                "控后远地点高度/km",
             ]
         )
         self._burn_table.setHorizontalHeaderLabels(
@@ -1236,6 +1244,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                 "推进剂消耗/kg",
                 "控后卫星质量/kg",
                 "控后近地点高度/km",
+                "控后远地点高度/km",
             ]
         )
         self._refresh_config_path_label()
