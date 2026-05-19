@@ -355,7 +355,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._continuous_thrust_hint_label.setWordWrap(True)
         layout.addWidget(self._continuous_thrust_hint_label)
 
-        self._continuous_thrust_table = QtWidgets.QTableWidget(0, 15)
+        self._continuous_thrust_table = QtWidgets.QTableWidget(0, 16)
         self._setup_readonly_table(self._continuous_thrust_table)
         self._continuous_thrust_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
         self._continuous_thrust_table.horizontalHeader().setStretchLastSection(True)
@@ -883,6 +883,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                     f"{parameter.cutoff_longitude_deg_e:.2f}",
                     f"{parameter.post_i_deg:.2f}",
                     f"{parameter.post_e:.6f}",
+                    f"{parameter.post_a_km:.2f}",
                     f"{parameter.yaw_angle_deg:.2f}",
                     f"{parameter.delta_v_mps:.2f}",
                     f"{parameter.propellant_kg:.2f}",
@@ -891,7 +892,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                     f"{_apogee_altitude_km(parameter.post_a_km, parameter.post_e, re_km):.2f}",
                 ),
             )
-            formula_item = self._continuous_thrust_table.item(row, 11)
+            formula_item = self._continuous_thrust_table.item(row, 12)
             if formula_item is not None:
                 formula_item.setToolTip(
                     (
@@ -1219,6 +1220,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                 "点火结束点经度/degE",
                 "点火结束点倾角/deg",
                 "点火结束点偏心率",
+                "控后半长轴/km",
                 "偏航角/deg",
                 "总速度增量/(m/s)",
                 "总推进剂消耗/kg",

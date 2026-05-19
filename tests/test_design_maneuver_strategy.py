@@ -260,7 +260,7 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path, monkeyp
     assert page._config_overview_table.rowCount() == 4
     assert page._burn_table.maximumHeight() <= 210
     assert page._continuous_thrust_button.text() == "优化连续推力模型参数"
-    assert page._continuous_thrust_table.columnCount() == 15
+    assert page._continuous_thrust_table.columnCount() == 16
     assert page._result_panel.layout().indexOf(page._continuous_thrust_table.parentWidget()) >= 0
     perigee_layout = page._mv1_hp_target_label.parentWidget().layout()
     assert perigee_layout.indexOf(page._q_sequence_combo) >= 0
@@ -326,9 +326,10 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path, monkeyp
     assert "固定t优化δ" in page._continuous_thrust_table.item(0, 0).text()
     assert "优化t和δ" in page._continuous_thrust_table.item(1, 0).text()
     assert page._continuous_thrust_table.horizontalHeaderItem(8).text() == "点火结束点偏心率"
-    assert page._continuous_thrust_table.horizontalHeaderItem(13).text() == "控后近地点高度/km"
-    assert page._continuous_thrust_table.horizontalHeaderItem(14).text() == "控后远地点高度/km"
-    assert page._continuous_thrust_table.item(0, 11).text()
+    assert page._continuous_thrust_table.horizontalHeaderItem(9).text() == "控后半长轴/km"
+    assert page._continuous_thrust_table.horizontalHeaderItem(14).text() == "控后近地点高度/km"
+    assert page._continuous_thrust_table.horizontalHeaderItem(15).text() == "控后远地点高度/km"
+    assert page._continuous_thrust_table.item(0, 12).text()
     assert "连续推力参数优化完成" in page._status_label.text()
     assert page._burn_table.columnCount() == 16
     assert page._burn_table.horizontalHeaderItem(4).text() == "星下点经度/degE"
