@@ -818,6 +818,17 @@ def optimize_continuous_thrust_model_parameters(
             sample_interval_s=history_sample_interval_s,
             integration_step_s=final_integration_step_s,
         )
+        trim_delta_v_mps = float(best["trim_delta_v_mps"])
+        trim_propellant_kg = float(best["trim_propellant_kg"])
+        displayed_delta_v_mps = float(best["delta_v_mps"])
+        displayed_propellant_kg = float(best["propellant_kg"])
+        displayed_post_i_deg = float(best["post_i_deg"])
+        displayed_post_mass_kg = float(best["post_mass_kg"])
+        if formula == "m + m3" and trim_propellant_kg > 0.0:
+            displayed_delta_v_mps += trim_delta_v_mps
+            displayed_propellant_kg += trim_propellant_kg
+            displayed_post_i_deg = float(config["target"]["i_deg"])
+            displayed_post_mass_kg = max(1.0, displayed_post_mass_kg - trim_propellant_kg)
         parameters.append(
             ContinuousThrustManeuverParameter(
                 maneuver_index=int(burn.index),
@@ -831,12 +842,12 @@ def optimize_continuous_thrust_model_parameters(
                 yaw_angle_deg=float(best["yaw_angle_deg"]),
                 ignition_longitude_deg_e=float(best["ignition_longitude_deg_e"]),
                 cutoff_longitude_deg_e=float(best["cutoff_longitude_deg_e"]),
-                delta_v_mps=float(best["delta_v_mps"]),
+                delta_v_mps=displayed_delta_v_mps,
                 target_post_a_km=target_post_a_km,
                 total_burn_time_min=float(best["total_burn_time_s"]) / 60.0,
                 settle_duration_min=float(best["settle_duration_s"]) / 60.0,
                 orbit_control_duration_min=float(best["orbit_control_duration_s"]) / 60.0,
-                propellant_kg=float(best["propellant_kg"]),
+                propellant_kg=displayed_propellant_kg,
                 future_apogee_raise_propellant_kg=m1,
                 future_perigee_lower_propellant_kg=m2,
                 trim_propellant_kg=float(best["trim_propellant_kg"]),
@@ -844,8 +855,8 @@ def optimize_continuous_thrust_model_parameters(
                 objective_formula=formula,
                 post_a_km=float(best["post_a_km"]),
                 post_e=float(best["post_e"]),
-                post_i_deg=float(best["post_i_deg"]),
-                post_mass_kg=float(best["post_mass_kg"]),
+                post_i_deg=displayed_post_i_deg,
+                post_mass_kg=displayed_post_mass_kg,
                 duration_ok=bool(best["duration_ok"]),
                 longitude_ok=bool(best["longitude_ok"]),
                 search_evaluations=search_evaluations,
@@ -985,6 +996,11 @@ def _evaluate_continuous_thrust_candidate(
     terminal_lon_excess_deg = 0.0
     if objective_formula == "m + m3":
         terminal_lon_excess_deg = abs(_wrap180(cutoff_longitude - float(config["target"]["lon_degE"])))
+    terminal_i_excess_deg = 0.0
+    terminal_i_error_abs_deg = 0.0
+    if objective_formula == "m + m3":
+        terminal_i_error_abs_deg = abs(post_i_deg - float(config["target"]["i_deg"]))
+        terminal_i_excess_deg = max(0.0, terminal_i_error_abs_deg - float(config["terminal_tolerance"]["i_deg"]))
     return {
         "burn_start_s": float(burn_start_s),
         "settle_end_s": float(burn_start_s) + float(burn_result["settle_duration_s"]),
@@ -997,9 +1013,12 @@ def _evaluate_continuous_thrust_candidate(
         "settle_duration_s": float(burn_result["settle_duration_s"]),
         "orbit_control_duration_s": float(burn_result["orbit_control_duration_s"]),
         "propellant_kg": propellant_kg,
+        "trim_delta_v_mps": trim_dv_mps,
         "trim_propellant_kg": trim_propellant_kg,
         "objective_delta_g_kg": objective_delta_g_kg,
         "terminal_lon_excess_deg": terminal_lon_excess_deg,
+        "terminal_i_excess_deg": terminal_i_excess_deg,
+        "terminal_i_error_abs_deg": terminal_i_error_abs_deg,
         "post_a_km": float(post_a),
         "post_e": float(post_e),
         "post_i_deg": post_i_deg,
@@ -1312,6 +1331,13 @@ def _continuous_thrust_fallback_candidate(
     total_burn_s = max(0.0, float(burn.total_burn_time_min) * 60.0)
     cutoff_s = start_s + total_burn_s
     r_cutoff, v_cutoff = _propagate_state_to_elapsed(config, r_start, v_start, start_s, cutoff_s)
+    terminal_i_error_abs_deg = (
+        abs(float(burn.post_i_deg) - float(config["target"]["i_deg"])) if objective_formula == "m + m3" else 0.0
+    )
+    terminal_i_excess_deg = max(
+        0.0,
+        terminal_i_error_abs_deg - float(config["terminal_tolerance"]["i_deg"]),
+    )
     return {
         "burn_start_s": start_s,
         "settle_end_s": start_s,
@@ -1324,11 +1350,14 @@ def _continuous_thrust_fallback_candidate(
         "settle_duration_s": 0.0,
         "orbit_control_duration_s": total_burn_s,
         "propellant_kg": float(burn.propellant_kg),
+        "trim_delta_v_mps": 0.0,
         "trim_propellant_kg": 0.0,
         "objective_delta_g_kg": float(burn.propellant_kg) + future_m1_kg + future_m2_kg,
         "terminal_lon_excess_deg": abs(_wrap180(_longitude_deg(config, r_cutoff, cutoff_s) - float(config["target"]["lon_degE"])))
         if objective_formula == "m + m3"
         else 0.0,
+        "terminal_i_excess_deg": terminal_i_excess_deg,
+        "terminal_i_error_abs_deg": terminal_i_error_abs_deg,
         "post_a_km": float(burn.post_a_km),
         "post_e": float(burn.post_e),
         "post_i_deg": float(burn.post_i_deg),
@@ -1570,7 +1599,7 @@ def _direction_longitude_latitude_deg(
     return _wrap180(math.degrees(math.atan2(y_ecef, x_ecef))), math.degrees(math.asin(max(-1.0, min(1.0, z / norm))))
 
 
-def _continuous_candidate_score(candidate: dict[str, Any]) -> tuple[float, float, float, float, float, float]:
+def _continuous_candidate_score(candidate: dict[str, Any]) -> tuple[float, float, float, float, float]:
     invalid_penalty = 0.0
     if not bool(candidate.get("duration_ok", False)):
         invalid_penalty += 1.0
@@ -1587,7 +1616,6 @@ def _continuous_candidate_score(candidate: dict[str, Any]) -> tuple[float, float
         continuity_penalty,
         float(candidate["objective_delta_g_kg"]),
         float(candidate.get("propellant_kg", 0.0)),
-        float(candidate.get("pulse_time_offset_s", 0.0)),
     )
 
 
@@ -1622,9 +1650,7 @@ def _continuous_thrust_failed_constraints(
     final = parameters[-1]
     if abs(_wrap180(final.cutoff_longitude_deg_e - float(target["lon_degE"]))) > float(tolerance["lon_deg"]):
         failed.append("终端经度误差")
-    # The local-search objective includes m3, the planned 10 N circularization/inclination trim.
-    terminal_i_after_trim = float(target["i_deg"]) if final.trim_propellant_kg >= 0.0 else final.post_i_deg
-    if abs(terminal_i_after_trim - float(target["i_deg"])) > float(tolerance["i_deg"]):
+    if abs(final.post_i_deg - float(target["i_deg"])) > float(tolerance["i_deg"]):
         failed.append("终端倾角误差")
     if not all(item.search_evaluations >= 0 and math.isfinite(item.objective_delta_g_kg) for item in parameters):
         failed.append("推进剂最小")

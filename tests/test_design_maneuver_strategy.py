@@ -94,6 +94,8 @@ def test_continuous_thrust_parameter_optimizer_uses_pulse_targets(tmp_path: Path
     assert continuous_result.parameters[-1].cutoff_longitude_deg_e == pytest.approx(
         pulse_result.config["target"]["lon_degE"], abs=pulse_result.config["terminal_tolerance"]["lon_deg"]
     )
+    assert continuous_result.parameters[-1].post_i_deg == pytest.approx(pulse_result.config["target"]["i_deg"])
+    assert continuous_result.parameters[-1].propellant_kg > pulse_result.burns[-1].propellant_kg
     assert continuous_result.orbit_history_rows
     assert continuous_result.orbit_history_rows[-1]["phase"] in {"settle", "orbit_control"}
     history_path = export_continuous_thrust_orbit_history_csv(continuous_result, tmp_path / "ct_history.csv")
