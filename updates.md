@@ -458,6 +458,10 @@
 - 提交：`daa1bff`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
 
-## 2026-05-19T17:42:39+08:00 | Align final perigee low-thrust burn
-- 提交：`本次提交`
+## 2026-05-19T17:42:43+08:00 | Align final perigee low-thrust burn
+- 提交：`e6cff0e`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-19T20:24:05+08:00 | Optimize first continuous thrust burn
+- 提交：`本次提交`
+- 影响文件：`src/smart/services/design_maneuver_strategy.py`、`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。

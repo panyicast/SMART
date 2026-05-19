@@ -874,7 +874,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                 self._continuous_thrust_table,
                 row,
                 (
-                    f"MV{parameter.maneuver_index} / {parameter.flight_revolution}",
+                    f"MV{parameter.maneuver_index} / {parameter.flight_revolution} / {parameter.optimization_mode}",
                     parameter.position_label,
                     f"{parameter.burn_start_min:.2f}",
                     f"{parameter.cutoff_min:.2f}",
@@ -897,10 +897,10 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                     (
                         f"{parameter.objective_formula}; "
                         f"m={parameter.propellant_kg:.3f}, "
-                        f"m1={parameter.future_apogee_raise_propellant_kg:.3f}, "
-                        f"m2={parameter.future_perigee_lower_propellant_kg:.3f}, "
-                        f"m3={parameter.trim_propellant_kg:.3f}; "
+                        f"mA={parameter.future_apogee_raise_propellant_kg:.3f}, "
+                        f"mP={parameter.future_perigee_lower_propellant_kg:.3f}; "
                         f"ΔG={parameter.objective_delta_g_kg:.3f} kg; "
+                        f"模式={parameter.optimization_mode}; "
                         f"初值 t={parameter.initial_burn_start_min:.2f} min, "
                         f"δ={parameter.initial_yaw_angle_deg:.2f} deg; "
                         f"评估 {parameter.search_evaluations} 组"
