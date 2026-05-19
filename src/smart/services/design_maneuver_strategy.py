@@ -707,6 +707,7 @@ def optimize_continuous_thrust_model_parameters(
         initial_start_s = max(state_elapsed_s, float(burn.elapsed_min) * 60.0 - float(burn.total_burn_time_min) * 60.0)
         initial_yaw_deg = float(burn.alpha_deg)
         target_post_a_km = float(burn.target_post_a_km if burn.target_post_a_km is not None else burn.post_a_km)
+        target_control_metric, target_control_value_km = _continuous_control_target(config, burn, target_post_a_km)
         remaining = sorted_burns[burn_position + 1 :]
         m1 = float(remaining[0].propellant_kg) if len(remaining) >= 1 else 0.0
         m2 = float(remaining[1].propellant_kg) if len(remaining) >= 2 else 0.0
@@ -814,7 +815,8 @@ def optimize_continuous_thrust_model_parameters(
             state_elapsed_s,
             float(best["burn_start_s"]),
             float(best["yaw_angle_deg"]),
-            target_post_a_km,
+            target_control_metric,
+            target_control_value_km,
             sample_interval_s=history_sample_interval_s,
             integration_step_s=final_integration_step_s,
         )
@@ -963,13 +965,15 @@ def _evaluate_continuous_thrust_candidate(
     *,
     integration_step_s: float,
 ) -> dict[str, Any] | None:
-    burn_result = _integrate_low_thrust_to_target_a(
+    target_control_metric, target_control_value_km = _continuous_control_target(config, burn, target_post_a_km)
+    burn_result = _integrate_low_thrust_to_target_metric(
         config,
         r_start,
         v_start,
         mass_kg,
         burn_start_s,
-        target_post_a_km,
+        target_control_metric,
+        target_control_value_km,
         yaw_angle_deg,
         integration_step_s=integration_step_s,
     )
@@ -1044,13 +1048,14 @@ def _evaluate_continuous_thrust_candidate(
     }
 
 
-def _integrate_low_thrust_to_target_a(
+def _integrate_low_thrust_to_target_metric(
     config: dict[str, Any],
     r_start: np.ndarray,
     v_start: np.ndarray,
     mass_kg: float,
     burn_start_s: float,
-    target_a_km: float,
+    target_metric: str,
+    target_value_km: float,
     yaw_angle_deg: float,
     *,
     integration_step_s: float,
@@ -1079,12 +1084,11 @@ def _integrate_low_thrust_to_target_a(
     state = np.asarray([*np.asarray(r_start, dtype=float), *np.asarray(v_start, dtype=float), float(mass_kg)], dtype=float)
     current_s = float(burn_start_s)
     elapsed_burn_s = 0.0
-    mu = float(config["earth"]["mu_km3_s2"])
-    start_a = _semi_major_axis_from_rv(state[:3], state[3:6], mu)
-    target_sign = 1.0 if float(target_a_km) >= start_a else -1.0
+    start_value = _continuous_target_metric_value(config, state[:3], state[3:6], target_metric)
+    target_sign = 1.0 if float(target_value_km) >= start_value else -1.0
     previous_state = state.copy()
     previous_s = current_s
-    previous_error = target_sign * (start_a - float(target_a_km))
+    previous_error = target_sign * (start_value - float(target_value_km))
     reached = abs(previous_error) <= 1.0e-6
     active_phase = "settle" if settle_limit_s > 0.0 else "orbit_control"
     ideal_delta_v_mps = 0.0
@@ -1109,12 +1113,12 @@ def _integrate_low_thrust_to_target_a(
             phase_elapsed_s += step_s
             elapsed_burn_s += step_s
             try:
-                current_a = _semi_major_axis_from_rv(state[:3], state[3:6], mu)
+                current_value = _continuous_target_metric_value(config, state[:3], state[3:6], target_metric)
             except Exception:
                 return None
-            current_error = target_sign * (current_a - float(target_a_km))
+            current_error = target_sign * (current_value - float(target_value_km))
             if current_error >= 0.0 and previous_error <= 0.0:
-                state, current_s = _refine_low_thrust_a_crossing(
+                state, current_s = _refine_low_thrust_metric_crossing(
                     config,
                     previous_state,
                     previous_s,
@@ -1122,7 +1126,8 @@ def _integrate_low_thrust_to_target_a(
                     yaw_angle_deg,
                     thrust_n,
                     isp_s,
-                    target_a_km,
+                    target_metric,
+                    target_value_km,
                     target_sign,
                 )
                 elapsed_burn_s = current_s - float(burn_start_s)
@@ -1147,6 +1152,32 @@ def _integrate_low_thrust_to_target_a(
         phase=active_phase,
         delta_v_mps=ideal_delta_v_mps,
     )
+
+
+def _continuous_control_target(
+    _config: dict[str, Any],
+    burn: DesignManeuverBurn,
+    target_post_a_km: float,
+) -> tuple[str, float]:
+    if str(burn.apsis).upper() == "A":
+        return "rp", float(burn.post_a_km) * (1.0 - float(burn.post_e))
+    return "a", float(target_post_a_km)
+
+
+def _continuous_target_metric_value(
+    config: dict[str, Any],
+    r: np.ndarray,
+    v: np.ndarray,
+    metric: str,
+) -> float:
+    if metric == "a":
+        return _semi_major_axis_from_rv(r, v, float(config["earth"]["mu_km3_s2"]))
+    a_km, e_val, *_ = _rv_to_coe(r, v, mu=float(config["earth"]["mu_km3_s2"]))
+    if metric == "rp":
+        return float(a_km) * (1.0 - float(e_val))
+    if metric == "ra":
+        return float(a_km) * (1.0 + float(e_val))
+    raise ValueError(f"Unsupported continuous target metric: {metric}")
 
 
 def _low_thrust_result_from_state(
@@ -1279,7 +1310,7 @@ def _local_horizontal_direction_fast(r: np.ndarray, alpha_deg: float) -> np.ndar
     )
 
 
-def _refine_low_thrust_a_crossing(
+def _refine_low_thrust_metric_crossing(
     config: dict[str, Any],
     state_before: np.ndarray,
     time_before_s: float,
@@ -1287,7 +1318,8 @@ def _refine_low_thrust_a_crossing(
     yaw_angle_deg: float,
     thrust_n: float,
     isp_s: float,
-    target_a_km: float,
+    target_metric: str,
+    target_value_km: float,
     target_sign: float,
 ) -> tuple[np.ndarray, float]:
     low_s = 0.0
@@ -1297,8 +1329,8 @@ def _refine_low_thrust_a_crossing(
     for _ in range(18):
         mid_s = 0.5 * (low_s + high_s)
         state_mid = _rk4_low_thrust_step(config, time_before_s, state_before, mid_s, yaw_angle_deg, thrust_n, isp_s)
-        a_mid = _semi_major_axis_from_rv(state_mid[:3], state_mid[3:6], float(config["earth"]["mu_km3_s2"]))
-        if target_sign * (a_mid - float(target_a_km)) >= 0.0:
+        value_mid = _continuous_target_metric_value(config, state_mid[:3], state_mid[3:6], target_metric)
+        if target_sign * (value_mid - float(target_value_km)) >= 0.0:
             best_state = state_mid
             best_time_s = float(time_before_s) + mid_s
             high_s = mid_s
@@ -1425,7 +1457,8 @@ def _append_continuous_burn_history(
     state_elapsed_s: float,
     burn_start_s: float,
     yaw_angle_deg: float,
-    target_a_km: float,
+    target_metric: str,
+    target_value_km: float,
     *,
     sample_interval_s: float,
     integration_step_s: float,
@@ -1445,9 +1478,9 @@ def _append_continuous_burn_history(
     )
     state = np.asarray([*r_start, *v_start, float(mass_kg)], dtype=float)
     current_s = float(burn_start_s)
-    start_a, *_ = _rv_to_coe(state[:3], state[3:6], mu=float(config["earth"]["mu_km3_s2"]))
-    target_sign = 1.0 if target_a_km >= start_a else -1.0
-    previous_error = target_sign * (start_a - target_a_km)
+    start_value = _continuous_target_metric_value(config, state[:3], state[3:6], target_metric)
+    target_sign = 1.0 if target_value_km >= start_value else -1.0
+    previous_error = target_sign * (start_value - target_value_km)
     _append_continuous_orbit_history_row(
         config,
         rows,
@@ -1486,10 +1519,10 @@ def _append_continuous_burn_history(
                     yaw_angle_deg=yaw_angle_deg,
                 )
                 next_sample_s += sample_interval_s
-            current_a = _semi_major_axis_from_rv(state[:3], state[3:6], float(config["earth"]["mu_km3_s2"]))
-            current_error = target_sign * (current_a - target_a_km)
+            current_value = _continuous_target_metric_value(config, state[:3], state[3:6], target_metric)
+            current_error = target_sign * (current_value - target_value_km)
             if current_error >= 0.0 and previous_error <= 0.0:
-                state, current_s = _refine_low_thrust_a_crossing(
+                state, current_s = _refine_low_thrust_metric_crossing(
                     config,
                     previous_state,
                     previous_s,
@@ -1497,7 +1530,8 @@ def _append_continuous_burn_history(
                     yaw_angle_deg,
                     thrust_n,
                     isp_s,
-                    target_a_km,
+                    target_metric,
+                    target_value_km,
                     target_sign,
                 )
                 _append_continuous_orbit_history_row(

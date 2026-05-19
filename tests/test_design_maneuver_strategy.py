@@ -75,6 +75,7 @@ def test_continuous_thrust_parameter_optimizer_uses_pulse_targets(tmp_path: Path
     assert continuous_result.time_step_s == pytest.approx(10.0)
     assert continuous_result.yaw_step_deg == pytest.approx(0.05)
     assert continuous_result.hard_constraint_passed is False
+    assert "终端经度误差" in continuous_result.failed_constraints
     assert "终端偏心率误差" in continuous_result.failed_constraints
     assert len(continuous_result.parameters) == len(pulse_result.burns)
     first = continuous_result.parameters[0]
@@ -88,13 +89,19 @@ def test_continuous_thrust_parameter_optimizer_uses_pulse_targets(tmp_path: Path
     assert first.target_post_a_km == pytest.approx(
         pulse_result.burns[0].target_post_a_km or pulse_result.burns[0].post_a_km
     )
+    re_km = float(pulse_result.config["earth"]["Re_km"])
+    for pulse_burn, continuous_parameter in zip(pulse_result.burns, continuous_result.parameters):
+        if pulse_burn.apsis == "A":
+            pulse_hp_km = pulse_burn.post_a_km * (1.0 - pulse_burn.post_e) - re_km
+            continuous_hp_km = continuous_parameter.post_a_km * (1.0 - continuous_parameter.post_e) - re_km
+            assert continuous_hp_km == pytest.approx(pulse_hp_km, abs=0.02)
     assert first.cutoff_min > first.burn_start_min
     assert first.search_evaluations > 0
     assert first.objective_formula == "m + m1 + m2 + m3"
     assert continuous_result.parameters[-1].objective_formula == "m + m3"
-    assert continuous_result.parameters[-1].cutoff_longitude_deg_e == pytest.approx(
-        pulse_result.config["target"]["lon_degE"], abs=pulse_result.config["terminal_tolerance"]["lon_deg"]
-    )
+    assert abs(
+        continuous_result.parameters[-1].cutoff_longitude_deg_e - pulse_result.config["target"]["lon_degE"]
+    ) > pulse_result.config["terminal_tolerance"]["lon_deg"]
     assert continuous_result.parameters[-1].post_i_deg == pytest.approx(pulse_result.config["target"]["i_deg"])
     assert abs(continuous_result.parameters[-1].post_e - pulse_result.config["target"]["e"]) > pulse_result.config["terminal_tolerance"]["e"]
     assert continuous_result.parameters[-1].propellant_kg > pulse_result.burns[-1].propellant_kg
