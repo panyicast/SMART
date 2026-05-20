@@ -80,6 +80,7 @@ def test_continuous_thrust_parameter_optimizer_uses_pulse_targets(tmp_path: Path
     assert continuous_result.time_step_s == pytest.approx(10.0)
     assert continuous_result.yaw_step_deg == pytest.approx(0.05)
     assert len(continuous_result.parameters) == 5
+    assert continuous_result.hard_constraint_passed, continuous_result.failed_constraints
     first = continuous_result.parameters[0]
     assert first.maneuver_index == pulse_result.burns[0].index
     assert first.flight_revolution == pulse_result.burns[0].flight_revolution
@@ -145,6 +146,27 @@ def test_continuous_thrust_parameter_optimizer_uses_pulse_targets(tmp_path: Path
         assert summary["elapsed_time_min"] == pytest.approx(parameter.cutoff_min)
         assert summary["semi_major_axis_m"] == pytest.approx(parameter.post_a_km * 1000.0, abs=1.0e-4)
         assert summary["inclination_deg"] == pytest.approx(parameter.post_i_deg, abs=1.0e-9)
+
+
+@pytest.mark.parametrize(("target_lon_deg", "target_i_deg"), [(100.0, 6.0), (100.0, 8.0), (140.0, 6.0), (140.0, 8.0)])
+def test_continuous_thrust_optimizer_handles_target_longitude_and_inclination_bounds(
+    target_lon_deg: float,
+    target_i_deg: float,
+) -> None:
+    payload = default_design_maneuver_strategy_payload()
+    payload["target"]["lon_degE"] = target_lon_deg
+    payload["target"]["i_deg"] = target_i_deg
+
+    pulse_result = plan_design_maneuver_strategy(payload)
+    continuous_result = optimize_continuous_thrust_model_parameters(pulse_result)
+
+    assert all(check["passed"] for check in pulse_result.checks)
+    assert continuous_result.hard_constraint_passed, continuous_result.failed_constraints
+    mv4 = continuous_result.parameters[3]
+    mv5 = continuous_result.parameters[4]
+    lon_error = ((mv5.cutoff_longitude_deg_e - target_lon_deg + 180.0) % 360.0) - 180.0
+    assert abs(mv4.post_i_deg - target_i_deg) <= pulse_result.config["terminal_tolerance"]["i_deg"]
+    assert abs(lon_error) <= pulse_result.config["terminal_tolerance"]["lon_deg"]
 
 
 def test_feasible_q_scan_ignores_current_user_q_constraint() -> None:
