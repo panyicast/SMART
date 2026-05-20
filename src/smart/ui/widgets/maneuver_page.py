@@ -256,6 +256,7 @@ class _ManeuverConfigDialog(QtWidgets.QDialog):
         self.setMinimumSize(1080, 700)
         self._drag_position: QtCore.QPoint | None = None
         self._summary_chips: list[QtWidgets.QLabel] = []
+        self._row_payloads: list[dict[str, Any]] = []
         self._table_title_label: QtWidgets.QLabel | None = None
         self._apply_dialog_style()
 
@@ -494,7 +495,7 @@ class _ManeuverConfigDialog(QtWidgets.QDialog):
     def strategy(self) -> dict[str, Any]:
         maneuvers: list[dict[str, Any]] = []
         for row in range(self._table.rowCount()):
-            step: dict[str, Any] = {}
+            step: dict[str, Any] = dict(self._row_payloads[row]) if row < len(self._row_payloads) else {}
             for column_index, column in enumerate(self._columns):
                 widget = self._table.cellWidget(row, column_index)
                 if column.key in {"maneuver_index", "dv_direction"}:
@@ -520,6 +521,7 @@ class _ManeuverConfigDialog(QtWidgets.QDialog):
         for key, field in self._orbit_fields.items():
             field.setValue(float(orbit.get(key, defaults["t0_orbit"][key])))
         self._table.setRowCount(0)
+        self._row_payloads.clear()
         rows = strategy.get("maneuvers", [])
         if isinstance(rows, list):
             for row in rows:
@@ -536,6 +538,7 @@ class _ManeuverConfigDialog(QtWidgets.QDialog):
     def _append_row(self, payload: dict[str, Any]) -> None:
         row = self._table.rowCount()
         self._table.insertRow(row)
+        self._row_payloads.append(dict(payload))
         for column_index, column in enumerate(self._columns):
             value = payload.get(column.key, row + 1 if column.key == "maneuver_index" else 1 if column.key == "dv_direction" else 0.0)
             self._table.setCellWidget(row, column_index, self._make_field(column, value))
@@ -547,6 +550,8 @@ class _ManeuverConfigDialog(QtWidgets.QDialog):
             row = self._table.rowCount() - 1
         if row >= 0:
             self._table.removeRow(row)
+            if row < len(self._row_payloads):
+                del self._row_payloads[row]
             for row_index in range(self._table.rowCount()):
                 widget = self._table.cellWidget(row_index, 0)
                 if isinstance(widget, QtWidgets.QSpinBox):
@@ -554,9 +559,12 @@ class _ManeuverConfigDialog(QtWidgets.QDialog):
             self._refresh_layout_metrics()
 
     def _refresh_layout_metrics(self) -> None:
-        self._sync_summary_chip()
-        self._sync_table_column_widths()
-        self._adjust_table_height_to_rows()
+        try:
+            self._sync_summary_chip()
+            self._sync_table_column_widths()
+            self._adjust_table_height_to_rows()
+        except RuntimeError:
+            return
 
     def _sync_summary_chip(self) -> None:
         count_text = f"{self._table.rowCount()} 次机动"
@@ -570,6 +578,7 @@ class _ManeuverConfigDialog(QtWidgets.QDialog):
             "burn_duration_min": 120,
             "control_fuel_%": 106,
             "settle_duration_s": 110,
+            "yaw_angle_deg": 98,
             "delta_deg": 98,
             "dv_direction": 90,
             "orbit_control_thrust_n": 112,
@@ -1037,6 +1046,7 @@ class ManeuverPage(QtWidgets.QWidget):
         _StrategyColumn("burn_duration_min", "maneuver.table.burn_duration_min", 3),
         _StrategyColumn("control_fuel_%", "maneuver.table.control_fuel_percent", 3),
         _StrategyColumn("settle_duration_s", "maneuver.table.settle_duration_s", 3),
+        _StrategyColumn("yaw_angle_deg", "maneuver.table.yaw_angle_deg", 3),
         _StrategyColumn("delta_deg", "maneuver.table.delta_deg", 3),
         _StrategyColumn("dv_direction", "maneuver.table.dv_direction", 0),
         _StrategyColumn("orbit_control_thrust_n", "maneuver.table.orbit_control_thrust_n", 3),
@@ -2440,6 +2450,7 @@ class ManeuverPage(QtWidgets.QWidget):
             "burn_duration_min": (0.0, 1.0e6, 0.1),
             "control_fuel_%": (-99.0, 100.0, 0.01),
             "settle_duration_s": (0.0, 1.0e7, 1.0),
+            "yaw_angle_deg": (-180.0, 180.0, 0.01),
             "delta_deg": (-180.0, 180.0, 0.01),
             "orbit_control_thrust_n": (0.0, 1.0e7, 1.0),
             "orbit_control_isp_s": (0.0, 1.0e5, 1.0),

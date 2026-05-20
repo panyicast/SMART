@@ -120,6 +120,10 @@ def test_continuous_thrust_parameter_optimizer_uses_pulse_targets(tmp_path: Path
     assert import_payload["maneuvers"][0]["control_fuel_%"] == pytest.approx(
         pulse_result.config["engine"]["attitude_control_efficiency"] * 100.0
     )
+    assert import_payload["maneuvers"][0]["direction_mode"] == "local_horizontal_yaw"
+    assert import_payload["maneuvers"][0]["yaw_angle_deg"] == pytest.approx(
+        continuous_result.parameters[0].yaw_angle_deg
+    )
     assert import_payload["maneuvers"][-1]["dv_direction"] in {-1, 1}
 
 

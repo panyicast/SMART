@@ -137,6 +137,31 @@ def test_orbit_history_rows_save_thrust_direction_angles() -> None:
     assert math.isnan(rows[1]["thrust_latitude_deg"])
 
 
+def test_local_horizontal_yaw_direction_is_applied_during_ignition() -> None:
+    state = np.array([7_000_000.0, 0.0, 0.0, 0.0, 7_500.0, 0.0, 5_000.0], dtype=float)
+    segment = PropagationSegment(
+        phase_name="orbit_control",
+        start_s=0.0,
+        end_s=60.0,
+        thrust_n=490.0,
+        isp_s=315.0,
+        delta_deg=0.0,
+        maneuver_index=1,
+        dv_direction=-1,
+        direction_mode="local_horizontal_yaw",
+        yaw_angle_deg=0.0,
+    )
+
+    command = _command_for_segment(segment, state)
+
+    assert command.direction_eci is not None
+    assert command.direction_eci[0] == pytest.approx(0.0)
+    assert command.direction_eci[1] == pytest.approx(1.0)
+    assert command.direction_eci[2] == pytest.approx(0.0)
+    assert command.alpha_rad == pytest.approx(0.0)
+    assert command.delta_rad == pytest.approx(0.0)
+
+
 def test_strategy_segments_reject_total_burn_shorter_than_settle_duration() -> None:
     step = ManeuverStrategyStep(
         maneuver_index=1,

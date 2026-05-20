@@ -482,6 +482,10 @@
 - 提交：`5e2725d`
 - 影响文件：`HANDOFF.md`、`projects/F4/config/design_maneuver_strategy.json`、`projects/F4/data/design_maneuver_results.json`、`projects/F4/smart_project.json`、`projects/F4/data/design_continuous_thrust_orbit_history.csv`。
 
-## 2026-05-20T19:03:57+08:00 | Add design maneuver import handoff
-- 提交：`本次提交`
+## 2026-05-20T19:04:01+08:00 | Add design maneuver import handoff
+- 提交：`6aa7688`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`src/smart/services/project_workspace.py`、`src/smart/ui/i18n.py`、`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`src/smart/ui/widgets/maneuver_page.py`、`tests/test_design_maneuver_strategy.py`、`tests/test_maneuver_page.py`、`HANDOFF.md`。
+
+## 2026-05-20T19:59:22+08:00 | Unify maneuver import yaw direction
+- 提交：`本次提交`
+- 影响文件：`src/smart/services/design_maneuver_strategy.py`、`src/smart/services/project_workspace.py`、`src/smart/services/thrust_direction.py`、`src/smart/ui/i18n.py`、`src/smart/ui/widgets/maneuver_page.py`、`tests/test_design_maneuver_strategy.py`、`tests/test_maneuver_page.py`、`tests/test_satellite_dynamics_equation.py` 等 10 个文件。

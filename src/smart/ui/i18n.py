@@ -305,6 +305,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "maneuver.table.burn_duration_min": "点火时长 (min)",
         "maneuver.table.control_fuel_percent": "姿控燃料 (%)",
         "maneuver.table.settle_duration_s": "沉底点火 (s)",
+        "maneuver.table.yaw_angle_deg": "偏航角 (deg)",
         "maneuver.table.delta_deg": "偏角 (deg)",
         "maneuver.table.dv_direction": "变速方向",
         "maneuver.table.orbit_control_thrust_n": "变轨推力 (N)",

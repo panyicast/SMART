@@ -80,6 +80,8 @@ def test_maneuver_page_uses_readonly_summary_and_edit_dialog(tmp_path) -> None:
                 "burn_duration_min": 2.5,
                 "control_fuel_%": 1.73,
                 "settle_duration_s": 60.0,
+                "direction_mode": "local_horizontal_yaw",
+                "yaw_angle_deg": 12.5,
                 "delta_deg": 2.5,
                 "dv_direction": 1,
                 "orbit_control_thrust_n": 490.0,
@@ -93,6 +95,8 @@ def test_maneuver_page_uses_readonly_summary_and_edit_dialog(tmp_path) -> None:
                 "burn_duration_min": 3.0,
                 "control_fuel_%": 1.73,
                 "settle_duration_s": 60.0,
+                "direction_mode": "local_horizontal_yaw",
+                "yaw_angle_deg": -178.5,
                 "delta_deg": -1.0,
                 "dv_direction": -1,
                 "orbit_control_thrust_n": 490.0,
@@ -108,6 +112,8 @@ def test_maneuver_page_uses_readonly_summary_and_edit_dialog(tmp_path) -> None:
     assert imported is not None
     assert imported["launch_mass_kg"] == pytest.approx(6400.0)
     assert imported["maneuver_count"] == 2
+    assert imported["maneuvers"][1]["direction_mode"] == "local_horizontal_yaw"
+    assert imported["maneuvers"][1]["yaw_angle_deg"] == pytest.approx(-178.5)
     assert imported["maneuvers"][1]["dv_direction"] == -1
     assert page._strategy_table.rowCount() == 2
     assert "已从设计变轨策略导入配置" in page._status_label.text()
@@ -121,7 +127,7 @@ def test_maneuver_page_uses_readonly_summary_and_edit_dialog(tmp_path) -> None:
         widget = dialog._table.cellWidget(0, column)
         assert widget is not None
         assert dialog._table.rowHeight(0) >= widget.sizeHint().height()
-    direction_widget = dialog._table.cellWidget(0, 6)
+    direction_widget = dialog._table.cellWidget(0, 7)
     assert isinstance(direction_widget, QtWidgets.QComboBox)
     assert direction_widget.maxVisibleItems() == 2
     beijing_tz = QtCore.QTimeZone(b"Asia/Shanghai")
@@ -134,3 +140,7 @@ def test_maneuver_page_uses_readonly_summary_and_edit_dialog(tmp_path) -> None:
     assert edited["launch_mass_kg"] == 7000.0
     assert edited["t0_epoch"] == "2024-01-01T00:00:00Z"
     assert len(edited["maneuvers"]) == len(imported["maneuvers"])
+    assert edited["maneuvers"][0]["direction_mode"] == "local_horizontal_yaw"
+    assert edited["maneuvers"][0]["yaw_angle_deg"] == pytest.approx(12.5)
+    dialog.close()
+    dialog.deleteLater()

@@ -729,6 +729,8 @@ def _default_maneuver_step_payload(maneuver_index: int) -> dict[str, Any]:
         "burn_duration_min": 0.0,
         "control_fuel_%": 0.0,
         "settle_duration_s": 240.0,
+        "direction_mode": "delta_tangent",
+        "yaw_angle_deg": 0.0,
         "delta_deg": 0.0,
         "dv_direction": 1,
         "orbit_control_thrust_n": 490.0,
@@ -743,6 +745,12 @@ def _normalize_maneuver_step_payload(step: dict[str, Any], fallback_index: int) 
     maneuver_index = int(step.get("maneuver_index", default["maneuver_index"]))
     if maneuver_index <= 0:
         maneuver_index = int(default["maneuver_index"])
+    direction_mode = str(step.get("direction_mode", default["direction_mode"]))
+    if direction_mode not in {"delta_tangent", "local_horizontal_yaw"}:
+        raise ValueError(
+            "Invalid maneuver strategy JSON payload: 'direction_mode' must be "
+            "'delta_tangent' or 'local_horizontal_yaw'."
+        )
     return {
         "maneuver_index": maneuver_index,
         "Tn_start_min": _coerce_minutes_value(
@@ -765,6 +773,8 @@ def _normalize_maneuver_step_payload(step: dict[str, Any], fallback_index: int) 
             step.get("control_fuel_%", step.get("control_fuel_percent", default["control_fuel_%"]))
         ),
         "settle_duration_s": float(step.get("settle_duration_s", default["settle_duration_s"])),
+        "direction_mode": direction_mode,
+        "yaw_angle_deg": float(step.get("yaw_angle_deg", default["yaw_angle_deg"])),
         "delta_deg": float(step.get("delta_deg", step.get("delta", default["delta_deg"]))),
         "dv_direction": _coerce_dv_direction(step.get("dv_direction", default["dv_direction"])),
         "orbit_control_thrust_n": float(step.get("orbit_control_thrust_n", default["orbit_control_thrust_n"])),

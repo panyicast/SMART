@@ -19,6 +19,7 @@ except Exception:  # pragma: no cover - optional runtime fallback
 
 from smart.domain.models import OrbitalElements
 from smart.services.earth_orientation import format_utc, greenwich_angle_at_utc, parse_utc, utc_now_iso_z
+from smart.services.thrust_direction import local_horizontal_yaw_direction
 
 BEIJING_OFFSET = timedelta(hours=8)
 G0_M_S2 = 9.80665
@@ -705,6 +706,8 @@ def continuous_thrust_result_to_maneuver_strategy_payload(
                 "burn_duration_min": total_burn_s / 60.0,
                 "control_fuel_%": float(engine["attitude_control_efficiency"]) * 100.0,
                 "settle_duration_s": settle_duration_s,
+                "direction_mode": "local_horizontal_yaw",
+                "yaw_angle_deg": float(parameter.yaw_angle_deg),
                 "delta_deg": delta_deg,
                 "dv_direction": dv_direction,
                 "orbit_control_thrust_n": float(engine["F_main_N"]),
@@ -1702,35 +1705,7 @@ def _semi_major_axis_from_rv(r: np.ndarray, v: np.ndarray, mu: float) -> float:
 
 
 def _local_horizontal_direction_fast(r: np.ndarray, alpha_deg: float) -> np.ndarray:
-    x, y, z = float(r[0]), float(r[1]), float(r[2])
-    xy_norm = math.hypot(x, y)
-    if xy_norm <= 1.0e-12:
-        east_x, east_y, east_z = 0.0, 1.0, 0.0
-    else:
-        east_x, east_y, east_z = -y / xy_norm, x / xy_norm, 0.0
-    r_norm = math.sqrt(x * x + y * y + z * z)
-    inv_r2 = 1.0 / max(1.0e-24, r_norm * r_norm)
-    north_x = -z * x * inv_r2
-    north_y = -z * y * inv_r2
-    north_z = 1.0 - z * z * inv_r2
-    north_norm = math.sqrt(north_x * north_x + north_y * north_y + north_z * north_z)
-    if north_norm <= 1.0e-12:
-        north_x, north_y, north_z = -east_y, east_x, 0.0
-        north_norm = math.sqrt(north_x * north_x + north_y * north_y + north_z * north_z)
-    north_x /= north_norm
-    north_y /= north_norm
-    north_z /= north_norm
-    alpha = math.radians(alpha_deg)
-    cos_a = math.cos(alpha)
-    sin_a = math.sin(alpha)
-    return np.asarray(
-        [
-            cos_a * east_x - sin_a * north_x,
-            cos_a * east_y - sin_a * north_y,
-            cos_a * east_z - sin_a * north_z,
-        ],
-        dtype=float,
-    )
+    return local_horizontal_yaw_direction(r, alpha_deg)
 
 
 def _refine_low_thrust_metric_crossing(
@@ -4836,9 +4811,7 @@ def _longitude_deg(config: dict[str, Any], r: np.ndarray, elapsed_s: float) -> f
 
 
 def _local_horizontal_direction(r: np.ndarray, alpha_deg: float) -> np.ndarray:
-    east, _north, south = _local_horizontal_basis(r)
-    alpha = math.radians(alpha_deg)
-    return math.cos(alpha) * east + math.sin(alpha) * south
+    return local_horizontal_yaw_direction(r, alpha_deg)
 
 
 def _local_horizontal_basis(r: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:

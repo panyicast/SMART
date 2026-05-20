@@ -22,6 +22,7 @@ from smart.services.earth_orientation import (
     inertial_raan_deg_from_ascending_node_longitude_deg,
     utc_now_iso_z,
 )
+from smart.services.thrust_direction import local_horizontal_yaw_direction
 
 Vector3 = NDArray[np.float64]
 StateVector = NDArray[np.float64]  # [x, y, z, vx, vy, vz, m] in SI
@@ -47,6 +48,7 @@ class ThrustCommand:
     alpha_rad: float     # rad
     delta_rad: float     # rad
     isp_s: float         # s
+    direction_eci: Vector3 | None = None
 
 
 @dataclass(frozen=True)
@@ -95,6 +97,8 @@ class ManeuverStrategyStep:
     settle_thrust_n: float
     settle_isp_s: float
     dv_direction: int = 1
+    direction_mode: str = "delta_tangent"
+    yaw_angle_deg: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -109,6 +113,8 @@ class PropagationSegment:
     delta_deg: float
     maneuver_index: int | None = None
     dv_direction: int = 1
+    direction_mode: str = "delta_tangent"
+    yaw_angle_deg: float = 0.0
 
 
 # T0 default data from the figure / configuration template.
@@ -176,6 +182,11 @@ def _strategy_step_from_payload(payload: dict[str, Any], fallback_index: int) ->
     dv_direction = int(float(payload.get("dv_direction", 1)))
     if dv_direction not in {-1, 1}:
         raise ValueError(f"Maneuver {maneuver_index} dv_direction must be 1 or -1.")
+    direction_mode = str(payload.get("direction_mode", "delta_tangent"))
+    if direction_mode not in {"delta_tangent", "local_horizontal_yaw"}:
+        raise ValueError(
+            f"Maneuver {maneuver_index} direction_mode must be 'delta_tangent' or 'local_horizontal_yaw'."
+        )
     return ManeuverStrategyStep(
         maneuver_index=maneuver_index,
         Tn_start_min=_time_in_minutes_from_payload(
@@ -200,6 +211,8 @@ def _strategy_step_from_payload(payload: dict[str, Any], fallback_index: int) ->
         settle_thrust_n=float(payload.get("settle_thrust_n", 20.0)),
         settle_isp_s=float(payload.get("settle_isp_s", 290.0)),
         dv_direction=dv_direction,
+        direction_mode=direction_mode,
+        yaw_angle_deg=float(payload.get("yaw_angle_deg", 0.0)),
     )
 
 
@@ -640,6 +653,16 @@ def thrust_direction(alpha_rad: float, delta_rad: float) -> Vector3:
     return np.array([cos_a * cos_d, sin_a * cos_d, sin_d], dtype=np.float64)
 
 
+def _command_direction_eci(command: ThrustCommand) -> Vector3:
+    if command.direction_eci is not None:
+        direction = np.asarray(command.direction_eci, dtype=np.float64)
+        norm = float(np.linalg.norm(direction))
+        if norm <= 0.0:
+            raise ValueError("Thrust command direction_eci must be non-zero.")
+        return direction / norm
+    return thrust_direction(command.alpha_rad, command.delta_rad)
+
+
 def _alpha_candidates_from_delta(state: StateVector, delta_rad: float, tol: float = 1e-10) -> list[float]:
     """
     Return alpha candidates from tangency constraint:
@@ -750,7 +773,7 @@ def satellite_dynamics(
     ay += j2_factor * y * (-1.5 + 7.5 * zr2)
     az += j2_factor * z * (-4.5 + 7.5 * zr2)
 
-    u = thrust_direction(command.alpha_rad, command.delta_rad)
+    u = _command_direction_eci(command)
     thrust_over_mass = command.thrust_n / mass
     ax += thrust_over_mass * float(u[0])
     ay += thrust_over_mass * float(u[1])
@@ -855,7 +878,8 @@ def build_propagation_segments_from_strategy(
       - burn_duration_min is the total burn window including settle and orbit-control phases
       - orbit-control thruster: starts after settle_duration_s and ends at Tn_start_min + burn_duration_min
       - orbit-control Isp: orbit_control_isp_s / (1 + control_fuel_% / 100)
-      - dv_direction: 1 selects the tangent solution along velocity, -1 selects the one against velocity.
+      - direction_mode=delta_tangent: delta_deg and dv_direction select the tangent solution.
+      - direction_mode=local_horizontal_yaw: yaw_angle_deg is fixed during ignition.
       - between burns: coast
       - after last burn: append extra_free_flight_s coast.
     """
@@ -872,6 +896,10 @@ def build_propagation_segments_from_strategy(
             raise ValueError(f"Maneuver {step.maneuver_index} burn_duration_min must be >= 0.")
         if step.dv_direction not in {-1, 1}:
             raise ValueError(f"Maneuver {step.maneuver_index} dv_direction must be 1 or -1.")
+        if step.direction_mode not in {"delta_tangent", "local_horizontal_yaw"}:
+            raise ValueError(
+                f"Maneuver {step.maneuver_index} direction_mode must be 'delta_tangent' or 'local_horizontal_yaw'."
+            )
 
         control_fuel_factor = 1.0 + step.control_fuel_percent / 100.0
         if control_fuel_factor <= 0.0:
@@ -905,6 +933,8 @@ def build_propagation_segments_from_strategy(
                     delta_deg=step.delta_deg,
                     maneuver_index=step.maneuver_index,
                     dv_direction=step.dv_direction,
+                    direction_mode=step.direction_mode,
+                    yaw_angle_deg=step.yaw_angle_deg,
                 )
             )
 
@@ -919,6 +949,8 @@ def build_propagation_segments_from_strategy(
                     delta_deg=step.delta_deg,
                     maneuver_index=step.maneuver_index,
                     dv_direction=step.dv_direction,
+                    direction_mode=step.direction_mode,
+                    yaw_angle_deg=step.yaw_angle_deg,
                 )
             )
 
@@ -950,6 +982,8 @@ def build_propagation_segments_from_strategy(
                     delta_deg=0.0,
                     maneuver_index=None,
                     dv_direction=1,
+                    direction_mode="delta_tangent",
+                    yaw_angle_deg=0.0,
                 )
             )
         if thrust_segment.end_s > cursor_s + tol:
@@ -964,6 +998,8 @@ def build_propagation_segments_from_strategy(
                     delta_deg=thrust_segment.delta_deg,
                     maneuver_index=thrust_segment.maneuver_index,
                     dv_direction=thrust_segment.dv_direction,
+                    direction_mode=thrust_segment.direction_mode,
+                    yaw_angle_deg=thrust_segment.yaw_angle_deg,
                 )
             )
             cursor_s = thrust_segment.end_s
@@ -979,6 +1015,8 @@ def build_propagation_segments_from_strategy(
                 delta_deg=0.0,
                 maneuver_index=None,
                 dv_direction=1,
+                direction_mode="delta_tangent",
+                yaw_angle_deg=0.0,
             )
         )
 
@@ -1014,6 +1052,16 @@ def _command_for_segment(segment: PropagationSegment, state: StateVector) -> Thr
         )
     if segment.isp_s <= 0.0:
         raise ValueError(f"Segment ISP must be positive for thrusting phase '{segment.phase_name}'.")
+    if segment.direction_mode == "local_horizontal_yaw":
+        return ThrustCommand(
+            thrust_n=segment.thrust_n,
+            alpha_rad=math.radians(segment.yaw_angle_deg),
+            delta_rad=0.0,
+            isp_s=segment.isp_s,
+            direction_eci=local_horizontal_yaw_direction(state[:3], segment.yaw_angle_deg),
+        )
+    if segment.direction_mode != "delta_tangent":
+        raise ValueError(f"Segment direction_mode must be 'delta_tangent' or 'local_horizontal_yaw'.")
     if segment.dv_direction not in {-1, 1}:
         raise ValueError(f"Segment dv_direction must be 1 or -1 for thrusting phase '{segment.phase_name}'.")
     delta_rad = math.radians(segment.delta_deg)
@@ -1089,7 +1137,7 @@ def _thrust_history_values(
     if command.thrust_n <= 0.0:
         return empty
 
-    direction_eci = thrust_direction(command.alpha_rad, command.delta_rad)
+    direction_eci = _command_direction_eci(command)
     direction_ecef = eci_to_ecef(
         direction_eci,
         elapsed_time_s=elapsed_time_s,
@@ -1097,8 +1145,9 @@ def _thrust_history_values(
         theta_g0_rad=theta_g0_rad,
     )
     longitude_deg, latitude_deg = _direction_longitude_latitude_deg(direction_ecef)
+    alpha_deg = segment.yaw_angle_deg if segment.direction_mode == "local_horizontal_yaw" else math.degrees(command.alpha_rad)
     return {
-        "thrust_alpha_deg": _wrap_degrees_180(math.degrees(command.alpha_rad)),
+        "thrust_alpha_deg": _wrap_degrees_180(alpha_deg),
         "thrust_beta_deg": math.degrees(command.delta_rad),
         "thrust_longitude_deg": longitude_deg,
         "thrust_latitude_deg": latitude_deg,
