@@ -494,6 +494,10 @@
 - 提交：`9c2a191`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`scripts/satellite_dynamics_equation.py`、`HANDOFF.md`。
 
-## 2026-05-20T20:41:58+08:00 | Export continuous thrust strategy spreadsheet
-- 提交：`本次提交`
+## 2026-05-20T20:42:02+08:00 | Export continuous thrust strategy spreadsheet
+- 提交：`59bc99f`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-20T20:54:15+08:00 | Polish design maneuver UI
+- 提交：`本次提交`
+- 影响文件：`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。

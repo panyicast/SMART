@@ -288,12 +288,15 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path, monkeyp
     assert not hasattr(page, "_summary_card")
     assert not hasattr(page, "_summary_table")
     assert not hasattr(page, "_check_table")
-    assert page._config_panel.maximumHeight() <= 178
-    assert page._config_overview_table.maximumHeight() <= 118
+    assert page._config_panel.maximumHeight() <= 218
+    assert page._parameter_config_button.minimumHeight() >= 44
+    assert page._config_overview_table.maximumHeight() <= 150
     assert page._config_overview_table.rowCount() == 4
     assert page._burn_table.maximumHeight() <= 210
     assert page._continuous_thrust_button.text() == "优化连续推力模型参数"
+    assert page._continuous_thrust_button.minimumHeight() >= 40
     assert page._export_continuous_strategy_button.text() == "导出变轨策略"
+    assert page._export_continuous_strategy_button.minimumWidth() >= 150
     assert page._continuous_thrust_table.columnCount() == 16
     assert page._result_panel.layout().indexOf(page._continuous_thrust_table.parentWidget()) >= 0
     perigee_layout = page._mv1_hp_target_label.parentWidget().layout()
