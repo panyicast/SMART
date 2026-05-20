@@ -4,6 +4,10 @@ import math
 from typing import Any
 
 import numpy as np
+try:
+    from scipy.optimize import minimize
+except Exception:  # pragma: no cover - SciPy is optional at runtime.
+    minimize = None
 
 from smart.services.design_maneuver_strategy import (
     ContinuousThrustManeuverParameter,
@@ -49,7 +53,7 @@ def optimize_continuous_thrust_chain_parameters(
 
     _append_history(config, history_rows, 0.0, r, v, mass_kg, "coast", True)
 
-    for burn_position in range(4):
+    for burn_position in range(3):
         burn = burns[burn_position]
         if burn_position == 0:
             event_s = float(burn.elapsed_min) * 60.0
@@ -63,36 +67,21 @@ def optimize_continuous_thrust_chain_parameters(
                 apogee_q_sequence[burn_position - 1],
             )
         nominal_start_s = event_s - 0.5 * float(burn.total_burn_time_min) * 60.0
-        target_a_km = sync_a_km if burn_position == 3 else float(
+        target_a_km = float(
             burn.target_post_a_km if burn.target_post_a_km is not None else burn.post_a_km
         )
-        if burn_position == 3:
-            candidate = _optimize_apogee_burn_for_inclination(
-                config,
-                r,
-                v,
-                elapsed_s,
-                mass_kg,
-                burn,
-                target_a_km,
-                nominal_start_s,
-                float(burn.alpha_deg),
-                target_i_deg,
-                integration_step_s=final_integration_step_s,
-            )
-        else:
-            candidate = _evaluate_apogee_candidate(
-                config,
-                r,
-                v,
-                elapsed_s,
-                mass_kg,
-                burn,
-                target_a_km,
-                nominal_start_s,
-                float(burn.alpha_deg),
-                integration_step_s=final_integration_step_s,
-            )
+        candidate = _evaluate_apogee_candidate(
+            config,
+            r,
+            v,
+            elapsed_s,
+            mass_kg,
+            burn,
+            target_a_km,
+            nominal_start_s,
+            float(burn.alpha_deg),
+            integration_step_s=final_integration_step_s,
+        )
         if candidate is None:
             raise ValueError(f"MV{burn_position + 1} 连续推力积分未到达熄火目标。")
         parameters.append(
@@ -122,22 +111,44 @@ def optimize_continuous_thrust_chain_parameters(
         elapsed_s = float(candidate["cutoff_s"])
         mass_kg = float(candidate["post_mass_kg"])
 
-    perigee_s, _perigee_r, _perigee_v = _next_apsis(config, r, v, elapsed_s, "P", 1)
+    mv4_burn = burns[3]
     final_burn = burns[-1]
-    nominal_final_start_s = perigee_s - 0.5 * float(final_burn.total_burn_time_min) * 60.0
-    final_candidate = _optimize_final_perigee_burn_for_longitude(
+    mv4_event_s, _mv4_event_r, _mv4_event_v = _next_apsis(
+        config,
+        r,
+        v,
+        elapsed_s,
+        "A",
+        apogee_q_sequence[2],
+    )
+    mv4_nominal_start_s = mv4_event_s - 0.5 * float(mv4_burn.total_burn_time_min) * 60.0
+    mv4_candidate, final_candidate, nominal_final_start_s = _optimize_tail_for_longitude_and_eccentricity(
         config,
         r,
         v,
         elapsed_s,
         mass_kg,
+        mv4_burn,
         final_burn,
-        nominal_final_start_s,
+        mv4_nominal_start_s,
         target_lon_deg,
+        target_i_deg,
         integration_step_s=final_integration_step_s,
     )
-    if final_candidate is None:
-        raise ValueError("MV5 连续推力积分未到达半长轴目标。")
+    if mv4_candidate is None or final_candidate is None:
+        raise ValueError("连续推力尾段优化未能生成 MV4/MV5 目标解。")
+    parameters.append(
+        _parameter_from_candidate(
+            config,
+            mv4_burn,
+            mv4_candidate,
+            sync_a_km,
+            mv4_nominal_start_s,
+            float(mv4_burn.alpha_deg),
+            mode="终端经度/倾角联合优化",
+            objective_formula="m",
+        )
+    )
     parameters.append(
         _parameter_from_candidate(
             config,
@@ -270,6 +281,193 @@ def _mv4_score(candidate: dict[str, Any], target_i_deg: float) -> tuple[float, f
     return (
         abs(float(candidate["post_i_deg"]) - float(target_i_deg)),
         float(candidate["total_burn_time_s"]),
+    )
+
+
+def _optimize_tail_for_longitude_and_eccentricity(
+    config: dict[str, Any],
+    r: np.ndarray,
+    v: np.ndarray,
+    elapsed_s: float,
+    mass_kg: float,
+    mv4_burn: Any,
+    final_burn: Any,
+    mv4_center_start_s: float,
+    target_lon_deg: float,
+    target_i_deg: float,
+    *,
+    integration_step_s: float,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, float]:
+    cache: dict[tuple[float, float], tuple[dict[str, Any], dict[str, Any], float] | None] = {}
+    target_a_km = float(config["target"]["a_km"])
+    search_integration_step_s = max(float(integration_step_s), 120.0)
+
+    def evaluate(
+        offset_min: float,
+        yaw_delta_deg: float,
+        *,
+        step_s: float = search_integration_step_s,
+        use_cache: bool = True,
+    ) -> tuple[dict[str, Any], dict[str, Any], float] | None:
+        key = (round(float(offset_min), 4), round(float(yaw_delta_deg), 4))
+        if use_cache and key in cache:
+            return cache[key]
+        mv4_start_s = max(float(elapsed_s), float(mv4_center_start_s) + float(offset_min) * 60.0)
+        mv4_candidate = _evaluate_apogee_candidate(
+            config,
+            r,
+            v,
+            elapsed_s,
+            mass_kg,
+            mv4_burn,
+            target_a_km,
+            mv4_start_s,
+            float(mv4_burn.alpha_deg) + float(yaw_delta_deg),
+            integration_step_s=step_s,
+        )
+        if mv4_candidate is None:
+            if use_cache:
+                cache[key] = None
+            return None
+        mv4_r = np.asarray(mv4_candidate["r_cutoff"], dtype=float)
+        mv4_v = np.asarray(mv4_candidate["v_cutoff"], dtype=float)
+        mv4_elapsed_s = float(mv4_candidate["cutoff_s"])
+        perigee_s, _perigee_r, _perigee_v = _next_apsis(config, mv4_r, mv4_v, mv4_elapsed_s, "P", 1)
+        final_center_start_s = perigee_s - 0.5 * float(final_burn.total_burn_time_min) * 60.0
+        final_candidate = _optimize_final_perigee_burn_for_eccentricity(
+            config,
+            mv4_r,
+            mv4_v,
+            mv4_elapsed_s,
+            float(mv4_candidate["post_mass_kg"]),
+            final_burn,
+            final_center_start_s,
+            integration_step_s=step_s,
+        )
+        if final_candidate is None:
+            if use_cache:
+                cache[key] = None
+            return None
+        result = (mv4_candidate, final_candidate, final_center_start_s)
+        if use_cache:
+            cache[key] = result
+        return result
+
+    def score(offset_min: float, yaw_delta_deg: float) -> float:
+        item = evaluate(offset_min, yaw_delta_deg)
+        if item is None:
+            return 1.0e12
+        mv4_candidate, final_candidate, _final_center_start_s = item
+        tolerance = config["terminal_tolerance"]
+        lon_error = abs(_wrap180(float(final_candidate["cutoff_longitude_deg_e"]) - float(target_lon_deg)))
+        mv4_i_error = abs(float(mv4_candidate["post_i_deg"]) - float(target_i_deg))
+        final_i_error = abs(float(final_candidate["post_i_deg"]) - float(target_i_deg))
+        lon_excess = max(0.0, lon_error - float(tolerance["lon_deg"]))
+        mv4_i_excess = max(0.0, mv4_i_error - float(tolerance["i_deg"]))
+        return (
+            1.0e8 * lon_excess * lon_excess
+            + 1.0e8 * mv4_i_excess * mv4_i_excess
+            + 2.0e3 * float(final_candidate["post_e"])
+            + 50.0 * final_i_error
+            + lon_error
+            + 100.0 * mv4_i_error
+            + 0.02 * abs(float(offset_min))
+        )
+
+    seeds = [
+        (0.0, 0.0),
+        (-60.0, -2.0),
+        (-60.0, 0.0),
+        (-60.0, 2.0),
+        (-30.0, -1.0),
+        (-30.0, 1.0),
+        (30.0, -1.0),
+        (30.0, 1.0),
+        (60.0, -2.0),
+        (60.0, 0.0),
+        (60.0, 2.0),
+    ]
+    best_x = min(seeds, key=lambda item: score(item[0], item[1]))
+    if minimize is not None:
+        result = minimize(
+            lambda x: score(float(x[0]), float(x[1])),
+            np.asarray(best_x, dtype=float),
+            method="Powell",
+            bounds=[(-90.0, 90.0), (-6.0, 6.0)],
+            options={"maxiter": 55, "maxfev": 140, "xtol": 0.05, "ftol": 1.0e-5},
+        )
+        if bool(getattr(result, "success", False)) or hasattr(result, "x"):
+            candidate_x = (float(result.x[0]), float(result.x[1]))
+            if score(candidate_x[0], candidate_x[1]) < score(best_x[0], best_x[1]):
+                best_x = candidate_x
+    fine_offsets = _grid_values(float(best_x[0]), span=3.0, step=0.5)
+    fine_yaws = _grid_values(float(best_x[1]), span=0.2, step=0.05)
+    for offset_min in fine_offsets:
+        for yaw_delta_deg in fine_yaws:
+            if score(offset_min, yaw_delta_deg) < score(best_x[0], best_x[1]):
+                best_x = (offset_min, yaw_delta_deg)
+    best = evaluate(best_x[0], best_x[1], step_s=integration_step_s, use_cache=False)
+    if best is None:
+        return None, None, 0.0
+    return best
+
+
+def _optimize_final_perigee_burn_for_eccentricity(
+    config: dict[str, Any],
+    r: np.ndarray,
+    v: np.ndarray,
+    elapsed_s: float,
+    mass_kg: float,
+    burn: Any,
+    center_start_s: float,
+    *,
+    integration_step_s: float,
+) -> dict[str, Any] | None:
+    target_a_km = float(config["target"]["a_km"])
+    yaw_angle_deg = float(burn.alpha_deg)
+
+    def evaluate(offset_min: float) -> dict[str, Any] | None:
+        burn_start_s = max(float(elapsed_s), float(center_start_s) + offset_min * 60.0)
+        r_start, v_start = _propagate_state_to_elapsed(config, r, v, elapsed_s, burn_start_s)
+        burn_result = _integrate_low_thrust_to_target_metric(
+            config,
+            r_start,
+            v_start,
+            mass_kg,
+            burn_start_s,
+            "a",
+            target_a_km,
+            yaw_angle_deg,
+            integration_step_s=integration_step_s,
+        )
+        if burn_result is None:
+            return None
+        candidate = _final_candidate(config, burn_result, r_start, v_start, burn_start_s, mass_kg, yaw_angle_deg)
+        candidate["search_evaluations"] = int(candidate.get("search_evaluations", 0)) + 1
+        candidate["seed_time_offset_s"] = abs(offset_min) * 60.0
+        return candidate
+
+    best = _best_from_grid(
+        _grid_values(0.0, span=3.0, step=0.5),
+        evaluate,
+        lambda candidate: _final_eccentricity_score(candidate, config),
+    )
+    if best is None:
+        return None
+    best_offset_min = (float(best["burn_start_s"]) - float(center_start_s)) / 60.0
+    return _best_from_grid(
+        _grid_values(best_offset_min, span=0.5, step=0.1),
+        evaluate,
+        lambda candidate: _final_eccentricity_score(candidate, config),
+        initial=best,
+    )
+
+
+def _final_eccentricity_score(candidate: dict[str, Any], config: dict[str, Any]) -> tuple[float, float, float]:
+    return (
+        float(candidate["post_e"]),
+        abs(float(candidate["post_a_km"]) - float(config["target"]["a_km"])),
+        abs(float(candidate.get("seed_time_offset_s", 0.0))),
     )
 
 
