@@ -8,6 +8,7 @@ from PySide6 import QtCore, QtWidgets
 
 import smart.services.design_maneuver_strategy as design_strategy
 from smart.services.design_maneuver_strategy import (
+    continuous_thrust_result_to_maneuver_strategy_payload,
     default_design_maneuver_strategy_payload,
     export_continuous_thrust_orbit_history_csv,
     find_feasible_q_sequences,
@@ -107,6 +108,19 @@ def test_continuous_thrust_parameter_optimizer_uses_pulse_targets(tmp_path: Path
     assert history_path.exists()
     assert "semi_major_axis_m" in history_path.read_text(encoding="utf-8-sig").splitlines()[0]
     assert continuous_result.objective_delta_g_kg == pytest.approx(continuous_result.total_propellant_kg)
+    import_payload = continuous_thrust_result_to_maneuver_strategy_payload(continuous_result, pulse_result.config)
+    assert import_payload["source"]["type"] == "design_continuous_thrust"
+    assert import_payload["launch_mass_kg"] == pytest.approx(pulse_result.config["initial"]["m0_kg"])
+    assert import_payload["t0_orbit"]["semi_major_axis_m"] == pytest.approx(pulse_result.config["initial"]["a_km"] * 1000.0)
+    assert import_payload["maneuver_count"] == len(continuous_result.parameters)
+    assert import_payload["maneuvers"][0]["Tn_start_min"] == pytest.approx(continuous_result.parameters[0].burn_start_min)
+    assert import_payload["maneuvers"][0]["burn_duration_min"] == pytest.approx(
+        continuous_result.parameters[0].cutoff_min - continuous_result.parameters[0].burn_start_min
+    )
+    assert import_payload["maneuvers"][0]["control_fuel_%"] == pytest.approx(
+        pulse_result.config["engine"]["attitude_control_efficiency"] * 100.0
+    )
+    assert import_payload["maneuvers"][-1]["dv_direction"] in {-1, 1}
 
 
 def test_feasible_q_scan_ignores_current_user_q_constraint() -> None:
@@ -317,6 +331,13 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path, monkeyp
     assert page._burn_table.rowCount() == 6
     page._continuous_thrust_button.click()
     assert page._continuous_thrust_table.rowCount() == 5
+    assert workspace.design_import_maneuver_strategy_path().exists()
+    import_strategy = workspace.load_design_import_maneuver_strategy()
+    assert import_strategy is not None
+    assert import_strategy["maneuver_count"] == 5
+    assert import_strategy["maneuvers"][0]["Tn_start_min"] == pytest.approx(
+        page._continuous_thrust_result.parameters[0].burn_start_min
+    )
     assert page._continuous_thrust_table.item(0, 0).text().startswith("MV1 / ")
     assert "固定链路优化" in page._continuous_thrust_table.item(0, 0).text()
     assert "近地点面内减速" in page._continuous_thrust_table.item(4, 0).text()

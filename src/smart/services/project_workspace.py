@@ -18,6 +18,7 @@ from smart.domain.models import (
 from smart.services.earth_orientation import format_utc, parse_utc, utc_now_iso_z
 from smart.services.design_maneuver_strategy import (
     DesignManeuverResult,
+    continuous_thrust_result_to_maneuver_strategy_payload,
     design_maneuver_result_from_payload,
     design_maneuver_result_to_payload,
     default_design_maneuver_strategy_payload,
@@ -39,6 +40,7 @@ SATELLITE_SETTINGS_FILE = "satellite_status.json"
 ORBIT_INITIALIZATION_FILE = "orbit_initialization.json"
 MANEUVER_STRATEGY_FILE = "maneuver_strategy.json"
 DESIGN_MANEUVER_STRATEGY_FILE = "design_maneuver_strategy.json"
+DESIGN_IMPORT_MANEUVER_STRATEGY_FILE = "design_import_maneuver_strategy.json"
 DESIGN_MANEUVER_RESULTS_FILE = "design_maneuver_results.json"
 LAUNCH_WINDOW_FILE = "launch_window.json"
 TRACKING_ARC_FILE = "tracking_arc.json"
@@ -182,6 +184,9 @@ class ProjectWorkspace:
     def design_maneuver_strategy_path(self) -> Path:
         return self.config_dir() / DESIGN_MANEUVER_STRATEGY_FILE
 
+    def design_import_maneuver_strategy_path(self) -> Path:
+        return self.config_dir() / DESIGN_IMPORT_MANEUVER_STRATEGY_FILE
+
     def design_maneuver_results_path(self) -> Path:
         return self.data_dir() / DESIGN_MANEUVER_RESULTS_FILE
 
@@ -286,6 +291,28 @@ class ProjectWorkspace:
             return None
         payload = _read_json(file_path)
         return normalize_design_maneuver_strategy_payload(payload)
+
+    def save_design_import_maneuver_strategy(self, strategy: dict[str, Any]) -> Path:
+        payload = _normalize_maneuver_strategy_payload(strategy)
+        file_path = self.design_import_maneuver_strategy_path()
+        _write_json(file_path, payload)
+        self._touch_updated_time()
+        return file_path
+
+    def load_design_import_maneuver_strategy(self) -> dict[str, Any] | None:
+        file_path = self.design_import_maneuver_strategy_path()
+        if not file_path.exists():
+            return None
+        payload = _read_json(file_path)
+        return _normalize_maneuver_strategy_payload(payload)
+
+    def save_continuous_thrust_import_maneuver_strategy(
+        self,
+        result: Any,
+        design_config: dict[str, Any],
+    ) -> Path:
+        payload = continuous_thrust_result_to_maneuver_strategy_payload(result, design_config)
+        return self.save_design_import_maneuver_strategy(payload)
 
     def save_design_maneuver_results(self, result: DesignManeuverResult) -> Path:
         file_path = self.design_maneuver_results_path()

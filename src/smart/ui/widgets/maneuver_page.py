@@ -1162,6 +1162,10 @@ class ManeuverPage(QtWidgets.QWidget):
         self._reload_button.clicked.connect(self.refresh_from_workspace)
         button_row.addWidget(self._reload_button)
 
+        self._import_design_strategy_button = QtWidgets.QPushButton()
+        self._import_design_strategy_button.clicked.connect(self.import_design_maneuver_strategy)
+        button_row.addWidget(self._import_design_strategy_button)
+
         self._edit_config_button = QtWidgets.QPushButton()
         self._edit_config_button.clicked.connect(self._open_config_dialog)
         button_row.addWidget(self._edit_config_button)
@@ -1461,6 +1465,11 @@ class ManeuverPage(QtWidgets.QWidget):
         self._reload_button.clicked.connect(self.refresh_from_workspace)
         button_row.addWidget(self._reload_button)
 
+        self._import_design_strategy_button = QtWidgets.QPushButton()
+        self._import_design_strategy_button.setProperty("variant", "secondary")
+        self._import_design_strategy_button.clicked.connect(self.import_design_maneuver_strategy)
+        button_row.addWidget(self._import_design_strategy_button)
+
         self._edit_config_button = QtWidgets.QPushButton()
         self._edit_config_button.setProperty("variant", "secondary")
         self._edit_config_button.clicked.connect(self._open_config_dialog)
@@ -1577,6 +1586,47 @@ class ManeuverPage(QtWidgets.QWidget):
         self._refresh_strategy_path_label()
         self._update_strategy_count_label()
         self._set_status("statusReady", self._i18n.t("maneuver.status.saved", path=str(saved_path)))
+        return saved_path
+
+    def import_design_maneuver_strategy(self) -> Path | None:
+        if self._workspace.current_project is None:
+            self._set_status("statusDisconnected", self._i18n.t("maneuver.status.no_project"))
+            return None
+
+        source_path = self._workspace.design_import_maneuver_strategy_path()
+        if not source_path.exists():
+            self._set_status(
+                "statusDisconnected",
+                self._i18n.t("maneuver.status.design_import_missing", path=str(source_path)),
+            )
+            return None
+
+        try:
+            strategy = self._workspace.load_design_import_maneuver_strategy()
+            if strategy is None:
+                raise FileNotFoundError(source_path)
+            saved_path = self._workspace.save_maneuver_strategy(strategy)
+            loaded = self._workspace.load_maneuver_strategy()
+        except Exception as exc:
+            self._set_status(
+                "statusDisconnected",
+                self._i18n.t("maneuver.status.design_import_failed", error=str(exc)),
+            )
+            return None
+
+        if loaded is not None:
+            self._current_strategy = loaded
+            self._set_initial_state_fields(loaded)
+            self._set_strategy_rows(loaded.get("maneuvers", []))
+        self._last_result_path = None
+        self._open_result_button.setEnabled(False)
+        self._refresh_strategy_path_label()
+        self._update_strategy_count_label()
+        self._clear_result_summary()
+        self._set_status(
+            "statusReady",
+            self._i18n.t("maneuver.status.design_import_done", source=str(source_path), path=str(saved_path)),
+        )
         return saved_path
 
     def calculate_strategy(self) -> None:
@@ -1815,6 +1865,7 @@ class ManeuverPage(QtWidgets.QWidget):
     def _set_controls_enabled(self, enabled: bool) -> None:
         self._strategy_tabs.setEnabled(enabled)
         self._reload_button.setEnabled(enabled)
+        self._import_design_strategy_button.setEnabled(enabled)
         self._edit_config_button.setEnabled(enabled)
         self._calculate_button.setEnabled(enabled)
 
@@ -2275,6 +2326,7 @@ class ManeuverPage(QtWidgets.QWidget):
         if "maneuver_count" in self._config_metric_labels:
             self._config_metric_labels["maneuver_count"].setText("机动次数")
         self._reload_button.setText(f"+  {t('maneuver.reload_button')}")
+        self._import_design_strategy_button.setText(f"⇢  {t('maneuver.import_design_strategy_button')}")
         self._edit_config_button.setText(f"▱  {t('maneuver.edit_config_button')}")
         self._calculation_header_label.setText(t("maneuver.calculation_header"))
         self._calculate_button.setText(t("maneuver.calculate_button"))

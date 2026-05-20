@@ -725,21 +725,29 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             self._continuous_thrust_result = continuous_result
             self._set_continuous_thrust_rows(continuous_result)
             history_path = None
+            import_strategy_path = None
             if self._workspace.current_project is not None:
                 history_path = export_continuous_thrust_orbit_history_csv(
                     continuous_result,
                     self._workspace.data_dir() / "design_continuous_thrust_orbit_history.csv",
                 )
+                import_strategy_path = self._workspace.save_continuous_thrust_import_maneuver_strategy(
+                    continuous_result,
+                    self._last_result.config,
+                )
             if continuous_result.hard_constraint_passed:
                 self._set_status(
                     "statusReady",
                     f"连续推力参数优化完成，硬约束全部通过，ΔG={continuous_result.objective_delta_g_kg:.3f} kg"
-                    + (f"，轨道数据：{history_path}" if history_path is not None else ""),
+                    + (f"，轨道数据：{history_path}" if history_path is not None else "")
+                    + (f"，导入配置：{import_strategy_path}" if import_strategy_path is not None else ""),
                 )
             else:
                 self._set_status(
                     "statusDisconnected",
-                    "连续推力参数优化后未通过硬约束：" + "、".join(continuous_result.failed_constraints),
+                    "连续推力参数优化后未通过硬约束："
+                    + "、".join(continuous_result.failed_constraints)
+                    + (f"；导入配置：{import_strategy_path}" if import_strategy_path is not None else ""),
                 )
         except Exception as exc:
             self._set_status("statusDisconnected", f"连续推力参数优化失败：{exc}")

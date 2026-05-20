@@ -248,7 +248,10 @@ Latest V5.1 performance run: cProfile completed; 7 design maneuver tests passed 
 Current F4 project output checkpoint is complete. The F4 design maneuver configuration now uses user apsis mode with `q_AP_user=0`, keeps only the first fixed perigee-height target, adds continuous-thrust optimizer sampling/search settings, refreshes `design_maneuver_results.json`, updates the project timestamp, and adds `data/design_continuous_thrust_orbit_history.csv`.
 Latest F4 project output checkpoint: no regression tests run; data/config checkpoint only.
 
-Next minimum task: run the page on the real F4 project and confirm the operator-facing advanced settings values match the desired mission sequence and perigee-height targets.
+Current design-to-import handoff task is complete. After `设计变轨策略` runs continuous-thrust optimization, SMART now writes `config/design_import_maneuver_strategy.json` as a separate import-page-ready maneuver strategy. The `导入变轨策略` page has a new `引入变轨策略` button that copies that file into `config/maneuver_strategy.json`, refreshes the page, clears stale calculation summaries, and leaves `data/full_orbit_history.csv` untouched until the operator runs calculation.
+Latest design-to-import handoff verification: `tests\test_design_maneuver_strategy.py tests\test_maneuver_page.py` passed (12 tests, 57.73 s). A generated import config also ran through `simulate_with_maneuver_strategy_config` and produced `full_orbit_history.csv` with 1070 rows. `tests\test_project_workspace.py` still has one unrelated failure: it expects planner version `V4.2_simplified_transfer_type` while current defaults write `V5.1_hard_constrained_phase_search`.
+
+Next minimum task: run the new design-to-import button path on the real F4 project and compare the import-page calculated `full_orbit_history.csv` against the design-page continuous-thrust history for acceptable mission deltas.
 
 ## Working Rule
 

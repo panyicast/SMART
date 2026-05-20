@@ -672,6 +672,171 @@ def export_continuous_thrust_orbit_history_csv(
     return path
 
 
+def continuous_thrust_result_to_maneuver_strategy_payload(
+    result: ContinuousThrustOptimizationResult,
+    config: dict[str, Any],
+) -> dict[str, Any]:
+    normalized_config = normalize_design_maneuver_strategy_payload(config)
+    parameters = sorted(result.parameters, key=lambda item: item.maneuver_index)
+    if not parameters:
+        raise ValueError("Continuous thrust result has no maneuver parameters.")
+
+    initial = normalized_config["initial"]
+    engine = normalized_config["engine"]
+    r_km, v_km_s = _initial_state_km(normalized_config)
+    elapsed_s = 0.0
+    mass_kg = float(initial["m0_kg"])
+    maneuvers: list[dict[str, Any]] = []
+
+    for parameter in parameters:
+        burn_start_s = float(parameter.burn_start_min) * 60.0
+        r_start, v_start = _propagate_state_to_elapsed(normalized_config, r_km, v_km_s, elapsed_s, burn_start_s)
+        delta_deg, dv_direction = _maneuver_strategy_direction_fields(
+            r_start,
+            v_start,
+            float(parameter.yaw_angle_deg),
+        )
+        total_burn_s = max(0.0, (float(parameter.cutoff_min) - float(parameter.burn_start_min)) * 60.0)
+        settle_duration_s = max(0.0, min(float(parameter.settle_duration_min) * 60.0, total_burn_s))
+        maneuvers.append(
+            {
+                "maneuver_index": int(parameter.maneuver_index),
+                "Tn_start_min": float(parameter.burn_start_min),
+                "burn_duration_min": total_burn_s / 60.0,
+                "control_fuel_%": float(engine["attitude_control_efficiency"]) * 100.0,
+                "settle_duration_s": settle_duration_s,
+                "delta_deg": delta_deg,
+                "dv_direction": dv_direction,
+                "orbit_control_thrust_n": float(engine["F_main_N"]),
+                "orbit_control_isp_s": float(engine["Isp_main_s"]),
+                "settle_thrust_n": float(engine["F_set_N"]),
+                "settle_isp_s": float(engine["Isp_set_s"]),
+            }
+        )
+
+        r_km, v_km_s, mass_kg = _propagate_continuous_parameter_to_cutoff(
+            normalized_config,
+            r_start,
+            v_start,
+            mass_kg,
+            parameter,
+        )
+        elapsed_s = float(parameter.cutoff_min) * 60.0
+
+    return {
+        "source": {
+            "type": "design_continuous_thrust",
+            "generated_utc": utc_now_iso_z(),
+            "hard_constraint_passed": bool(result.hard_constraint_passed),
+        },
+        "launch_mass_kg": float(initial["m0_kg"]),
+        "t0_epoch": format_utc(str(initial["t0_epoch"])),
+        "t0_orbit": {
+            "semi_major_axis_m": float(initial["a_km"]) * 1000.0,
+            "eccentricity": float(initial["e"]),
+            "inclination_deg": float(initial["i_deg"]),
+            "argument_of_perigee_deg": float(initial["argp_deg"]),
+            "raan_deg": float(initial["lon_node_deg"]),
+            "mean_anomaly_deg": float(initial["mean_anomaly_deg"]),
+        },
+        "maneuver_count": len(maneuvers),
+        "maneuvers": maneuvers,
+    }
+
+
+def _propagate_continuous_parameter_to_cutoff(
+    config: dict[str, Any],
+    r_start_km: np.ndarray,
+    v_start_km_s: np.ndarray,
+    mass_kg: float,
+    parameter: ContinuousThrustManeuverParameter,
+) -> tuple[np.ndarray, np.ndarray, float]:
+    engine = config["engine"]
+    state = np.asarray(
+        [
+            float(r_start_km[0]),
+            float(r_start_km[1]),
+            float(r_start_km[2]),
+            float(v_start_km_s[0]),
+            float(v_start_km_s[1]),
+            float(v_start_km_s[2]),
+            max(1.0, float(mass_kg)),
+        ],
+        dtype=float,
+    )
+    current_s = float(parameter.burn_start_min) * 60.0
+    cutoff_s = float(parameter.cutoff_min) * 60.0
+    if cutoff_s <= current_s:
+        return state[:3].copy(), state[3:6].copy(), float(state[6])
+    main_isp_s = max(1.0, float(engine["Isp_main_s"]) / (1.0 + float(engine["attitude_control_efficiency"])))
+    phases = (
+        (
+            max(0.0, float(parameter.settle_duration_min) * 60.0),
+            max(0.0, float(engine["F_set_N"])),
+            max(1.0, float(engine["Isp_set_s"])),
+        ),
+        (
+            max(0.0, cutoff_s - current_s - max(0.0, float(parameter.settle_duration_min) * 60.0)),
+            max(0.0, float(engine["F_main_N"])),
+            main_isp_s,
+        ),
+    )
+    step_limit_s = max(0.5, float(config["continuous_thrust_optimizer"]["final_integration_step_s"]))
+    for duration_s, thrust_n, isp_s in phases:
+        phase_end_s = min(cutoff_s, current_s + duration_s)
+        while current_s < phase_end_s - 1.0e-12:
+            step_s = min(step_limit_s, phase_end_s - current_s)
+            state = _rk4_low_thrust_step(config, current_s, state, step_s, float(parameter.yaw_angle_deg), thrust_n, isp_s)
+            current_s += step_s
+    return state[:3].copy(), state[3:6].copy(), float(state[6])
+
+
+def _maneuver_strategy_direction_fields(r_km: np.ndarray, v_km_s: np.ndarray, yaw_angle_deg: float) -> tuple[float, int]:
+    desired = _local_horizontal_direction(np.asarray(r_km, dtype=float), float(yaw_angle_deg))
+    desired_norm = float(np.linalg.norm(desired))
+    if desired_norm <= 1.0e-12:
+        raise ValueError("Continuous thrust yaw direction produced a zero vector.")
+    desired = desired / desired_norm
+    z_component = max(-1.0, min(1.0, float(desired[2])))
+    delta_rad = math.asin(z_component)
+    delta_deg = math.degrees(delta_rad)
+    candidates = _tangent_direction_candidates_from_delta(np.asarray(r_km, dtype=float), delta_rad)
+    desired_index = max(
+        range(len(candidates)),
+        key=lambda index: float(np.dot(candidates[index], desired)),
+    )
+    velocity_scores = [float(np.dot(candidate, np.asarray(v_km_s, dtype=float))) for candidate in candidates]
+    prograde_index = max(range(len(candidates)), key=lambda index: velocity_scores[index])
+    dv_direction = 1 if desired_index == prograde_index else -1
+    return delta_deg, dv_direction
+
+
+def _tangent_direction_candidates_from_delta(r_km: np.ndarray, delta_rad: float) -> list[np.ndarray]:
+    x, y, z = (float(value) for value in r_km)
+    cos_delta = math.cos(delta_rad)
+    if abs(cos_delta) <= 1.0e-12:
+        return [np.asarray([0.0, 0.0, math.copysign(1.0, math.sin(delta_rad))], dtype=float)]
+    rho = math.hypot(x, y)
+    if rho <= 1.0e-12:
+        return [np.asarray([math.cos(0.0) * cos_delta, math.sin(0.0) * cos_delta, math.sin(delta_rad)], dtype=float)]
+    cos_term = max(-1.0, min(1.0, -z * math.tan(delta_rad) / rho))
+    phase = math.atan2(y, x)
+    offset = math.acos(cos_term)
+    candidates: list[np.ndarray] = []
+    for alpha in (phase + offset, phase - offset):
+        candidates.append(
+            np.asarray(
+                [
+                    math.cos(alpha) * cos_delta,
+                    math.sin(alpha) * cos_delta,
+                    math.sin(delta_rad),
+                ],
+                dtype=float,
+            )
+        )
+    return candidates
+
+
 def optimize_continuous_thrust_model_parameters(
     result: DesignManeuverResult,
 ) -> ContinuousThrustOptimizationResult:
