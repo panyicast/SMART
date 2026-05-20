@@ -8,6 +8,8 @@ import math
 from pathlib import Path
 from time import perf_counter
 from typing import Any
+import zipfile
+from xml.etree import ElementTree as ET
 
 import numpy as np
 
@@ -673,6 +675,19 @@ def export_continuous_thrust_orbit_history_csv(
     return path
 
 
+def export_continuous_thrust_maneuver_strategy_xlsx(
+    result: ContinuousThrustOptimizationResult,
+    config: dict[str, Any],
+    output_path: str | Path,
+) -> Path:
+    normalized_config = normalize_design_maneuver_strategy_payload(config)
+    table = _continuous_thrust_strategy_export_table(result, normalized_config)
+    path = Path(output_path).expanduser().resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _write_minimal_xlsx(path, "连续推力变轨策略", table)
+    return path
+
+
 def continuous_thrust_result_to_maneuver_strategy_payload(
     result: ContinuousThrustOptimizationResult,
     config: dict[str, Any],
@@ -839,6 +854,284 @@ def _tangent_direction_candidates_from_delta(r_km: np.ndarray, delta_rad: float)
             )
         )
     return candidates
+
+
+_XLSX_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+_XLSX_REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
+
+
+def _continuous_thrust_strategy_export_table(
+    result: ContinuousThrustOptimizationResult,
+    config: dict[str, Any],
+) -> dict[str, Any]:
+    parameters = sorted(result.parameters, key=lambda item: item.maneuver_index)
+    if not parameters:
+        raise ValueError("Continuous thrust result has no maneuver parameters.")
+
+    columns: list[dict[str, Any]] = []
+    r_km, v_km_s = _initial_state_km(config)
+    elapsed_s = 0.0
+    mass_kg = float(config["initial"]["m0_kg"])
+    columns.append(
+        _continuous_export_state_column(
+            config,
+            "星舰分离T0",
+            elapsed_s,
+            r_km,
+            v_km_s,
+            mass_kg,
+            revolution=0,
+            position_label="",
+        )
+    )
+
+    burn_metrics: list[dict[str, float]] = []
+    for parameter in parameters:
+        burn_start_s = float(parameter.burn_start_min) * 60.0
+        r_start, v_start = _propagate_state_to_elapsed(config, r_km, v_km_s, elapsed_s, burn_start_s)
+        columns.append(
+            _continuous_export_state_column(
+                config,
+                f"第{parameter.maneuver_index}次变轨点火点",
+                burn_start_s,
+                r_start,
+                v_start,
+                mass_kg,
+                revolution=int(parameter.flight_revolution),
+                position_label=str(parameter.position_label),
+            )
+        )
+        r_km, v_km_s, mass_kg = _propagate_continuous_parameter_to_cutoff(
+            config,
+            r_start,
+            v_start,
+            mass_kg,
+            parameter,
+        )
+        columns.append(
+            _continuous_export_state_column(
+                config,
+                f"第{parameter.maneuver_index}次变轨熄火点",
+                float(parameter.cutoff_min) * 60.0,
+                r_km,
+                v_km_s,
+                mass_kg,
+                revolution=int(parameter.flight_revolution),
+                position_label=str(parameter.position_label),
+            )
+        )
+        elapsed_s = float(parameter.cutoff_min) * 60.0
+        burn_metrics.append(
+            {
+                "yaw_angle_deg": float(parameter.yaw_angle_deg),
+                "propellant_kg": float(parameter.propellant_kg),
+                "delta_v_mps": float(parameter.delta_v_mps),
+                "total_burn_time_min": float(parameter.total_burn_time_min),
+                "settle_duration_min": float(parameter.settle_duration_min),
+                "orbit_control_duration_min": float(parameter.orbit_control_duration_min),
+            }
+        )
+
+    return {"columns": columns, "burn_metrics": burn_metrics}
+
+
+def _continuous_export_state_column(
+    config: dict[str, Any],
+    header: str,
+    elapsed_s: float,
+    r_km: np.ndarray,
+    v_km_s: np.ndarray,
+    mass_kg: float,
+    *,
+    revolution: int,
+    position_label: str,
+) -> dict[str, Any]:
+    earth = config["earth"]
+    a_km, e_val, inc_rad, raan_rad, argp_rad, mean_rad, true_rad = _rv_to_coe(
+        np.asarray(r_km, dtype=float),
+        np.asarray(v_km_s, dtype=float),
+        mu=float(earth["mu_km3_s2"]),
+    )
+    elapsed_s = float(elapsed_s)
+    lon_deg_e = _longitude_deg(config, np.asarray(r_km, dtype=float), elapsed_s)
+    lat_deg, _alt_km = _spherical_latitude_altitude(config, np.asarray(r_km, dtype=float), elapsed_s)
+    period_min = 2.0 * math.pi * math.sqrt(float(a_km) ** 3 / float(earth["mu_km3_s2"])) / 60.0
+    drift_deg_per_rev = 360.0 - math.degrees(float(earth["omega_e_rad_s"]) * period_min * 60.0)
+    theta_deg = math.degrees(greenwich_angle_at_utc(parse_utc(str(config["initial"]["t0_epoch"])))) + math.degrees(
+        float(earth["omega_e_rad_s"]) * elapsed_s
+    )
+    ascending_node_longitude_deg = (math.degrees(float(raan_rad)) - theta_deg) % 360.0
+    return {
+        "header": header,
+        "航时(min)": elapsed_s / 60.0,
+        "圈次": revolution,
+        "轨道位置(远/近地点)": position_label,
+        "半长轴 a (km)": float(a_km),
+        "偏心率 e": float(e_val),
+        "倾角 i (度)": math.degrees(float(inc_rad)),
+        "近地点幅角 w (度)": math.degrees(float(argp_rad)) % 360.0,
+        "升交点经度 Ne (度)": ascending_node_longitude_deg,
+        "升交点赤经 N (度)": math.degrees(float(raan_rad)) % 360.0,
+        "平近点角 M (度)": math.degrees(float(mean_rad)) % 360.0,
+        "真近点角 f (度)": math.degrees(float(true_rad)) % 360.0,
+        "近地点高度(km)": float(a_km) * (1.0 - float(e_val)) - float(earth["Re_km"]),
+        "远地点高度(km)": float(a_km) * (1.0 + float(e_val)) - float(earth["Re_km"]),
+        "卫星重量 (kg)": float(mass_kg),
+        "星下点经度 (度)": _wrap180(lon_deg_e),
+        "星下点纬度 (度)": lat_deg,
+        "轨道周期(min)": period_min,
+        "经度漂移率(度/圈)": drift_deg_per_rev,
+    }
+
+
+def _write_minimal_xlsx(path: Path, sheet_name: str, table: dict[str, Any]) -> None:
+    rows, merges = _continuous_export_xlsx_rows(table)
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", _xlsx_content_types_xml())
+        archive.writestr("_rels/.rels", _xlsx_root_rels_xml())
+        archive.writestr("xl/workbook.xml", _xlsx_workbook_xml(sheet_name))
+        archive.writestr("xl/_rels/workbook.xml.rels", _xlsx_workbook_rels_xml())
+        archive.writestr("xl/styles.xml", _xlsx_styles_xml())
+        archive.writestr("xl/worksheets/sheet1.xml", _xlsx_sheet_xml(rows, merges))
+
+
+def _continuous_export_xlsx_rows(table: dict[str, Any]) -> tuple[list[list[Any]], list[str]]:
+    columns = list(table["columns"])
+    burn_metrics = list(table["burn_metrics"])
+    labels = [
+        "航时(min)",
+        "圈次",
+        "轨道位置(远/近地点)",
+        "半长轴 a (km)",
+        "偏心率 e",
+        "倾角 i (度)",
+        "近地点幅角 w (度)",
+        "升交点经度 Ne (度)",
+        "升交点赤经 N (度)",
+        "平近点角 M (度)",
+        "真近点角 f (度)",
+        "近地点高度(km)",
+        "远地点高度(km)",
+        "卫星重量 (kg)",
+        "星下点经度 (度)",
+        "星下点纬度 (度)",
+        "轨道周期(min)",
+        "经度漂移率(度/圈)",
+    ]
+    rows: list[list[Any]] = [["", *(column["header"] for column in columns)]]
+    for label in labels:
+        rows.append([label, *(column.get(label, "") for column in columns)])
+
+    metric_rows = [
+        ("点火偏航角 (度)", "yaw_angle_deg"),
+        ("本次点火所耗推进剂 (kg)", "propellant_kg"),
+        ("本次点火速度增量 (m/s)", "delta_v_mps"),
+        ("本次点火工作时间(min)", "total_burn_time_min"),
+        ("沉底发动机工作时长(min)", "settle_duration_min"),
+        ("变轨发动机工作时长(min)", "orbit_control_duration_min"),
+    ]
+    merges: list[str] = []
+    for label, key in metric_rows:
+        row_values: list[Any] = [label, "-"]
+        for metric in burn_metrics:
+            row_values.extend([metric[key], ""])
+        row_number = len(rows) + 1
+        for burn_index in range(len(burn_metrics)):
+            start_col = 3 + burn_index * 2
+            end_col = start_col + 1
+            merges.append(f"{_xlsx_col_name(start_col)}{row_number}:{_xlsx_col_name(end_col)}{row_number}")
+        rows.append(row_values)
+    return rows, merges
+
+
+def _xlsx_sheet_xml(rows: list[list[Any]], merges: list[str]) -> str:
+    ET.register_namespace("", _XLSX_NS)
+    worksheet = ET.Element(f"{{{_XLSX_NS}}}worksheet")
+    ET.SubElement(worksheet, f"{{{_XLSX_NS}}}dimension", {"ref": f"A1:{_xlsx_col_name(max(len(row) for row in rows))}{len(rows)}"})
+    sheet_views = ET.SubElement(worksheet, f"{{{_XLSX_NS}}}sheetViews")
+    ET.SubElement(sheet_views, f"{{{_XLSX_NS}}}sheetView", {"workbookViewId": "0"})
+    cols = ET.SubElement(worksheet, f"{{{_XLSX_NS}}}cols")
+    ET.SubElement(cols, f"{{{_XLSX_NS}}}col", {"min": "1", "max": "1", "width": "25", "customWidth": "1"})
+    ET.SubElement(cols, f"{{{_XLSX_NS}}}col", {"min": "2", "max": "12", "width": "18", "customWidth": "1"})
+    sheet_data = ET.SubElement(worksheet, f"{{{_XLSX_NS}}}sheetData")
+    for row_index, row_values in enumerate(rows, start=1):
+        row = ET.SubElement(sheet_data, f"{{{_XLSX_NS}}}row", {"r": str(row_index)})
+        for col_index, value in enumerate(row_values, start=1):
+            _append_xlsx_cell(row, row_index, col_index, value, style_id=1 if row_index == 1 or col_index == 1 else 2)
+    if merges:
+        merge_cells = ET.SubElement(worksheet, f"{{{_XLSX_NS}}}mergeCells", {"count": str(len(merges))})
+        for ref in merges:
+            ET.SubElement(merge_cells, f"{{{_XLSX_NS}}}mergeCell", {"ref": ref})
+    return ET.tostring(worksheet, encoding="utf-8", xml_declaration=True).decode("utf-8")
+
+
+def _append_xlsx_cell(row: ET.Element, row_index: int, col_index: int, value: Any, *, style_id: int) -> None:
+    cell = ET.SubElement(row, f"{{{_XLSX_NS}}}c", {"r": f"{_xlsx_col_name(col_index)}{row_index}", "s": str(style_id)})
+    if value is None or value == "":
+        return
+    if isinstance(value, str):
+        cell.set("t", "inlineStr")
+        inline = ET.SubElement(cell, f"{{{_XLSX_NS}}}is")
+        text = ET.SubElement(inline, f"{{{_XLSX_NS}}}t")
+        text.text = value
+        return
+    value_node = ET.SubElement(cell, f"{{{_XLSX_NS}}}v")
+    value_node.text = f"{float(value):.12g}"
+
+
+def _xlsx_col_name(index: int) -> str:
+    name = ""
+    while index > 0:
+        index, remainder = divmod(index - 1, 26)
+        name = chr(65 + remainder) + name
+    return name
+
+
+def _xlsx_content_types_xml() -> str:
+    return """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+</Types>"""
+
+
+def _xlsx_root_rels_xml() -> str:
+    return f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="{_REL_NS}">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>"""
+
+
+def _xlsx_workbook_rels_xml() -> str:
+    return f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="{_REL_NS}">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>"""
+
+
+def _xlsx_workbook_xml(sheet_name: str) -> str:
+    escaped_name = sheet_name.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+    return f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="{_XLSX_NS}" xmlns:r="{_XLSX_REL_NS}">
+  <sheets><sheet name="{escaped_name}" sheetId="1" r:id="rId1"/></sheets>
+</workbook>"""
+
+
+def _xlsx_styles_xml() -> str:
+    return f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="{_XLSX_NS}">
+  <fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>
+  <fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFD9EAF7"/><bgColor indexed="64"/></patternFill></fill></fills>
+  <borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color auto="1"/></left><right style="thin"><color auto="1"/></right><top style="thin"><color auto="1"/></top><bottom style="thin"><color auto="1"/></bottom><diagonal/></border></borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf></cellXfs>
+  <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>"""
 
 
 def optimize_continuous_thrust_model_parameters(

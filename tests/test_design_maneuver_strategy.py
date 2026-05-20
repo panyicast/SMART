@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import zipfile
+from xml.etree import ElementTree as ET
 
 import pytest
 
@@ -291,6 +293,7 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path, monkeyp
     assert page._config_overview_table.rowCount() == 4
     assert page._burn_table.maximumHeight() <= 210
     assert page._continuous_thrust_button.text() == "优化连续推力模型参数"
+    assert page._export_continuous_strategy_button.text() == "导出变轨策略"
     assert page._continuous_thrust_table.columnCount() == 16
     assert page._result_panel.layout().indexOf(page._continuous_thrust_table.parentWidget()) >= 0
     perigee_layout = page._mv1_hp_target_label.parentWidget().layout()
@@ -369,6 +372,26 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path, monkeyp
     assert page._continuous_thrust_table.horizontalHeaderItem(15).text() == "控后远地点高度/km"
     assert page._continuous_thrust_table.item(0, 12).text()
     assert "连续推力参数优化" in page._status_label.text()
+    opened_urls: list[str] = []
+    monkeypatch.setattr(
+        design_page_module.QtGui.QDesktopServices,
+        "openUrl",
+        lambda url: opened_urls.append(url.toLocalFile()) or True,
+    )
+    exported_xlsx = page.export_continuous_thrust_strategy()
+    assert exported_xlsx == workspace.data_dir() / "design_continuous_thrust_maneuver_strategy.xlsx"
+    assert exported_xlsx.exists()
+    assert [Path(value) for value in opened_urls] == [exported_xlsx]
+    assert "连续推力变轨策略已导出" in page._status_label.text()
+    xlsx_values, xlsx_merges = _read_xlsx_sheet_values(exported_xlsx)
+    assert xlsx_values["B1"] == "星舰分离T0"
+    assert xlsx_values["C1"] == "第1次变轨点火点"
+    assert xlsx_values["D1"] == "第1次变轨熄火点"
+    assert xlsx_values["A20"] == "点火偏航角 (度)"
+    assert xlsx_values["A25"] == "变轨发动机工作时长(min)"
+    assert xlsx_values["B20"] == "-"
+    assert "C20:D20" in xlsx_merges
+    assert "K25:L25" in xlsx_merges
     assert page._burn_table.columnCount() == 16
     assert page._burn_table.horizontalHeaderItem(4).text() == "星下点经度/degE"
     assert page._burn_table.horizontalHeaderItem(8).text() == "控后偏心率"
@@ -402,6 +425,23 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path, monkeyp
     assert replans == []
     page._apply_hp_targets_button.click()
     assert replans == [True]
+
+
+def _read_xlsx_sheet_values(path: Path) -> tuple[dict[str, str], set[str]]:
+    ns = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+    with zipfile.ZipFile(path) as archive:
+        root = ET.fromstring(archive.read("xl/worksheets/sheet1.xml"))
+    values: dict[str, str] = {}
+    for cell in root.findall(".//x:c", ns):
+        ref = cell.attrib["r"]
+        inline_text = cell.find("x:is/x:t", ns)
+        value = cell.find("x:v", ns)
+        if inline_text is not None:
+            values[ref] = inline_text.text or ""
+        elif value is not None:
+            values[ref] = value.text or ""
+    merges = {node.attrib["ref"] for node in root.findall(".//x:mergeCell", ns)}
+    return values, merges
     q_values = [int(value) for value in candidate_q.split(",")]
     q_config = page.config()
     assert q_config["apsis"]["pattern_mode"] == "user"

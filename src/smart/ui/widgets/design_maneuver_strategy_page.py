@@ -12,6 +12,7 @@ from smart.services.design_maneuver_strategy import (
     ContinuousThrustOptimizationResult,
     DesignManeuverResult,
     default_design_maneuver_strategy_payload,
+    export_continuous_thrust_maneuver_strategy_xlsx,
     export_continuous_thrust_orbit_history_csv,
     find_feasible_q_sequences as service_find_feasible_q_sequences,
     initial_design_maneuver_subsatellite_longitude_deg_e,
@@ -348,6 +349,11 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._continuous_thrust_button.setFixedHeight(34)
         self._continuous_thrust_button.clicked.connect(self.run_continuous_thrust_optimization)
         header_row.addWidget(self._continuous_thrust_button)
+        self._export_continuous_strategy_button = QtWidgets.QPushButton("导出变轨策略")
+        self._export_continuous_strategy_button.setProperty("variant", "secondary")
+        self._export_continuous_strategy_button.setFixedHeight(34)
+        self._export_continuous_strategy_button.clicked.connect(self.export_continuous_thrust_strategy)
+        header_row.addWidget(self._export_continuous_strategy_button)
         layout.addLayout(header_row)
 
         self._continuous_thrust_hint_label = QtWidgets.QLabel("变量：点火开始时间 t、偏航角 δ；步长 10s / 0.05deg")
@@ -754,6 +760,29 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         finally:
             self._set_planning_busy(False)
 
+    def export_continuous_thrust_strategy(self) -> Path | None:
+        if self._workspace.current_project is None:
+            self._set_status("statusDisconnected", self._i18n.t("design_maneuver.status.no_project"))
+            return None
+        if self._continuous_thrust_result is None:
+            self._set_status("statusDisconnected", "请先优化连续推力模型参数，再导出变轨策略。")
+            return None
+        if self._last_result is None:
+            self._set_status("statusDisconnected", "缺少脉冲规划配置，无法导出连续推力变轨策略。")
+            return None
+        try:
+            output_path = export_continuous_thrust_maneuver_strategy_xlsx(
+                self._continuous_thrust_result,
+                self._last_result.config,
+                self._workspace.data_dir() / "design_continuous_thrust_maneuver_strategy.xlsx",
+            )
+        except Exception as exc:
+            self._set_status("statusDisconnected", f"连续推力变轨策略导出失败：{exc}")
+            return None
+        QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(output_path)))
+        self._set_status("statusReady", f"连续推力变轨策略已导出：{output_path}")
+        return output_path
+
     def config(self) -> dict[str, Any]:
         config = normalize_design_maneuver_strategy_payload(self._config)
         if hasattr(self, "_mv1_hp_target_edit"):
@@ -1083,6 +1112,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             self._plan_button,
             self._find_feasible_q_button,
             self._continuous_thrust_button,
+            self._export_continuous_strategy_button,
             self._burn_table,
             self._continuous_thrust_table,
             self._mv1_hp_target_edit,
@@ -1171,6 +1201,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             self._plan_button,
             self._find_feasible_q_button,
             self._continuous_thrust_button,
+            self._export_continuous_strategy_button,
             self._mv1_hp_target_edit,
             self._mv2_hp_target_edit,
             self._apply_hp_targets_button,
@@ -1208,6 +1239,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._find_feasible_q_button.setText("查找全部可行q")
         self._continuous_thrust_header_label.setText("连续推力模型参数")
         self._continuous_thrust_button.setText("优化连续推力模型参数")
+        self._export_continuous_strategy_button.setText("导出变轨策略")
         self._continuous_thrust_hint_label.setText("变量：点火开始时间 t、偏航角 δ；步长 10s / 0.05deg")
         self._burn_header_label.setText(t("design_maneuver.burn_header"))
         self._mv1_hp_target_label.setText("第一次目标近地点高度/km")
