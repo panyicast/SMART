@@ -732,6 +732,7 @@ def continuous_thrust_result_to_maneuver_strategy_payload(
             "generated_utc": utc_now_iso_z(),
             "hard_constraint_passed": bool(result.hard_constraint_passed),
         },
+        "earth": dict(normalized_config["earth"]),
         "launch_mass_kg": float(initial["m0_kg"]),
         "t0_epoch": format_utc(str(initial["t0_epoch"])),
         "t0_orbit": {

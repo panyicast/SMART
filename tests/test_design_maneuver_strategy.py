@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -7,6 +8,7 @@ import pytest
 from PySide6 import QtCore, QtWidgets
 
 import smart.services.design_maneuver_strategy as design_strategy
+import scripts.satellite_dynamics_equation as dynamics
 from smart.services.design_maneuver_strategy import (
     continuous_thrust_result_to_maneuver_strategy_payload,
     default_design_maneuver_strategy_payload,
@@ -125,6 +127,22 @@ def test_continuous_thrust_parameter_optimizer_uses_pulse_targets(tmp_path: Path
         continuous_result.parameters[0].yaw_angle_deg
     )
     assert import_payload["maneuvers"][-1]["dv_direction"] in {-1, 1}
+    strategy_path = tmp_path / "design_import_strategy.json"
+    strategy_path.write_text(json.dumps(import_payload), encoding="utf-8")
+    _csv_path, import_rows = dynamics.simulate_with_maneuver_strategy_config(
+        strategy_config_path=strategy_path,
+        output_csv_path=tmp_path / "import_history.csv",
+        extra_free_flight_s=24.0 * 3600.0,
+    )
+    import_summaries = dynamics.build_maneuver_result_rows(
+        dynamics.load_maneuver_strategy_steps(strategy_path),
+        import_rows,
+    )
+    assert len(import_summaries) == len(continuous_result.parameters)
+    for summary, parameter in zip(import_summaries, continuous_result.parameters):
+        assert summary["elapsed_time_min"] == pytest.approx(parameter.cutoff_min)
+        assert summary["semi_major_axis_m"] == pytest.approx(parameter.post_a_km * 1000.0, abs=1.0e-4)
+        assert summary["inclination_deg"] == pytest.approx(parameter.post_i_deg, abs=1.0e-9)
 
 
 def test_feasible_q_scan_ignores_current_user_q_constraint() -> None:
