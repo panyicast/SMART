@@ -2518,7 +2518,7 @@ def find_feasible_q_sequences(payload: dict[str, Any] | None) -> list[dict[str, 
     first_elapsed, first_r, first_v, first_lon = _find_initial_burn_event(config, *_initial_state_km(config), "A")
     reference = _v51_apogee_to_rp_i(config, first_r, first_v, a_target, i_target)
     if reference is None:
-        raise RuntimeError("首个远地点无法一次完成目标近地点与倾角参考解。")
+        raise RuntimeError(_v51_apogee_to_rp_i_failure_message(config, first_r, first_v, a_target, i_target))
 
     raw_design_dv = max(1.0, float(config["burn_limit"]["design_dv_per_burn_mps"]))
     v51_recommended_total = max(2, int(math.ceil(float(reference["dv_mps"]) / raw_design_dv)) + 1)
@@ -2596,7 +2596,7 @@ def _plan_v51_hard_constrained(
     first_elapsed, first_r, first_v, first_lon = _find_initial_burn_event(config, *_initial_state_km(config), "A")
     reference = _v51_apogee_to_rp_i(config, first_r, first_v, a_target, i_target)
     if reference is None:
-        raise RuntimeError("首个远地点无法一次完成目标近地点与倾角参考解。")
+        raise RuntimeError(_v51_apogee_to_rp_i_failure_message(config, first_r, first_v, a_target, i_target))
 
     raw_design_dv = max(1.0, float(config["burn_limit"]["design_dv_per_burn_mps"]))
     v51_recommended_total = max(2, int(math.ceil(float(reference["dv_mps"]) / raw_design_dv)) + 1)
@@ -3084,6 +3084,58 @@ def _v51_apogee_to_rp_i(
         if low - 1.0e-9 <= alpha_deg <= high + 1.0e-9:
             candidates.append({"dv_mps": dv_mps, "alpha_deg": alpha_deg, "v_plus": v_plus, "post_a_km": post_a})
     return min(candidates, key=lambda item: item["dv_mps"]) if candidates else None
+
+
+def _v51_apogee_to_rp_i_failure_message(
+    config: dict[str, Any],
+    r: np.ndarray,
+    v: np.ndarray,
+    rp_target_km: float,
+    i_target_deg: float,
+) -> str:
+    radius = float(np.linalg.norm(r))
+    if not math.isfinite(radius) or radius <= 0.0:
+        return "首个远地点参考解失败：点火点半径无效，无法一次完成目标近地点与倾角。"
+    if rp_target_km >= radius:
+        return (
+            "首个远地点参考解失败：目标近地点半径 "
+            f"{rp_target_km:.3f} km 不小于当前远地点半径 {radius:.3f} km，"
+            "无法构造从该远地点降近地点的参考椭圆。"
+        )
+    r_hat = r / radius
+    latitude_deg = math.degrees(math.asin(float(np.clip(r_hat[2], -1.0, 1.0))))
+    min_i_deg = abs(latitude_deg)
+    cos_delta = math.sqrt(max(0.0, 1.0 - float(r_hat[2]) ** 2))
+    if cos_delta <= 1.0e-12:
+        return (
+            "首个远地点参考解失败：点火点接近地心极区，局部水平参考方向退化，"
+            "无法一次完成目标近地点与倾角。"
+        )
+    cos_beta = math.cos(math.radians(i_target_deg)) / cos_delta
+    if abs(cos_beta) > 1.0 + 1.0e-12:
+        return (
+            "首个远地点参考解失败：目标倾角 "
+            f"{i_target_deg:.3f} deg 低于该点几何允许下限 {min_i_deg:.3f} deg"
+            f"（点火点地心纬度约 {latitude_deg:.3f} deg），"
+            "无法在此远地点一次完成目标近地点与倾角；请提高目标倾角，"
+            "或改用多次降倾角/其它点火点方案。"
+        )
+
+    beta_abs = math.acos(float(np.clip(cos_beta, -1.0, 1.0)))
+    post_a = 0.5 * (radius + rp_target_km)
+    v_required = math.sqrt(float(config["earth"]["mu_km3_s2"]) * (2.0 / radius - 1.0 / post_a))
+    east, _north, south = _local_horizontal_basis(r)
+    low, high = _v51_front_alpha_bounds(config)
+    candidate_alpha: list[float] = []
+    for beta in (beta_abs, -beta_abs):
+        v_plus = v_required * (math.cos(beta) * east + math.sin(beta) * south)
+        candidate_alpha.append(_alpha_from_local_horizontal_vector(r, v_plus - v))
+    alpha_text = ", ".join(f"{value:.3f}" for value in candidate_alpha)
+    return (
+        "首个远地点参考解失败：几何解存在，但所需偏航角 "
+        f"{alpha_text} deg 超出前段允许范围 [{low:.3f}, {high:.3f}] deg；"
+        "请调整目标倾角、偏航角边界或改用多次降倾角方案。"
+    )
 
 
 def _v51_terminal_perigee_burn(config: dict[str, Any], r: np.ndarray, v: np.ndarray) -> dict[str, Any]:

@@ -221,6 +221,20 @@ def test_v51_user_sequence_and_perigee_targets_drive_planner() -> None:
         plan_design_maneuver_strategy(payload)
 
 
+def test_v51_low_target_inclination_error_reports_geometry_limit() -> None:
+    payload = default_design_maneuver_strategy_payload()
+    payload["target"]["i_deg"] = 5.0
+
+    with pytest.raises(RuntimeError) as excinfo:
+        plan_design_maneuver_strategy(payload)
+
+    message = str(excinfo.value)
+    assert "首个远地点参考解失败" in message
+    assert "目标倾角 5.000 deg" in message
+    assert "几何允许下限" in message
+    assert "点火点地心纬度" in message
+
+
 def test_v51_single_fixed_perigee_target_keeps_duration_hard_limit(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = default_design_maneuver_strategy_payload()
     payload["hard_constraint_planner"]["fixed_hp_targets_km"] = {"1": 3940.0}
