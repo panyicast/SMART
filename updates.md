@@ -562,6 +562,10 @@
 - 提交：`260a423`
 - 影响文件：`src/smart/services/design_continuous_thrust_optimizer.py`、`HANDOFF.md`。
 
-## 2026-05-21T22:28:58+08:00 | Force J2 for design maneuver dynamics
-- 提交：`本次提交`
+## 2026-05-21T22:29:02+08:00 | Force J2 for design maneuver dynamics
+- 提交：`9d7fb7f`
 - 影响文件：`src/smart/services/design_continuous_thrust_optimizer.py`、`src/smart/services/design_maneuver_strategy.py`、`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-21T22:44:45+08:00 | Optimize fixed q pulse planning
+- 提交：`本次提交`
+- 影响文件：`src/smart/services/design_maneuver_strategy.py`、`HANDOFF.md`。

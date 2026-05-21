@@ -3216,6 +3216,35 @@ def _v51_terminal_perigee_burn(config: dict[str, Any], r: np.ndarray, v: np.ndar
     }
 
 
+def _v51_state_fingerprint(r: np.ndarray, v: np.ndarray) -> tuple[tuple[float, ...], tuple[float, ...]]:
+    return (
+        tuple(round(float(value), 6) for value in np.asarray(r, dtype=float)),
+        tuple(round(float(value), 9) for value in np.asarray(v, dtype=float)),
+    )
+
+
+def _v51_next_apsis_cached(
+    config: dict[str, Any],
+    r: np.ndarray,
+    v: np.ndarray,
+    elapsed_s: float,
+    apsis: str,
+    index: int,
+    cache: dict[tuple[float, tuple[float, ...], tuple[float, ...], str, int], tuple[float, np.ndarray, np.ndarray]] | None,
+) -> tuple[float, np.ndarray, np.ndarray]:
+    if cache is None:
+        return _next_apsis(config, r, v, elapsed_s, apsis, index)
+    r_key, v_key = _v51_state_fingerprint(r, v)
+    key = (round(float(elapsed_s), 3), r_key, v_key, apsis.upper(), int(index))
+    cached = cache.get(key)
+    if cached is not None:
+        cached_elapsed, cached_r, cached_v = cached
+        return cached_elapsed, cached_r.copy(), cached_v.copy()
+    next_elapsed, next_r, next_v = _next_apsis(config, r, v, elapsed_s, apsis, index)
+    cache[key] = (float(next_elapsed), np.asarray(next_r, dtype=float).copy(), np.asarray(next_v, dtype=float).copy())
+    return next_elapsed, next_r, next_v
+
+
 def _v51_optimize_front_alpha(
     config: dict[str, Any],
     r: np.ndarray,
@@ -3224,9 +3253,18 @@ def _v51_optimize_front_alpha(
     rp_target_km: float,
     q_next: int,
     burn_index: int,
-    cache: dict[tuple[float, float, int, int], tuple[float, float]],
+    cache: dict[tuple[float, tuple[float, ...], tuple[float, ...], float, int, int], tuple[float, float]],
+    apsis_cache: dict[tuple[float, tuple[float, ...], tuple[float, ...], str, int], tuple[float, np.ndarray, np.ndarray]] | None = None,
 ) -> tuple[float, float]:
-    key = (round(float(elapsed_s), 3), round(float(rp_target_km), 3), int(q_next), int(burn_index))
+    r_key, v_key = _v51_state_fingerprint(r, v)
+    key = (
+        round(float(elapsed_s), 3),
+        r_key,
+        v_key,
+        round(float(rp_target_km), 3),
+        int(q_next),
+        int(burn_index),
+    )
     if key in cache:
         return cache[key]
     radius = float(np.linalg.norm(r))
@@ -3245,7 +3283,15 @@ def _v51_optimize_front_alpha(
         else:
             r_after = r.copy()
             v_after = v + (dv_mps / 1000.0) * _local_horizontal_direction(r, alpha_deg)
-            next_elapsed, next_r, next_v = _next_apsis(config, r_after, v_after, elapsed_s, "A", int(q_next))
+            next_elapsed, next_r, next_v = _v51_next_apsis_cached(
+                config,
+                r_after,
+                v_after,
+                elapsed_s,
+                "A",
+                int(q_next),
+                apsis_cache,
+            )
             rem = _v51_apogee_to_rp_i(config, next_r, next_v, float(config["target"]["a_km"]), float(config["target"]["i_deg"]))
             window_excess = _window_distance(_longitude_deg(config, next_r, next_elapsed), planning_window)
             value = dv_mps + (float(rem["dv_mps"]) if rem else 1.0e7) + 1000.0 * window_excess * window_excess
@@ -3270,6 +3316,8 @@ def _v51_simulate_candidate(
     rp_targets_km: list[float],
     q_aa: tuple[int, ...],
     q_ap: int,
+    front_alpha_cache: dict[tuple[float, tuple[float, ...], tuple[float, ...], float, int, int], tuple[float, float]] | None = None,
+    apsis_cache: dict[tuple[float, tuple[float, ...], tuple[float, ...], str, int], tuple[float, np.ndarray, np.ndarray]] | None = None,
 ) -> dict[str, Any]:
     elapsed_s, r, v, _lon = first
     r = np.asarray(r, dtype=float)
@@ -3278,7 +3326,7 @@ def _v51_simulate_candidate(
     burns: list[DesignManeuverBurn] = []
     raw_window = config["longitude"]["raw_window_degE"]
     planning_window = config["longitude"]["planning_window_degE"]
-    cache: dict[tuple[float, float, int, int], tuple[float, float]] = {}
+    cache = front_alpha_cache if front_alpha_cache is not None else {}
 
     def append_burn(
         *,
@@ -3331,7 +3379,17 @@ def _v51_simulate_candidate(
     flight_revolution = 2
     for index, rp_target in enumerate(rp_targets_km, start=1):
         q_next = int(q_aa[index - 1])
-        dv_mps, alpha_deg = _v51_optimize_front_alpha(config, r, v, elapsed_s, rp_target, q_next, index, cache)
+        dv_mps, alpha_deg = _v51_optimize_front_alpha(
+            config,
+            r,
+            v,
+            elapsed_s,
+            rp_target,
+            q_next,
+            index,
+            cache,
+            apsis_cache=apsis_cache,
+        )
         v_after = v + (dv_mps / 1000.0) * _local_horizontal_direction(r, alpha_deg)
         append_burn(
             index=index,
@@ -3346,7 +3404,7 @@ def _v51_simulate_candidate(
             target_post_a=0.5 * (float(np.linalg.norm(r)) + rp_target),
             flight_revolution=flight_revolution,
         )
-        elapsed_s, r, v = _next_apsis(config, r, v_after, elapsed_s, "A", q_next)
+        elapsed_s, r, v = _v51_next_apsis_cached(config, r, v_after, elapsed_s, "A", q_next, apsis_cache)
         flight_revolution += q_next
 
     terminal = _v51_apogee_to_rp_i(config, r, v, float(config["target"]["a_km"]), float(config["target"]["i_deg"]))
@@ -3368,7 +3426,7 @@ def _v51_simulate_candidate(
     )
     r_after = r.copy()
     v_after = np.asarray(terminal["v_plus"], dtype=float)
-    elapsed_p, r_p, v_p = _next_apsis(config, r_after, v_after, elapsed_s, "P", int(q_ap) + 1)
+    elapsed_p, r_p, v_p = _v51_next_apsis_cached(config, r_after, v_after, elapsed_s, "P", int(q_ap) + 1, apsis_cache)
     circ = _v51_terminal_perigee_burn(config, r_p, v_p)
     append_burn(
         index=terminal_index + 1,
@@ -3456,10 +3514,20 @@ def _v51_hard_objective(
     x_values: list[float],
     q_aa: tuple[int, ...],
     q_ap: int,
+    front_alpha_cache: dict[tuple[float, tuple[float, ...], tuple[float, ...], float, int, int], tuple[float, float]] | None = None,
+    apsis_cache: dict[tuple[float, tuple[float, ...], tuple[float, ...], str, int], tuple[float, np.ndarray, np.ndarray]] | None = None,
 ) -> float:
     try:
         rp_targets = _v51_rp_from_x(config, front_count, fixed_rp, variable_indices, x_values)
-        rec = _v51_simulate_candidate(config, first, rp_targets, q_aa, q_ap)
+        rec = _v51_simulate_candidate(
+            config,
+            first,
+            rp_targets,
+            q_aa,
+            q_ap,
+            front_alpha_cache=front_alpha_cache,
+            apsis_cache=apsis_cache,
+        )
     except Exception:
         return 1.0e18
     violations = _v51_feasibility_violations(config, rec)
@@ -3491,6 +3559,8 @@ def _v51_refine_last_variable_from_best_template(
     records: list[dict[str, Any]],
     q_aa: tuple[int, ...],
     q_ap: int,
+    front_alpha_cache: dict[tuple[float, tuple[float, ...], tuple[float, ...], float, int, int], tuple[float, float]] | None = None,
+    apsis_cache: dict[tuple[float, tuple[float, ...], tuple[float, ...], str, int], tuple[float, np.ndarray, np.ndarray]] | None = None,
 ) -> list[dict[str, Any]]:
     if minimize_scalar is None or not _v51_use_template_only_fast_path(config, front_count, fixed_rp, variable_indices):
         return []
@@ -3520,24 +3590,43 @@ def _v51_refine_last_variable_from_best_template(
             trial,
             q_aa,
             q_ap,
+            front_alpha_cache=front_alpha_cache,
+            apsis_cache=apsis_cache,
         )
 
-    result = minimize_scalar(
-        objective,
-        bounds=(low, high),
-        method="bounded",
-        options={"xatol": 1.0e-3, "maxiter": min(24, int(config["hard_constraint_planner"]["local_maxiter"]))},
-    )
-    try:
+    max_full_iter = min(24, int(config["hard_constraint_planner"]["local_maxiter"]))
+    max_fast_iter = min(10, max_full_iter)
+
+    def run_refinement(maxiter: int) -> dict[str, Any]:
+        result = minimize_scalar(
+            objective,
+            bounds=(low, high),
+            method="bounded",
+            options={"xatol": 1.0e-3, "maxiter": maxiter},
+        )
         refined_x = list(x_values)
         refined_x[variable_offset] = float(result.x)
         refined_targets = _v51_rp_from_x(config, front_count, fixed_rp, variable_indices, refined_x)
-        refined = _v51_simulate_candidate(config, first, refined_targets, q_aa, q_ap)
+        refined = _v51_simulate_candidate(
+            config,
+            first,
+            refined_targets,
+            q_aa,
+            q_ap,
+            front_alpha_cache=front_alpha_cache,
+            apsis_cache=apsis_cache,
+        )
         refined["optimizer"] = {
             "method": "template_x3_scalar",
             "success": bool(result.success),
             "nfev": int(getattr(result, "nfev", -1)),
         }
+        return refined
+
+    try:
+        refined = run_refinement(max_fast_iter)
+        if not _v51_is_feasible(config, refined) and max_full_iter > max_fast_iter:
+            refined = run_refinement(max_full_iter)
         return [refined]
     except Exception as exc:
         return [{"success": False, "reason": str(exc), "optimizer": {"method": "template_x3_scalar", "success": False}}]
@@ -3556,10 +3645,20 @@ def _v51_optimize_sequence(
 ) -> list[dict[str, Any]]:
     front_count = len(q_aa)
     records: list[dict[str, Any]] = []
+    front_alpha_cache: dict[tuple[float, tuple[float, ...], tuple[float, ...], float, int, int], tuple[float, float]] = {}
+    apsis_cache: dict[tuple[float, tuple[float, ...], tuple[float, ...], str, int], tuple[float, np.ndarray, np.ndarray]] = {}
     if not variable_indices:
         try:
             rp_targets = _v51_rp_from_x(config, front_count, fixed_rp, variable_indices, [])
-            rec = _v51_simulate_candidate(config, first, rp_targets, q_aa, q_ap)
+            rec = _v51_simulate_candidate(
+                config,
+                first,
+                rp_targets,
+                q_aa,
+                q_ap,
+                front_alpha_cache=front_alpha_cache,
+                apsis_cache=apsis_cache,
+            )
             records.append(rec)
         except Exception as exc:
             records.append({"success": False, "reason": str(exc)})
@@ -3568,7 +3667,15 @@ def _v51_optimize_sequence(
     def append_record(x_values: list[float], optimizer: dict[str, Any]) -> None:
         try:
             rp_targets = _v51_rp_from_x(config, front_count, fixed_rp, variable_indices, x_values)
-            rec = _v51_simulate_candidate(config, first, rp_targets, q_aa, q_ap)
+            rec = _v51_simulate_candidate(
+                config,
+                first,
+                rp_targets,
+                q_aa,
+                q_ap,
+                front_alpha_cache=front_alpha_cache,
+                apsis_cache=apsis_cache,
+            )
             rec["optimizer"] = optimizer
             records.append(rec)
         except Exception as exc:
@@ -3589,6 +3696,8 @@ def _v51_optimize_sequence(
                 records=records,
                 q_aa=q_aa,
                 q_ap=q_ap,
+                front_alpha_cache=front_alpha_cache,
+                apsis_cache=apsis_cache,
             )
         )
         return records
@@ -3596,7 +3705,18 @@ def _v51_optimize_sequence(
     if len(variable_indices) == 1 and minimize_scalar is not None:
         low, high = bounds[0]
         result = minimize_scalar(
-            lambda value: _v51_hard_objective(config, first, fixed_rp, variable_indices, front_count, [float(value)], q_aa, q_ap),
+            lambda value: _v51_hard_objective(
+                config,
+                first,
+                fixed_rp,
+                variable_indices,
+                front_count,
+                [float(value)],
+                q_aa,
+                q_ap,
+                front_alpha_cache=front_alpha_cache,
+                apsis_cache=apsis_cache,
+            ),
             bounds=(low, high),
             method="bounded",
             options={"xatol": 1.0e-3, "maxiter": int(config["hard_constraint_planner"]["local_maxiter"])},
@@ -3615,6 +3735,8 @@ def _v51_optimize_sequence(
                     [float(value) for value in values],
                     q_aa,
                     q_ap,
+                    front_alpha_cache=front_alpha_cache,
+                    apsis_cache=apsis_cache,
                 ),
                 np.asarray(start, dtype=float),
                 method="Powell",
