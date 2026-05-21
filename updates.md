@@ -554,6 +554,10 @@
 - 提交：`f46bd9f`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`doc/design_continuous_thrust_parameter_optimization_algorithm.md`、`doc/design_maneuver_pulse_planning_algorithm.md`、`HANDOFF.md`。
 
-## 2026-05-21T21:25:18+08:00 | Tune full J2 maneuver terminal burn and continuous search
-- 提交：`本次提交`
+## 2026-05-21T21:25:22+08:00 | Tune full J2 maneuver terminal burn and continuous search
+- 提交：`4972a76`
 - 影响文件：`src/smart/services/design_continuous_thrust_optimizer.py`、`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-21T22:02:02+08:00 | Add full J2 MV4 micro search
+- 提交：`本次提交`
+- 影响文件：`src/smart/services/design_continuous_thrust_optimizer.py`、`HANDOFF.md`。
