@@ -510,6 +510,10 @@
 - 提交：`1ee5930`
 - 影响文件：`src/smart/services/design_continuous_thrust_optimizer.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
 
-## 2026-05-20T23:32:44+08:00 | Keep MV5 near perigee in continuous thrust
-- 提交：`本次提交`
+## 2026-05-20T23:32:48+08:00 | Keep MV5 near perigee in continuous thrust
+- 提交：`692f6ea`
 - 影响文件：`src/smart/services/design_continuous_thrust_optimizer.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-21T11:41:10+08:00 | Freeze continuous thrust optimization rules
+- 提交：`本次提交`
+- 影响文件：`src/smart/services/design_continuous_thrust_optimizer.py`、`tests/test_design_maneuver_strategy.py`、`doc/design_continuous_thrust_parameter_optimization_algorithm.md`、`HANDOFF.md`。

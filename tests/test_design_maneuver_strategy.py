@@ -11,6 +11,10 @@ from PySide6 import QtCore, QtWidgets
 
 import smart.services.design_maneuver_strategy as design_strategy
 import scripts.satellite_dynamics_equation as dynamics
+from smart.services.design_continuous_thrust_optimizer import (
+    MV5_LOCKED_MAX_ECCENTRICITY,
+    MV5_NEAR_PERIGEE_START_WINDOW_MIN,
+)
 from smart.services.design_maneuver_strategy import (
     continuous_thrust_result_to_maneuver_strategy_payload,
     default_design_maneuver_strategy_payload,
@@ -167,8 +171,8 @@ def test_continuous_thrust_optimizer_handles_target_longitude_and_inclination_bo
     lon_error = ((mv5.cutoff_longitude_deg_e - target_lon_deg + 180.0) % 360.0) - 180.0
     assert abs(mv4.post_i_deg - target_i_deg) <= pulse_result.config["terminal_tolerance"]["i_deg"]
     assert abs(lon_error) <= pulse_result.config["terminal_tolerance"]["lon_deg"]
-    assert abs(mv5.burn_start_min - mv5.initial_burn_start_min) <= 3.0
-    assert mv5.post_e <= 1.0e-3
+    assert abs(mv5.burn_start_min - mv5.initial_burn_start_min) <= MV5_NEAR_PERIGEE_START_WINDOW_MIN
+    assert mv5.post_e <= MV5_LOCKED_MAX_ECCENTRICITY
 
 
 def test_feasible_q_scan_ignores_current_user_q_constraint() -> None:
