@@ -3729,8 +3729,8 @@ def _v51_refine_yaw_fixed_post_a(
 
     current = clipped(seed)
     current_score = score(current)
-    max_evaluations = max(12, min(24, int(config["hard_constraint_planner"]["local_maxiter"])))
-    for step in (2.0, 1.0, 0.5, 0.25, 0.1):
+    max_evaluations = max(18, min(36, int(config["hard_constraint_planner"]["local_maxiter"])))
+    for step in (2.0, 1.0, 0.5, 0.25, 0.1, 0.05):
         improved = True
         while improved and len(eval_cache) < max_evaluations:
             improved = False

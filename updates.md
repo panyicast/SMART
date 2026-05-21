@@ -574,6 +574,10 @@
 - 提交：`c6b7d8e`
 - 影响文件：`doc/satellite_trajectory_plan.md`、`projects/F4/config/design_import_maneuver_strategy.json`、`projects/F4/config/design_maneuver_strategy.json`、`projects/F4/data/design_maneuver_results.json`、`projects/F4/smart_project.json`、`projects/F4/charts/altitude_trend.png`、`projects/F4/charts/velocity_trend.png`、`projects/F4/data/design_continuous_thrust_maneuver_strategy.xlsx` 等 9 个文件。
 
-## 2026-05-22T00:05:49+08:00 | Optimize pulse yaw refinement
-- 提交：`本次提交`
+## 2026-05-22T00:05:54+08:00 | Optimize pulse yaw refinement
+- 提交：`c129e6b`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-22T00:22:17+08:00 | Use finer pulse yaw step
+- 提交：`本次提交`
+- 影响文件：`src/smart/services/design_maneuver_strategy.py`、`HANDOFF.md`。
