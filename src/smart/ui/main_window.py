@@ -32,6 +32,7 @@ from smart.ui.widgets.common_orbital_tools import (
     OrbitalConversionDialog,
     PlaneChangeDialog,
     SolarLunarPositionDialog,
+    TwoBodyPropagationDialog,
 )
 
 _MAX_RECENT_PROJECTS = 8
@@ -201,6 +202,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self._lambert_transfer_action.triggered.connect(self._open_lambert_transfer_tool)
         self._common_tools_menu.addAction(self._lambert_transfer_action)
 
+        self._two_body_propagation_action = QtGui.QAction(self)
+        self._two_body_propagation_action.triggered.connect(self._open_two_body_propagation_tool)
+        self._common_tools_menu.addAction(self._two_body_propagation_action)
+
     def _build_sidebar(self) -> QtWidgets.QWidget:
         sidebar = QtWidgets.QFrame()
         sidebar.setProperty("role", "sidebar")
@@ -288,6 +293,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _open_lambert_transfer_tool(self) -> None:
         LambertTransferDialog(self._i18n, self).exec()
+
+    def _open_two_body_propagation_tool(self) -> None:
+        TwoBodyPropagationDialog(self._i18n, self).exec()
 
     def _toggle_sidebar_collapsed(self) -> None:
         self._apply_sidebar_collapsed(not self._sidebar_collapsed, persist=True)
@@ -689,6 +697,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._hohmann_transfer_action.setText(t("common_tools.action.hohmann_transfer"))
         self._plane_change_action.setText(t("common_tools.action.plane_change"))
         self._lambert_transfer_action.setText(t("common_tools.action.lambert_transfer"))
+        self._two_body_propagation_action.setText(t("common_tools.action.two_body_propagation"))
         self._refresh_recent_project_actions()
         self._refresh_project_actions()
 

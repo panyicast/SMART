@@ -14,6 +14,7 @@ from smart.ui.widgets.common_orbital_tools import (
     OrbitalConversionDialog,
     PlaneChangeDialog,
     SolarLunarPositionDialog,
+    TwoBodyPropagationDialog,
 )
 
 
@@ -74,6 +75,18 @@ def test_lambert_dialog_calculates_default_quarter_arc() -> None:
         assert dialog._status.text() == "计算完成。"
         assert dialog._lambert_velocity_table.item(0, 0).text() == "出发速度"
         assert float(dialog._lambert_summary_table.item(0, 0).text()) == 90.0
+    finally:
+        dialog.deleteLater()
+
+
+def test_two_body_propagation_dialog_calculates_state_and_subpoint() -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    dialog = TwoBodyPropagationDialog(I18nManager())
+    try:
+        assert dialog._propagation_status.text() == "计算完成。"
+        assert dialog._propagation_state_table.item(0, 0).text() == "位置"
+        assert float(dialog._propagation_summary_table.item(0, 1).text()) >= 0.0
     finally:
         dialog.deleteLater()
 

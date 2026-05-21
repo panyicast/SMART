@@ -86,12 +86,13 @@ def test_common_tools_menu_exposes_orbital_analysis_actions() -> None:
         assert [action.text() for action in window._common_tools_menu.actions()] == [
             "轨道六根数 / 状态矢量转换",
             "近远地点参数换算",
-            "轨道周期与高度换算",
+            "圆轨道速度与周期校核",
             "真偏平近点角转换",
             "太阳月亮位置计算",
             "霍夫曼转移计算",
             "平面变轨计算",
             "Lambert 转移计算",
+            "两体轨道传播",
         ]
     finally:
         window.deleteLater()

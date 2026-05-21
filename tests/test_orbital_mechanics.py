@@ -10,11 +10,13 @@ from smart.services.orbital_mechanics import (
     apsis_orbit_metrics_from_altitudes,
     circular_orbit_metrics_from_altitude,
     circular_orbit_metrics_from_period,
+    coplanar_hohmann_estimate,
     hohmann_transfer_between_circular_orbits,
     lambert_transfer,
     orbital_anomalies_from_angle,
     orbital_elements_from_state_vector,
     plane_change_delta_v,
+    propagate_two_body_elements,
     sample_orbit,
     state_from_true_anomaly,
 )
@@ -110,3 +112,31 @@ def test_lambert_transfer_recovers_quarter_circular_arc_velocity() -> None:
     np.testing.assert_allclose(result.departure_velocity_km_s, [0.0, circular_speed, 0.0], atol=1e-8)
     np.testing.assert_allclose(result.arrival_velocity_km_s, [-circular_speed, 0.0, 0.0], atol=1e-8)
     assert result.transfer_angle_deg == pytest.approx(90.0)
+
+
+def test_coplanar_hohmann_estimate_reports_phase_wait_and_burn_directions() -> None:
+    estimate = coplanar_hohmann_estimate(EARTH_RADIUS_KM + 400.0, EARTH_RADIUS_KM + 1200.0, 0.0)
+
+    assert estimate.transfer_kind == "raise"
+    assert estimate.departure_burn_direction == "prograde"
+    assert estimate.arrival_burn_direction == "prograde"
+    assert 0.0 <= estimate.required_target_lead_angle_deg < 360.0
+    assert estimate.wait_time_s is not None
+    assert estimate.wait_time_s >= 0.0
+
+
+def test_two_body_propagation_advances_quarter_circular_orbit() -> None:
+    elements = OrbitalElements(
+        semi_major_axis_km=7000.0,
+        eccentricity=0.0,
+        inclination_deg=0.0,
+        raan_deg=0.0,
+        argument_of_periapsis_deg=0.0,
+        true_anomaly_deg=0.0,
+    )
+    elapsed_s = elements.period_seconds / 4.0
+
+    result = propagate_two_body_elements(elements, elapsed_s)
+
+    assert result.true_anomaly_deg == pytest.approx(90.0, abs=1e-8)
+    np.testing.assert_allclose(result.position_km, [0.0, 7000.0, 0.0], atol=1e-7)

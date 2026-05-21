@@ -1,22 +1,29 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import math
 from typing import Callable
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from smart.domain.models import CircularOrbitMetrics, EARTH_MU_KM3_S2, EARTH_RADIUS_KM, OrbitalElements
-from smart.services.earth_orientation import ecef_state_from_eci, format_utc, geodetic_point_from_ecef
+from smart.services.earth_orientation import (
+    ecef_state_from_eci,
+    format_utc,
+    geodetic_point_from_ecef,
+    parse_utc,
+    subsatellite_point_from_eci,
+)
 from smart.services.orbital_mechanics import (
     apsis_orbit_metrics_from_altitudes,
     circular_orbit_metrics_from_altitude,
     circular_orbit_metrics_from_period,
-    hohmann_transfer_between_circular_orbits,
+    coplanar_hohmann_estimate,
     lambert_transfer,
     orbital_anomalies_from_angle,
     orbital_elements_from_state_vector,
     plane_change_delta_v,
+    propagate_two_body_elements,
     state_from_true_anomaly,
 )
 from smart.services.spice_service import BodyState, SpiceKernelManager
@@ -616,7 +623,7 @@ class CircularOrbitPeriodDialog(_CommonOrbitalToolDialog):
         status = self._caption("")
         panel_layout.addWidget(status)
         table = self._output_table(
-            ["高度 (km)", "半径 (km)", "周期 (min)", "圆轨道速度 (km/s)", "逃逸速度 (km/s)", "平运动 (rad/s)"],
+            ["高度 (km)", "半径 (km)", "周期 (min)", "圆轨道速度 (km/s)", "逃逸速度 (km/s)", "角速度 (rad/s)"],
             1,
         )
         panel_layout.addWidget(table)
@@ -840,17 +847,22 @@ class HohmannTransferDialog(_CommonOrbitalToolDialog):
         card_layout.setContentsMargins(16, 16, 16, 16)
         card_layout.setSpacing(12)
         card_layout.addWidget(self._title("圆轨道输入"))
-        card_layout.addWidget(self._caption("输入地球圆轨道高度。计算使用 Earth 标准引力参数。"))
+        card_layout.addWidget(
+            self._caption("输入地球圆轨道高度和当前目标领先相位。输出双脉冲共面转移、点火方向和相位初算。")
+        )
 
         grid = QtWidgets.QGridLayout()
         grid.setHorizontalSpacing(16)
         grid.setVerticalSpacing(10)
         self._initial_altitude = _number_field(400.0, 0.0, 2.0e6, 10.0, 6)
         self._target_altitude = _number_field(35786.0, 0.0, 2.0e6, 10.0, 6)
+        self._current_phase_angle = _number_field(0.0, -360000.0, 360000.0, 1.0, 6)
         grid.addWidget(QtWidgets.QLabel("初始轨道高度 (km)"), 0, 0)
         grid.addWidget(self._initial_altitude, 0, 1)
         grid.addWidget(QtWidgets.QLabel("目标轨道高度 (km)"), 0, 2)
         grid.addWidget(self._target_altitude, 0, 3)
+        grid.addWidget(QtWidgets.QLabel("当前目标领先相位 (deg)"), 1, 0)
+        grid.addWidget(self._current_phase_angle, 1, 1)
         grid.setColumnStretch(1, 1)
         grid.setColumnStretch(3, 1)
         card_layout.addLayout(grid)
@@ -869,10 +881,25 @@ class HohmannTransferDialog(_CommonOrbitalToolDialog):
         self._status = self._caption("")
         output_layout.addWidget(self._status)
         self._result_table = self._output_table(
-            ["r1 (km)", "r2 (km)", "转移半长轴 (km)", "Δv1 (km/s)", "Δv2 (km/s)", "总 Δv (km/s)", "转移时间 (min)"],
+            [
+                "类型",
+                "r1 (km)",
+                "r2 (km)",
+                "v1 圆轨道 (km/s)",
+                "v2 圆轨道 (km/s)",
+                "Δv1 (km/s)",
+                "Δv2 (km/s)",
+                "总 Δv (km/s)",
+                "转移时间 (min)",
+            ],
             1,
         )
         output_layout.addWidget(self._result_table)
+        self._phase_table = self._output_table(
+            ["第一次点火", "第二次点火", "所需目标领先相位 (deg)", "当前相位 (deg)", "等待时间 (min)"],
+            1,
+        )
+        output_layout.addWidget(self._phase_table)
         self.root_layout.addWidget(output, 1)
         self._calculate_transfer()
 
@@ -880,25 +907,52 @@ class HohmannTransferDialog(_CommonOrbitalToolDialog):
         initial_radius = EARTH_RADIUS_KM + self._initial_altitude.value()
         target_radius = EARTH_RADIUS_KM + self._target_altitude.value()
         try:
-            result = hohmann_transfer_between_circular_orbits(initial_radius, target_radius, EARTH_MU_KM3_S2)
+            estimate = coplanar_hohmann_estimate(
+                initial_radius,
+                target_radius,
+                self._current_phase_angle.value(),
+                mu_km3_s2=EARTH_MU_KM3_S2,
+            )
         except Exception as exc:
             self._status.setText(f"计算失败：{exc}")
             return
 
         self._status.setText("计算完成。")
+        transfer = estimate.transfer
         self._set_table_row(
             self._result_table,
             0,
             [
-                f"{result.initial_radius_km:.6f}",
-                f"{result.target_radius_km:.6f}",
-                f"{result.transfer_semi_major_axis_km:.6f}",
-                f"{result.delta_v1_km_s:.10f}",
-                f"{result.delta_v2_km_s:.10f}",
-                f"{result.total_delta_v_km_s:.10f}",
-                f"{result.transfer_time_s / 60.0:.6f}",
+                self._transfer_kind_text(estimate.transfer_kind),
+                f"{transfer.initial_radius_km:.6f}",
+                f"{transfer.target_radius_km:.6f}",
+                f"{estimate.initial_circular_speed_km_s:.10f}",
+                f"{estimate.target_circular_speed_km_s:.10f}",
+                f"{transfer.delta_v1_km_s:.10f}",
+                f"{transfer.delta_v2_km_s:.10f}",
+                f"{transfer.total_delta_v_km_s:.10f}",
+                f"{transfer.transfer_time_s / 60.0:.6f}",
             ],
         )
+        self._set_table_row(
+            self._phase_table,
+            0,
+            [
+                self._burn_direction_text(estimate.departure_burn_direction),
+                self._burn_direction_text(estimate.arrival_burn_direction),
+                f"{estimate.required_target_lead_angle_deg:.8f}",
+                f"{estimate.current_target_lead_angle_deg:.8f}",
+                "--" if estimate.wait_time_s is None else f"{estimate.wait_time_s / 60.0:.8f}",
+            ],
+        )
+
+    @staticmethod
+    def _transfer_kind_text(value: str) -> str:
+        return {"raise": "升轨", "lower": "降轨", "same": "同轨"}.get(value, value)
+
+    @staticmethod
+    def _burn_direction_text(value: str) -> str:
+        return {"prograde": "顺行加速", "retrograde": "逆行减速", "none": "无"}.get(value, value)
 
 
 class PlaneChangeDialog(_CommonOrbitalToolDialog):
@@ -1068,5 +1122,125 @@ class LambertTransferDialog(_CommonOrbitalToolDialog):
                 f"{result.transfer_angle_deg:.8f}",
                 f"{result.time_of_flight_s / 60.0:.8f}",
                 "长路径" if result.path == "long" else "短路径",
+            ],
+        )
+
+
+class TwoBodyPropagationDialog(_CommonOrbitalToolDialog):
+    def __init__(self, i18n: I18nManager, parent: QtWidgets.QWidget | None = None) -> None:
+        super().__init__(i18n, "common_tools.two_body.title", parent)
+        self.resize(1160, 720)
+
+        input_card = self._card()
+        input_layout = QtWidgets.QVBoxLayout(input_card)
+        input_layout.setContentsMargins(16, 16, 16, 16)
+        input_layout.setSpacing(12)
+        input_layout.addWidget(self._title("输入轨道和传播航时"))
+        input_layout.addWidget(self._caption("六根数做两体传播；历元仅用于把传播后位置转成星下点地理经纬度。"))
+
+        self._propagation_fields = {
+            "a": _number_field(7000.0, EARTH_RADIUS_KM + 1.0, 2.0e7, 10.0, 8),
+            "e": _number_field(0.01, 0.0, 0.999999, 0.001, 8),
+            "i": _number_field(28.5, 0.0, 180.0, 0.1, 8),
+            "raan": _number_field(40.0, 0.0, 360.0, 0.1, 8),
+            "argp": _number_field(10.0, 0.0, 360.0, 0.1, 8),
+            "ta": _number_field(0.0, 0.0, 360.0, 0.1, 8),
+        }
+        grid = QtWidgets.QGridLayout()
+        grid.setHorizontalSpacing(14)
+        grid.setVerticalSpacing(10)
+        labels = [
+            ("半长轴 a (km)", "a"),
+            ("偏心率 e", "e"),
+            ("倾角 i (deg)", "i"),
+            ("RAAN (deg)", "raan"),
+            ("近地点幅角 (deg)", "argp"),
+            ("初始真近点角 (deg)", "ta"),
+        ]
+        for index, (label, key) in enumerate(labels):
+            row = index // 3
+            column = (index % 3) * 2
+            grid.addWidget(QtWidgets.QLabel(label), row, column)
+            grid.addWidget(self._propagation_fields[key], row, column + 1)
+        for column in (1, 3, 5):
+            grid.setColumnStretch(column, 1)
+        input_layout.addLayout(grid)
+
+        time_row = QtWidgets.QHBoxLayout()
+        time_row.setSpacing(12)
+        time_row.addWidget(QtWidgets.QLabel("初始历元 (北京时间)"))
+        self._propagation_epoch_field = NoWheelDateTimeEdit()
+        self._propagation_epoch_field.setCalendarPopup(True)
+        self._propagation_epoch_field.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
+        self._propagation_epoch_field.setTimeZone(_beijing_qtimezone())
+        self._propagation_epoch_field.setDateTime(_utc_to_qdatetime(datetime.now(tz=timezone.utc).replace(microsecond=0)))
+        self._propagation_epoch_field.setMinimumHeight(38)
+        time_row.addWidget(self._propagation_epoch_field, 1)
+        self._propagation_elapsed_field = _number_field(30.0, -1.0e9, 1.0e9, 1.0, 8)
+        time_row.addWidget(QtWidgets.QLabel("航时 (min)"))
+        time_row.addWidget(self._propagation_elapsed_field, 1)
+        time_row.addWidget(self._primary_button("传播轨道", self._calculate_propagation))
+        input_layout.addLayout(time_row)
+        self.root_layout.addWidget(input_card)
+
+        output = self._panel()
+        output_layout = QtWidgets.QVBoxLayout(output)
+        output_layout.setContentsMargins(14, 14, 14, 14)
+        output_layout.setSpacing(8)
+        output_layout.addWidget(self._title("输出"))
+        self._propagation_status = self._caption("")
+        output_layout.addWidget(self._propagation_status)
+        self._propagation_state_table = self._output_table(["量", "X", "Y", "Z", "单位"], 2)
+        output_layout.addWidget(self._propagation_state_table)
+        self._propagation_summary_table = self._output_table(
+            ["传播后 UTC", "真近点角 (deg)", "星下点经度 (deg)", "星下点纬度 (deg)"],
+            1,
+        )
+        output_layout.addWidget(self._propagation_summary_table)
+        self.root_layout.addWidget(output, 1)
+        self._calculate_propagation()
+
+    def _calculate_propagation(self) -> None:
+        try:
+            elements = OrbitalElements(
+                semi_major_axis_km=self._propagation_fields["a"].value(),
+                eccentricity=self._propagation_fields["e"].value(),
+                inclination_deg=self._propagation_fields["i"].value(),
+                raan_deg=self._propagation_fields["raan"].value(),
+                argument_of_periapsis_deg=self._propagation_fields["argp"].value(),
+                true_anomaly_deg=self._propagation_fields["ta"].value(),
+            ).validate()
+            elapsed_s = self._propagation_elapsed_field.value() * 60.0
+            propagated = propagate_two_body_elements(elements, elapsed_s)
+            propagated_epoch = parse_utc(_datetime_edit_to_utc(self._propagation_epoch_field)) + timedelta(
+                seconds=elapsed_s
+            )
+            subpoint = subsatellite_point_from_eci(
+                propagated.position_km * 1000.0,
+                epoch_utc=propagated_epoch,
+            )
+        except Exception as exc:
+            self._propagation_status.setText(f"计算失败：{exc}")
+            return
+
+        self._propagation_status.setText("计算完成。")
+        self._set_table_row(
+            self._propagation_state_table,
+            0,
+            ["位置", *(f"{float(value):.8f}" for value in propagated.position_km), "km"],
+        )
+        self._set_table_row(
+            self._propagation_state_table,
+            1,
+            ["速度", *(f"{float(value):.10f}" for value in propagated.velocity_km_s), "km/s"],
+        )
+        self._set_table_row(
+            self._propagation_summary_table,
+            0,
+            [
+                format_utc(propagated_epoch),
+                f"{propagated.true_anomaly_deg:.10f}",
+                f"{subpoint.longitude_deg:.8f}",
+                f"{subpoint.latitude_deg:.8f}",
             ],
         )

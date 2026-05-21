@@ -89,6 +89,22 @@ class HohmannTransferResult:
 
 
 @dataclass(slots=True)
+class CoplanarHohmannEstimate:
+    transfer: HohmannTransferResult
+    transfer_kind: str
+    initial_circular_speed_km_s: float
+    target_circular_speed_km_s: float
+    transfer_departure_speed_km_s: float
+    transfer_arrival_speed_km_s: float
+    departure_burn_direction: str
+    arrival_burn_direction: str
+    required_target_lead_angle_deg: float
+    current_target_lead_angle_deg: float
+    wait_time_s: float | None
+    relative_phase_rate_deg_s: float
+
+
+@dataclass(slots=True)
 class CircularOrbitMetrics:
     altitude_km: float
     radius_km: float
@@ -133,6 +149,14 @@ class LambertTransferResult:
     time_of_flight_s: float
     transfer_angle_deg: float
     path: str
+
+
+@dataclass(slots=True)
+class TwoBodyPropagationResult:
+    position_km: NDArray[np.float64]
+    velocity_km_s: NDArray[np.float64]
+    true_anomaly_deg: float
+    elapsed_s: float
 
 
 @dataclass(slots=True)

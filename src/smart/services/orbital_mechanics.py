@@ -10,6 +10,7 @@ from scipy.optimize import brentq
 from smart.domain.models import (
     ApsisOrbitMetrics,
     CircularOrbitMetrics,
+    CoplanarHohmannEstimate,
     EARTH_MU_KM3_S2,
     EARTH_RADIUS_KM,
     HohmannTransferResult,
@@ -18,6 +19,7 @@ from smart.domain.models import (
     OrbitalAnomalySet,
     OrbitalElements,
     PlaneChangeResult,
+    TwoBodyPropagationResult,
 )
 from smart.services import spice_service
 
@@ -388,6 +390,48 @@ def hohmann_transfer_between_circular_orbits(
     )
 
 
+def coplanar_hohmann_estimate(
+    initial_radius_km: float,
+    target_radius_km: float,
+    current_target_lead_angle_deg: float = 0.0,
+    *,
+    mu_km3_s2: float = EARTH_MU_KM3_S2,
+) -> CoplanarHohmannEstimate:
+    transfer = hohmann_transfer_between_circular_orbits(initial_radius_km, target_radius_km, mu_km3_s2)
+    initial_circular_speed_km_s = math.sqrt(mu_km3_s2 / initial_radius_km)
+    target_circular_speed_km_s = math.sqrt(mu_km3_s2 / target_radius_km)
+    transfer_departure_speed_km_s = initial_circular_speed_km_s + transfer.delta_v1_km_s
+    transfer_arrival_speed_km_s = target_circular_speed_km_s - transfer.delta_v2_km_s
+
+    initial_rate_deg_s = math.degrees(math.sqrt(mu_km3_s2 / initial_radius_km**3))
+    target_rate_deg_s = math.degrees(math.sqrt(mu_km3_s2 / target_radius_km**3))
+    required_lead_deg = (180.0 - target_rate_deg_s * transfer.transfer_time_s) % 360.0
+    current_lead_deg = current_target_lead_angle_deg % 360.0
+    relative_phase_rate_deg_s = target_rate_deg_s - initial_rate_deg_s
+    wait_time_s = _phase_wait_time_s(current_lead_deg, required_lead_deg, relative_phase_rate_deg_s)
+
+    if target_radius_km > initial_radius_km:
+        transfer_kind = "raise"
+    elif target_radius_km < initial_radius_km:
+        transfer_kind = "lower"
+    else:
+        transfer_kind = "same"
+    return CoplanarHohmannEstimate(
+        transfer=transfer,
+        transfer_kind=transfer_kind,
+        initial_circular_speed_km_s=initial_circular_speed_km_s,
+        target_circular_speed_km_s=target_circular_speed_km_s,
+        transfer_departure_speed_km_s=transfer_departure_speed_km_s,
+        transfer_arrival_speed_km_s=transfer_arrival_speed_km_s,
+        departure_burn_direction=_burn_direction_from_delta_v(transfer.delta_v1_km_s),
+        arrival_burn_direction=_burn_direction_from_delta_v(transfer.delta_v2_km_s),
+        required_target_lead_angle_deg=required_lead_deg,
+        current_target_lead_angle_deg=current_lead_deg,
+        wait_time_s=wait_time_s,
+        relative_phase_rate_deg_s=relative_phase_rate_deg_s,
+    )
+
+
 def circular_orbit_metrics_from_altitude(
     altitude_km: float,
     *,
@@ -576,6 +620,24 @@ def lambert_transfer(
     )
 
 
+def propagate_two_body_elements(elements: OrbitalElements, elapsed_s: float) -> TwoBodyPropagationResult:
+    elements.validate()
+    mean_motion = math.sqrt(elements.mu_km3_s2 / elements.semi_major_axis_km**3)
+    initial_mean_anomaly = float(
+        _mean_anomaly_from_true_anomaly(math.radians(elements.true_anomaly_deg), elements.eccentricity)
+    )
+    propagated_mean_anomaly = (initial_mean_anomaly + mean_motion * elapsed_s) % (2.0 * math.pi)
+    eccentric_anomaly = _eccentric_anomaly_from_mean_anomaly(propagated_mean_anomaly, elements.eccentricity)
+    true_anomaly = _true_anomaly_from_eccentric_anomaly(eccentric_anomaly, elements.eccentricity)
+    position_km, velocity_km_s = state_from_true_anomaly(elements, true_anomaly)
+    return TwoBodyPropagationResult(
+        position_km=position_km,
+        velocity_km_s=velocity_km_s,
+        true_anomaly_deg=_normalized_angle_deg(true_anomaly),
+        elapsed_s=elapsed_s,
+    )
+
+
 def _circular_orbit_metrics_from_radius(
     radius_km: float,
     *,
@@ -594,6 +656,25 @@ def _circular_orbit_metrics_from_radius(
         escape_speed_km_s=math.sqrt(2.0 * mu_km3_s2 / radius_km),
         mean_motion_rad_s=mean_motion_rad_s,
     )
+
+
+def _phase_wait_time_s(current_deg: float, required_deg: float, relative_rate_deg_s: float) -> float | None:
+    if abs(relative_rate_deg_s) <= 1e-14:
+        difference = ((required_deg - current_deg + 180.0) % 360.0) - 180.0
+        return 0.0 if abs(difference) <= 1e-10 else None
+    if relative_rate_deg_s > 0.0:
+        phase_distance_deg = (required_deg - current_deg) % 360.0
+    else:
+        phase_distance_deg = (current_deg - required_deg) % 360.0
+    return phase_distance_deg / abs(relative_rate_deg_s)
+
+
+def _burn_direction_from_delta_v(delta_v_km_s: float) -> str:
+    if delta_v_km_s > _VECTOR_TOLERANCE:
+        return "prograde"
+    if delta_v_km_s < -_VECTOR_TOLERANCE:
+        return "retrograde"
+    return "none"
 
 
 def _eccentric_anomaly_from_true_anomaly(true_anomaly_rad: float, eccentricity: float) -> float:
