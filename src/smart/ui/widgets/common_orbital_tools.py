@@ -7,7 +7,7 @@ from typing import Callable
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from smart.domain.models import EARTH_MU_KM3_S2, EARTH_RADIUS_KM, OrbitalElements
-from smart.services.earth_orientation import format_utc
+from smart.services.earth_orientation import ecef_state_from_eci, format_utc, geodetic_point_from_ecef
 from smart.services.orbital_mechanics import (
     hohmann_transfer_between_circular_orbits,
     orbital_elements_from_state_vector,
@@ -498,7 +498,9 @@ class SolarLunarPositionDialog(_CommonOrbitalToolDialog):
         card_layout.setContentsMargins(16, 16, 16, 16)
         card_layout.setSpacing(12)
         card_layout.addWidget(self._title("输入历元"))
-        card_layout.addWidget(self._caption("北京时间编辑，计算时转 UTC。输出为 Earth 相对 J2000 位置速度。"))
+        card_layout.addWidget(
+            self._caption("北京时间编辑，计算时转 UTC。输出 Earth 相对 J2000 位置速度和日下点/月下点地理经纬度。")
+        )
 
         row = QtWidgets.QHBoxLayout()
         row.setSpacing(12)
@@ -522,7 +524,18 @@ class SolarLunarPositionDialog(_CommonOrbitalToolDialog):
         self._status = self._caption("依赖本地 SPICE LSK 与行星 SPK 内核。")
         output_layout.addWidget(self._status)
         self._state_table = self._output_table(
-            ["天体", "X (km)", "Y (km)", "Z (km)", "Vx (km/s)", "Vy (km/s)", "Vz (km/s)", "光行时 (s)"],
+            [
+                "天体",
+                "X (km)",
+                "Y (km)",
+                "Z (km)",
+                "Vx (km/s)",
+                "Vy (km/s)",
+                "Vz (km/s)",
+                "地理经度 (deg)",
+                "地理纬度 (deg)",
+                "光行时 (s)",
+            ],
             2,
         )
         output_layout.addWidget(self._state_table, 1)
@@ -551,9 +564,21 @@ class SolarLunarPositionDialog(_CommonOrbitalToolDialog):
                 label,
                 *(f"{float(value):.6f}" for value in state.position_km),
                 *(f"{float(value):.10f}" for value in state.velocity_km_s),
+                *self._geographic_longitude_latitude_text(state),
                 f"{state.light_time_s:.6f}",
             ],
         )
+
+    def _geographic_longitude_latitude_text(self, state: BodyState) -> tuple[str, str]:
+        utc = _datetime_edit_to_utc(self._epoch_field)
+        position_ecef_m, _velocity_ecef_m_s = ecef_state_from_eci(
+            state.position_km * 1000.0,
+            state.velocity_km_s * 1000.0,
+            epoch_utc=utc,
+            manager=self._kernel_manager,
+        )
+        subpoint = geodetic_point_from_ecef(position_ecef_m)
+        return f"{subpoint.longitude_deg:.8f}", f"{subpoint.latitude_deg:.8f}"
 
 
 class HohmannTransferDialog(_CommonOrbitalToolDialog):

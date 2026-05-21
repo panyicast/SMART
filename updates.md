@@ -534,6 +534,10 @@
 - 提交：`f7162f3`
 - 影响文件：`.gitignore`、`HANDOFF.md`、`doc/1.jpg`、`doc/1.png`、`doc/10.jpg`、`doc/11.jpg`、`doc/12.jpg`、`doc/13.jpg` 等 30 个文件。
 
-## 2026-05-21T13:00:42+08:00 | Add common orbital tools menu
-- 提交：`本次提交`
+## 2026-05-21T13:00:47+08:00 | Add common orbital tools menu
+- 提交：`acb29a8`
 - 影响文件：`src/smart/ui/i18n.py`、`src/smart/ui/main_window.py`、`src/smart/ui/widgets/common_orbital_tools.py`、`tests/test_common_orbital_tools.py`、`tests/test_sidebar_navigation.py`、`HANDOFF.md`。
+
+## 2026-05-21T13:06:18+08:00 | Add Sun Moon geographic coordinates
+- 提交：`本次提交`
+- 影响文件：`src/smart/ui/widgets/common_orbital_tools.py`、`tests/test_common_orbital_tools.py`、`HANDOFF.md`。
