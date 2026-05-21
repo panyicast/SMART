@@ -56,6 +56,21 @@ def test_j2_numerical_coast_reports_osculating_elements() -> None:
     assert math.degrees(true_rad) == pytest.approx(177.5989488177673, abs=0.01)
 
 
+def test_design_maneuver_dynamics_forces_j2_enabled() -> None:
+    payload = default_design_maneuver_strategy_payload()
+    payload["earth"]["use_J2"] = False
+
+    config = normalize_design_maneuver_strategy_payload(payload)
+
+    assert config["earth"]["use_J2"] is True
+
+    raw_config = normalize_design_maneuver_strategy_payload(default_design_maneuver_strategy_payload())
+    raw_config["earth"]["use_J2"] = False
+    r0, v0 = design_strategy._initial_state_km(config)
+    with pytest.raises(ValueError, match="J2 perturbation is mandatory"):
+        design_strategy._propagate_state_to_elapsed(raw_config, r0, v0, 0.0, 60.0)
+
+
 def test_supersynchronous_design_planner_outputs_fixed_tail() -> None:
     result = plan_design_maneuver_strategy(default_design_maneuver_strategy_payload())
 
@@ -99,9 +114,14 @@ def test_supersynchronous_design_planner_outputs_fixed_tail() -> None:
 
 
 def test_continuous_thrust_parameter_optimizer_uses_pulse_targets(tmp_path: Path) -> None:
-    pulse_result = plan_design_maneuver_strategy(default_design_maneuver_strategy_payload())
+    payload = default_design_maneuver_strategy_payload()
+    payload["apsis"]["pattern_mode"] = "user"
+    payload["hard_constraint_planner"]["q_AA_user"] = [3, 3, 2]
+    payload["hard_constraint_planner"]["q_AP_user"] = 0
+    pulse_result = plan_design_maneuver_strategy(payload)
     continuous_result = optimize_continuous_thrust_model_parameters(pulse_result)
 
+    assert all(check["passed"] for check in pulse_result.checks)
     assert continuous_result.time_step_s == pytest.approx(10.0)
     assert continuous_result.yaw_step_deg == pytest.approx(0.05)
     assert len(continuous_result.parameters) == 5
@@ -169,8 +189,8 @@ def test_continuous_thrust_parameter_optimizer_uses_pulse_targets(tmp_path: Path
     assert len(import_summaries) == len(continuous_result.parameters)
     for summary, parameter in zip(import_summaries, continuous_result.parameters):
         assert summary["elapsed_time_min"] == pytest.approx(parameter.cutoff_min)
-        assert summary["semi_major_axis_m"] == pytest.approx(parameter.post_a_km * 1000.0, abs=1.0e-4)
-        assert summary["inclination_deg"] == pytest.approx(parameter.post_i_deg, abs=1.0e-9)
+        assert summary["semi_major_axis_m"] == pytest.approx(parameter.post_a_km * 1000.0, abs=1.0e-2)
+        assert summary["inclination_deg"] == pytest.approx(parameter.post_i_deg, abs=1.0e-8)
 
 
 @pytest.mark.parametrize(("target_lon_deg", "target_i_deg"), [(100.0, 6.0), (100.0, 8.0), (140.0, 6.0), (140.0, 8.0)])

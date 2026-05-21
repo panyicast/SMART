@@ -19,11 +19,6 @@ from typing import Any
 
 import numpy as np
 
-try:
-    from scipy.optimize import minimize
-except Exception:  # pragma: no cover - SciPy is optional at runtime.
-    minimize = None
-
 from smart.services.design_maneuver_strategy import (
     ContinuousThrustManeuverParameter,
     ContinuousThrustOptimizationResult,
@@ -34,6 +29,7 @@ from smart.services.design_maneuver_strategy import (
     _longitude_deg,
     _next_apsis,
     _propagate_state_to_elapsed,
+    _require_j2_enabled,
     _rv_to_coe,
     _initial_state_km,
     _wrap180,
@@ -49,6 +45,7 @@ def optimize_continuous_thrust_chain_parameters(
     result: DesignManeuverResult,
 ) -> ContinuousThrustOptimizationResult:
     config = normalize_design_maneuver_strategy_payload(result.config)
+    _require_j2_enabled(config)
     burns = sorted(result.burns, key=lambda item: item.index)
     if len(burns) < 5:
         raise ValueError("连续推力链路优化需要至少 5 次脉冲规划点火。")
@@ -337,51 +334,20 @@ def _optimize_tail_for_longitude_and_eccentricity(
             + 0.02 * abs(float(offset_min))
         )
 
-    if bool(config["earth"].get("use_J2", True)):
-        seeds = [
-            (0.0, 0.0),
-            (2.0, 0.75),
-            (2.0, 0.5),
-            (2.0, 1.0),
-            (1.0, 0.75),
-            (3.0, 0.75),
-            (-2.0, -0.75),
-            (0.0, -1.0),
-            (0.0, 1.0),
-        ]
-    else:
-        seeds = [
-            (0.0, 0.0),
-            (-60.0, -2.0),
-            (-60.0, 0.0),
-            (-60.0, 2.0),
-            (-30.0, -1.0),
-            (-30.0, 1.0),
-            (30.0, -1.0),
-            (30.0, 1.0),
-            (60.0, -2.0),
-            (60.0, 0.0),
-            (60.0, 2.0),
-        ]
+    seeds = [
+        (0.0, 0.0),
+        (2.0, 0.75),
+        (2.0, 0.5),
+        (2.0, 1.0),
+        (1.0, 0.75),
+        (3.0, 0.75),
+        (-2.0, -0.75),
+        (0.0, -1.0),
+        (0.0, 1.0),
+    ]
     best_x = min(seeds, key=lambda item: score(item[0], item[1]))
-    if minimize is not None and not bool(config["earth"].get("use_J2", True)):
-        result = minimize(
-            lambda x: score(float(x[0]), float(x[1])),
-            np.asarray(best_x, dtype=float),
-            method="Powell",
-            bounds=[(-90.0, 90.0), (-6.0, 6.0)],
-            options={"maxiter": 55, "maxfev": 140, "xtol": 0.05, "ftol": 1.0e-5},
-        )
-        if bool(getattr(result, "success", False)) or hasattr(result, "x"):
-            candidate_x = (float(result.x[0]), float(result.x[1]))
-            if score(candidate_x[0], candidate_x[1]) < score(best_x[0], best_x[1]):
-                best_x = candidate_x
-    if bool(config["earth"].get("use_J2", True)):
-        fine_offsets = _grid_values(float(best_x[0]), span=1.0, step=1.0)
-        fine_yaws = _grid_values(float(best_x[1]), span=0.1, step=0.1)
-    else:
-        fine_offsets = _grid_values(float(best_x[0]), span=3.0, step=0.5)
-        fine_yaws = _grid_values(float(best_x[1]), span=0.2, step=0.05)
+    fine_offsets = _grid_values(float(best_x[0]), span=1.0, step=1.0)
+    fine_yaws = _grid_values(float(best_x[1]), span=0.1, step=0.1)
     for offset_min in fine_offsets:
         for yaw_delta_deg in fine_yaws:
             if score(offset_min, yaw_delta_deg) < score(best_x[0], best_x[1]):
@@ -427,26 +393,10 @@ def _optimize_final_perigee_burn_for_eccentricity(
         candidate["seed_time_offset_s"] = abs(offset_min) * 60.0
         return candidate
 
-    if bool(config["earth"].get("use_J2", True)):
-        return _best_from_grid(
-            _grid_values(0.0, span=1.0, step=1.0),
-            evaluate,
-            lambda candidate: _final_eccentricity_score(candidate, config),
-        )
-
-    best = _best_from_grid(
-        _grid_values(0.0, span=MV5_NEAR_PERIGEE_START_WINDOW_MIN, step=0.5),
-        evaluate,
-        lambda candidate: _final_eccentricity_score(candidate, config),
-    )
-    if best is None:
-        return None
-    best_offset_min = (float(best["burn_start_s"]) - float(center_start_s)) / 60.0
     return _best_from_grid(
-        _grid_values(best_offset_min, span=0.5, step=0.1),
+        _grid_values(0.0, span=1.0, step=1.0),
         evaluate,
         lambda candidate: _final_eccentricity_score(candidate, config),
-        initial=best,
     )
 
 

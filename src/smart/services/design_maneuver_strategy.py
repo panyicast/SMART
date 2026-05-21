@@ -419,7 +419,7 @@ def normalize_design_maneuver_strategy_payload(payload: dict[str, Any] | None) -
     for key in ("dv_tail_apogee_fixed_mps", "dv_tail_perigee_fixed_mps"):
         result["supersynchronous_transfer"][key] = _optional_float(result["supersynchronous_transfer"].get(key))
 
-    result["earth"]["use_J2"] = bool(result["earth"].get("use_J2", True))
+    result["earth"]["use_J2"] = True
     result["engine"]["use_settling"] = bool(result["engine"].get("use_settling", True))
     result["burn_limit"]["include_settling_in_burn_time"] = bool(
         result["burn_limit"].get("include_settling_in_burn_time", True)
@@ -1951,11 +1951,11 @@ def _rk4_low_thrust_step(
     yaw_sin = math.sin(yaw_rad)
     earth = config["earth"]
     mu = float(earth["mu_km3_s2"])
-    use_j2 = bool(earth.get("use_J2", True))
-    j2_mu_re2 = float(earth["J2"]) * mu * float(earth["Re_km"]) ** 2 if use_j2 else 0.0
+    _require_j2_enabled(config)
+    j2_mu_re2 = float(earth["J2"]) * mu * float(earth["Re_km"]) ** 2
 
     h = float(step_s)
-    k1 = _low_thrust_state_derivative(state, yaw_cos, yaw_sin, thrust_n, isp_s, mu, use_j2, j2_mu_re2)
+    k1 = _low_thrust_state_derivative(state, yaw_cos, yaw_sin, thrust_n, isp_s, mu, True, j2_mu_re2)
     k2 = _low_thrust_state_derivative(
         state + 0.5 * h * k1,
         yaw_cos,
@@ -1963,7 +1963,7 @@ def _rk4_low_thrust_step(
         thrust_n,
         isp_s,
         mu,
-        use_j2,
+        True,
         j2_mu_re2,
     )
     k3 = _low_thrust_state_derivative(
@@ -1973,10 +1973,10 @@ def _rk4_low_thrust_step(
         thrust_n,
         isp_s,
         mu,
-        use_j2,
+        True,
         j2_mu_re2,
     )
-    k4 = _low_thrust_state_derivative(state + h * k3, yaw_cos, yaw_sin, thrust_n, isp_s, mu, use_j2, j2_mu_re2)
+    k4 = _low_thrust_state_derivative(state + h * k3, yaw_cos, yaw_sin, thrust_n, isp_s, mu, True, j2_mu_re2)
     next_state = state + (h / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
     next_state[6] = max(1.0, float(next_state[6]))
     return next_state
@@ -2766,20 +2766,7 @@ def _plan_v51_hard_constrained(
     if not feasible:
         warnings.append(f"V5.1 完整 J2 数值传播未找到完全满足硬约束的候选；已返回最小违约量候选: {best_violations}")
     unique_records = _v51_unique_record_summaries(config, records)
-    if bool(config["earth"].get("use_J2", True)):
-        feasible_q_sequences = []
-    else:
-        feasible_q_sequences = _v51_scan_feasible_q_sequences(
-            config,
-            first=(first_elapsed, first_r, first_v, first_lon),
-            fixed_rp=fixed_rp,
-            variable_indices=variable_indices,
-            bounds=bounds,
-            starts=starts,
-            q_aa_candidates=q_aa_candidates,
-            q_ap_candidates=q_ap_candidates,
-            front_count=front_count,
-        )
+    feasible_q_sequences = []
 
     burns = list(best["burns"])
     checks = _build_checks(config, burns, ignore_uniform=True)
@@ -3265,23 +3252,11 @@ def _v51_optimize_front_alpha(
         eval_cache[alpha_key] = float(value)
         return float(value)
 
-    if bool(config["earth"].get("use_J2", True)):
-        template = config["alpha"].get("initial_template_deg", [])
-        seed = float(template[int(burn_index) - 1]) if isinstance(template, list) and len(template) >= int(burn_index) else 0.5 * (low + high)
-        values = [seed - 5.0, seed, seed + 5.0]
-        grid = np.asarray([min(max(float(value), low), high) for value in values], dtype=float)
-    else:
-        grid = np.linspace(low, high, 9)
+    template = config["alpha"].get("initial_template_deg", [])
+    seed = float(template[int(burn_index) - 1]) if isinstance(template, list) and len(template) >= int(burn_index) else 0.5 * (low + high)
+    values = [seed - 5.0, seed, seed + 5.0]
+    grid = np.asarray([min(max(float(value), low), high) for value in values], dtype=float)
     best_alpha = min(((objective(float(alpha)), float(alpha)) for alpha in grid), key=lambda item: item[0])[1]
-    if minimize_scalar is not None and high > low and not bool(config["earth"].get("use_J2", True)):
-        result = minimize_scalar(
-            objective,
-            bounds=(max(low, best_alpha - 6.0), min(high, best_alpha + 6.0)),
-            method="bounded",
-            options={"xatol": 0.01, "maxiter": 50},
-        )
-        if bool(getattr(result, "success", False)):
-            best_alpha = float(result.x)
     dv_star = _solve_dv_for_target_a(r, v, best_alpha, target_a)
     if dv_star is None:
         raise RuntimeError("远地点 alpha 优化后无法反解 Δv。")
@@ -5197,12 +5172,17 @@ def _gravity_state_derivative_ode(
     return _gravity_state_derivative(state, mu, use_j2, j2_mu_re2)
 
 
+def _require_j2_enabled(config: dict[str, Any]) -> None:
+    if not bool(config.get("earth", {}).get("use_J2", True)):
+        raise ValueError("J2 perturbation is mandatory for design maneuver dynamics.")
+
+
 def _gravity_ode_params(config: dict[str, Any]) -> tuple[float, bool, float]:
     earth = config["earth"]
     mu = float(earth["mu_km3_s2"])
-    use_j2 = bool(earth.get("use_J2", True))
-    j2_mu_re2 = float(earth["J2"]) * mu * float(earth["Re_km"]) ** 2 if use_j2 else 0.0
-    return mu, use_j2, j2_mu_re2
+    _require_j2_enabled(config)
+    j2_mu_re2 = float(earth["J2"]) * mu * float(earth["Re_km"]) ** 2
+    return mu, True, j2_mu_re2
 
 
 def _solve_ivp_gravity(
@@ -5396,31 +5376,8 @@ def _next_apsis(
     apsis: str,
     index: int,
 ) -> tuple[float, np.ndarray, np.ndarray]:
-    earth = config["earth"]
-    mu = float(earth["mu_km3_s2"])
-    if bool(earth["use_J2"]):
-        return _next_apsis_numerical_j2(config, r, v, elapsed_s, apsis, index)
-    a, e, inc, raan, argp, mean_anomaly, _true_anomaly = _rv_to_coe(r, v, mu=mu)
-    raan_dot = 0.0
-    argp_dot = 0.0
-    mean_dot = math.sqrt(mu / a**3)
-    target_m = math.pi if apsis.upper() == "A" else 0.0
-    delta = (target_m - mean_anomaly) % (2.0 * math.pi)
-    if delta < 1.0e-9:
-        delta = 2.0 * math.pi
-    delta += (max(1, int(index)) - 1) * 2.0 * math.pi
-    dt = delta / mean_dot
-    next_elapsed = elapsed_s + dt
-    next_r, next_v = _coe_to_rv(
-        a,
-        e,
-        inc,
-        (raan + raan_dot * dt) % (2.0 * math.pi),
-        (argp + argp_dot * dt) % (2.0 * math.pi),
-        target_m,
-        mu=mu,
-    )
-    return next_elapsed, next_r, next_v
+    _require_j2_enabled(config)
+    return _next_apsis_numerical_j2(config, r, v, elapsed_s, apsis, index)
 
 
 def _propagate_state_to_elapsed(
@@ -5433,25 +5390,10 @@ def _propagate_state_to_elapsed(
     dt = float(to_elapsed_s) - float(from_elapsed_s)
     if abs(dt) <= 1.0e-9:
         return np.asarray(r, dtype=float).copy(), np.asarray(v, dtype=float).copy()
-    earth = config["earth"]
-    mu = float(earth["mu_km3_s2"])
-    if bool(earth["use_J2"]):
-        state0 = np.asarray([*np.asarray(r, dtype=float), *np.asarray(v, dtype=float)], dtype=float)
-        state = _integrate_gravity_state(config, state0, dt, max_step_s=_coast_numerical_step_s(config, state0[:3], state0[3:6]))
-        return state[:3].copy(), state[3:6].copy()
-    a, e, inc, raan, argp, mean_anomaly, _true_anomaly = _rv_to_coe(np.asarray(r, dtype=float), np.asarray(v, dtype=float), mu=mu)
-    raan_dot = 0.0
-    argp_dot = 0.0
-    mean_dot = math.sqrt(mu / a**3)
-    return _coe_to_rv(
-        a,
-        e,
-        inc,
-        (raan + raan_dot * dt) % (2.0 * math.pi),
-        (argp + argp_dot * dt) % (2.0 * math.pi),
-        (mean_anomaly + mean_dot * dt) % (2.0 * math.pi),
-        mu=mu,
-    )
+    _require_j2_enabled(config)
+    state0 = np.asarray([*np.asarray(r, dtype=float), *np.asarray(v, dtype=float)], dtype=float)
+    state = _integrate_gravity_state(config, state0, dt, max_step_s=_coast_numerical_step_s(config, state0[:3], state0[3:6]))
+    return state[:3].copy(), state[3:6].copy()
 
 
 def _longitude_deg(config: dict[str, Any], r: np.ndarray, elapsed_s: float) -> float:

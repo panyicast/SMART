@@ -1474,6 +1474,7 @@ class _DesignManeuverSettingsDialog(QtWidgets.QDialog):
             config[section][key] = [float(low.value()), float(high.value())]
         for (section, key), checkbox in self._check_fields.items():
             config[section][key] = checkbox.isChecked()
+        config["earth"]["use_J2"] = True
         for (section, key), combo in self._combo_fields.items():
             config[section][key] = str(combo.currentData())
         for (section, key), field in self._text_fields.items():
@@ -1544,6 +1545,10 @@ class _DesignManeuverSettingsDialog(QtWidgets.QDialog):
         for check_spec in spec.check_specs:
             checkbox = QtWidgets.QCheckBox(check_spec.label)
             checkbox.setMinimumHeight(32)
+            if (check_spec.section, check_spec.key) == ("earth", "use_J2"):
+                checkbox.setChecked(True)
+                checkbox.setEnabled(False)
+                checkbox.setToolTip("J2 perturbation is mandatory for maneuver dynamics.")
             self._check_fields[(check_spec.section, check_spec.key)] = checkbox
             grid.addWidget(checkbox, row, 0, 1, 2)
             row += 1
@@ -1631,7 +1636,11 @@ class _DesignManeuverSettingsDialog(QtWidgets.QDialog):
             low.setValue(float(values[0]))
             high.setValue(float(values[1]))
         for (section, key), checkbox in self._check_fields.items():
-            checkbox.setChecked(bool(config[section][key]))
+            if (section, key) == ("earth", "use_J2"):
+                checkbox.setChecked(True)
+                checkbox.setEnabled(False)
+            else:
+                checkbox.setChecked(bool(config[section][key]))
         for (section, key), combo in self._combo_fields.items():
             DesignManeuverStrategyPage._set_combo_value(combo, str(config[section][key]))
         for (section, key), field in self._text_fields.items():
