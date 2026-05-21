@@ -478,6 +478,50 @@
 - 提交：`12d0a81`
 - 影响文件：`src/smart/services/design_continuous_thrust_optimizer.py`、`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
 
-## 2026-05-19T23:03:51+08:00 | Checkpoint F4 maneuver project outputs
-- 提交：`本次提交`
+## 2026-05-19T23:03:56+08:00 | Checkpoint F4 maneuver project outputs
+- 提交：`5e2725d`
 - 影响文件：`HANDOFF.md`、`projects/F4/config/design_maneuver_strategy.json`、`projects/F4/data/design_maneuver_results.json`、`projects/F4/smart_project.json`、`projects/F4/data/design_continuous_thrust_orbit_history.csv`。
+
+## 2026-05-20T19:04:01+08:00 | Add design maneuver import handoff
+- 提交：`6aa7688`
+- 影响文件：`src/smart/services/design_maneuver_strategy.py`、`src/smart/services/project_workspace.py`、`src/smart/ui/i18n.py`、`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`src/smart/ui/widgets/maneuver_page.py`、`tests/test_design_maneuver_strategy.py`、`tests/test_maneuver_page.py`、`HANDOFF.md`。
+
+## 2026-05-20T19:59:26+08:00 | Unify maneuver import yaw direction
+- 提交：`1190244`
+- 影响文件：`src/smart/services/design_maneuver_strategy.py`、`src/smart/services/project_workspace.py`、`src/smart/services/thrust_direction.py`、`src/smart/ui/i18n.py`、`src/smart/ui/widgets/maneuver_page.py`、`tests/test_design_maneuver_strategy.py`、`tests/test_maneuver_page.py`、`tests/test_satellite_dynamics_equation.py` 等 10 个文件。
+
+## 2026-05-20T20:16:36+08:00 | Match design import propagation results
+- 提交：`9c2a191`
+- 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`scripts/satellite_dynamics_equation.py`、`HANDOFF.md`。
+
+## 2026-05-20T20:42:02+08:00 | Export continuous thrust strategy spreadsheet
+- 提交：`59bc99f`
+- 影响文件：`src/smart/services/design_maneuver_strategy.py`、`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-20T20:54:20+08:00 | Polish design maneuver UI
+- 提交：`4498e1a`
+- 影响文件：`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-20T21:04:44+08:00 | Clarify design maneuver reference errors
+- 提交：`34cc9dd`
+- 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-20T21:49:31+08:00 | Adapt continuous thrust targets
+- 提交：`1ee5930`
+- 影响文件：`src/smart/services/design_continuous_thrust_optimizer.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-20T23:32:48+08:00 | Keep MV5 near perigee in continuous thrust
+- 提交：`692f6ea`
+- 影响文件：`src/smart/services/design_continuous_thrust_optimizer.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-21T11:41:15+08:00 | Freeze continuous thrust optimization rules
+- 提交：`e355e34`
+- 影响文件：`src/smart/services/design_continuous_thrust_optimizer.py`、`tests/test_design_maneuver_strategy.py`、`doc/design_continuous_thrust_parameter_optimization_algorithm.md`、`HANDOFF.md`。
+
+## 2026-05-21T11:53:46+08:00 | Optimize continuous thrust RK4 hot path
+- 提交：`81524d5`
+- 影响文件：`src/smart/services/design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-21T12:36:06+08:00 | Checkpoint remaining SMART project updates
+- 提交：`本次提交`
+- 影响文件：`src/smart/ui/main_window.py`、`tests/test_sidebar_navigation.py`、`projects/F4/config/design_import_maneuver_strategy.json`、`projects/F4/config/design_maneuver_strategy.json`、`projects/F4/config/maneuver_strategy.json`、`projects/F4/data/design_maneuver_results.json`、`projects/F4/smart_project.json`、`"/346/210/252/345/233/276//345/261/217/345/271/225/346/210/252/345/233/276 2026-05-20 185455.png"` 等 22 个文件。

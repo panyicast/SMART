@@ -2,7 +2,7 @@
   "planner": {
     "version": "V4.2_simplified_transfer_type",
     "auto_recommend_count": true,
-    "maneuver_count_user": 5,
+    "maneuver_count_user": 6,
     "force_user_count": true
   },
   "initial": {
@@ -69,7 +69,7 @@
   "maneuver_count": {
     "min": 1,
     "max": 5,
-    "user": 5,
+    "user": 6,
     "engineering_min_count": 1,
     "engineering_min_count_supersync": 5,
     "engineering_min_count_standard": 3,

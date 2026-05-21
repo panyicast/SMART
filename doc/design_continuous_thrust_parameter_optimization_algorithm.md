@@ -1,6 +1,8 @@
 # 设计变轨策略连续推力参数优化算法
 
-本文档固定当前连续推力变轨参数优化方案，用于从脉冲规划结果生成 5 次连续推力点火参数，并微调前 4 次远地点点火开始时间，使第 5 次点火熄火点经度到达目标经度。
+本文档固定当前连续推力变轨参数优化方案，用于从脉冲规划结果生成 5 次连续推力点火参数。当前版本的核心规则是：前 3 次远地点点火继承脉冲规划事件链；MV4 通过点火开始时间和偏航角联合优化完成终端经度相位闭合与倾角控制；MV5 必须保持在近地点附近，只在满足半长轴控制量的前提下最小化控后偏心率。
+
+除非同步更新代码、本文档和回归测试，不允许把 MV5 改回“大范围移动点火点追经度”的方案。
 
 ## 1. 适用范围
 
@@ -18,26 +20,23 @@
 
 - 初始轨道根数与初始质量。
 - 目标同步轨道半长轴。
-- 目标倾角 `6 deg`。
+- 目标经度 `target.lon_degE`，当前已验证范围为 `100-140 degE`。
+- 目标倾角 `target.i_deg`，当前已验证范围为 `6-8 deg`。
 - 发动机推力、比冲、稳定段参数。
 - 每次脉冲规划点火时长、点火位置、偏航角、控后近地点目标。
 
 ### 2.2 固定事件序列
 
-采用当前脉冲规划 q 序列：
-
-```text
-q = 3, 3, 2, 0
-```
+采用脉冲规划输出的 `summary.q_sequence`。连续推力链路读取前三个远地点间 q 值；若脉冲结果缺失 q，则回退为 `3,3,3`。
 
 对应连续推力事件：
 
 | 变轨 | 事件 |
 |---|---|
 | MV1 | 初始脉冲规划第 1 次远地点附近 |
-| MV2 | MV1 控后轨道推进 3 圈到远地点 |
-| MV3 | MV2 控后轨道推进 3 圈到远地点 |
-| MV4 | MV3 控后轨道推进 2 圈到远地点 |
+| MV2 | MV1 控后轨道按 `q_sequence[0]` 推进到远地点 |
+| MV3 | MV2 控后轨道按 `q_sequence[1]` 推进到远地点 |
+| MV4 | MV3 控后轨道按 `q_sequence[2]` 推进到远地点 |
 | MV5 | MV4 控后轨道推进半圈到近地点 |
 
 ## 3. 动力学模型
@@ -94,49 +93,54 @@ mdot = -F / (Isp * g0)
 
 ### 4.1 MV1-MV4 远地点变轨
 
-第一轮整体优化变量为 4 个远地点偏航角：
-
-```text
-yaw_A = [yaw1, yaw2, yaw3, yaw4]
-```
-
-起始时刻初值：
+MV1-MV3 使用脉冲规划给出的点火事件、时长和偏航角，不参与终端相位优化。起始时刻为：
 
 ```text
 T_start_i = T_event_i - 0.5 * T_pulse_duration_i
 ```
 
-第二轮微调用 4 个远地点点火开始时间偏移：
+MV4 是终端相位与倾角联合优化变量：
 
 ```text
-dt_A = [dt1, dt2, dt3, dt4]
+variables:
+  dt4      # MV4 点火开始时间相对名义开始点的偏移
+  yaw4_d   # MV4 偏航角相对脉冲规划偏航角的偏移
 ```
 
-最终固定值：
+MV4 优化目标：
 
 ```text
-yaw_A = [5.469752, 10.074242, 15.480019, 14.590538] deg
-dt_A  = [-0.009883, 0.202783, -0.481636, 0.597745] min
+close target longitude at MV5 cutoff
+match target inclination at MV4 cutoff
+keep MV5 eccentricity low
+limit excessive MV4 start-time movement
 ```
 
 ### 4.2 MV5 近地点变轨
 
-MV5 固定为近地点附近面内减速：
+MV5 固定为近地点附近面内减速。MV5 不承担大范围经度闭合，只允许在近地点名义开始点附近小范围搜索：
 
 ```text
-yaw5 = -178.537754 deg
+abs(T_start_5 - T_nominal_5) <= 3 min
 ```
 
-MV5 开始时间：
+MV5 名义开始时间：
 
 ```text
-T_start_5 = T_perigee_5 - 14.391979 min
+T_nominal_5 = T_perigee_5 - 0.5 * T_pulse_duration_5
 ```
 
 MV5 熄火目标：
 
 ```text
-a_cutoff = 42164.2 km
+a_cutoff = target.a_km
+```
+
+MV5 选择准则：
+
+```text
+minimize e5
+subject to a5 = target.a_km
 ```
 
 ## 5. 约束
@@ -157,141 +161,135 @@ MV4 有两个硬约束：
 
 ```text
 控后近地点高度 = 同步轨道高度
-控后倾角 ≈ 6 deg
-```
-
-当前固定结果：
-
-```text
-MV4 控后倾角 = 6.003562 deg
+控后倾角 ≈ target.i_deg
 ```
 
 ### 5.3 MV5
 
-MV5 熄火目标：
+MV5 熄火目标和锁定规则：
 
 ```text
-控后半长轴 = 42164.2 km
-```
-
-当前固定结果：
-
-```text
-控后半长轴 = 42164.199921 km
-熄火点经度 = 120.000000 degE
+控后半长轴 = target.a_km
+abs(T_start_5 - T_nominal_5) <= 3 min
+控后偏心率 <= 1.0e-3
 ```
 
 ## 6. 目标函数
 
-### 6.1 前 4 次远地点变轨
+### 6.1 MV1-MV3
 
-先以总推进剂消耗最小为主要目标，同时强制 MV4 倾角接近 `6 deg`：
+MV1-MV3 不做独立相位搜索。每段以脉冲规划点火开始点和偏航角作为连续推力种子，积分到对应控后近地点目标。
+
+### 6.2 MV4
+
+MV4 使用局部优化，同时评估后续 MV5 结果：
+
+```text
+score =
+  W_lon * excess(lon5_cutoff - target.lon_degE)^2
++ W_i   * excess(i4 - target.i_deg)^2
++ W_e   * e5
++ W_i5  * abs(i5 - target.i_deg)
++ W_t   * abs(dt4)
+```
+
+其中 MV5 在每个 MV4 候选后都重新按“近地点附近最小偏心率”规则求解。
+
+### 6.3 MV5
 
 ```text
 minimize:
-  sum(m_prop_i), i = 1..4
+  e5
 
 subject to:
-  hp_i = hp_target_i
-  i_4 = 6 deg
+  a5 = target.a_km
+  abs(T_start_5 - T_nominal_5) <= 3 min
 ```
 
-实现中使用罚函数或局部搜索：
+这个规则是防回退约束：终端经度不能再通过把 MV5 移离近地点几十分钟来闭合。
+
+当前回归要求：
 
 ```text
-score = sum(m_prop_i) + W_i * (i4 - 6)^2
-```
-
-### 6.2 MV5
-
-MV5 以点火时长尽量短为目标，熄火半长轴为约束：
-
-```text
-minimize:
-  burn_duration_5
-
-subject to:
-  a_5 = 42164.2 km
-```
-
-### 6.3 熄火经度微调
-
-固定 MV5 参数不变，只微调 MV1-MV4 点火开始时间：
-
-```text
-variables:
-  dt1, dt2, dt3, dt4
-
-minimize:
-  W_lon * wrap(lon5_cutoff - 120)^2
-+ W_a   * (a5 - 42164.2)^2
-+ W_e   * max(0, e5 - e_limit)^2
-+ W_dt  * sum(dt_i^2)
-```
-
-当前微调量：
-
-| 变轨 | 开始点微调/min | 开始点微调/s |
-|---|---:|---:|
-| MV1 | `-0.009883` | `-0.593` |
-| MV2 | `+0.202783` | `+12.167` |
-| MV3 | `-0.481636` | `-28.898` |
-| MV4 | `+0.597745` | `+35.865` |
-
-微调后：
-
-```text
-MV5 熄火经度 = 120.000000 degE
-MV5 控后偏心率 = 0.000261955
-MV5 控后半长轴 = 42164.199921 km
+abs(lon5_cutoff - target.lon_degE) <= terminal_tolerance.lon_deg
+abs(T_start_5 - T_nominal_5) <= 3 min
+e5 <= 1.0e-3
 ```
 
 ## 7. 算法流程
 
-### 7.1 远地点变轨整体优化
+### 7.1 MV1-MV3 远地点变轨
 
 ```text
 1. 读取脉冲规划结果。
-2. 取 q = [3, 3, 2, 0]。
-3. 设置 MV1-MV4 的初始点火开始时刻：
+2. 读取脉冲规划 q_sequence 的前三个远地点间 q 值。
+3. 设置 MV1-MV3 的初始点火开始时刻：
    T_start_i = T_event_i - 0.5 * T_pulse_duration_i
-4. 以 yaw1..yaw4 为变量，逐次传播并积分点火：
+4. 以脉冲规划 yaw 为偏航角，逐次传播并积分点火：
    MV1: 初始轨道 -> 控后 hp1
-   MV2: MV1 后 3 圈远地点 -> 控后 hp2
-   MV3: MV2 后 3 圈远地点 -> 控后 hp3
-   MV4: MV3 后 2 圈远地点 -> 控后 GEO 近地点高度和 i=6 deg
-5. 搜索满足 MV4 倾角硬约束的最小推进剂解。
-6. 固定 yaw1..yaw4。
+   MV2: MV1 后 q0 圈远地点 -> 控后 hp2
+   MV3: MV2 后 q1 圈远地点 -> 控后 hp3
 ```
 
-### 7.2 MV5 近地点点火
+### 7.2 MV4/MV5 尾段联合优化
 
 ```text
-1. 从 MV4 控后轨道推进半圈到近地点。
-2. 设置 MV5 面内减速偏航角 yaw5 = -178.537754 deg。
-3. 设置点火开始点为近地点前 14.391979 min。
-4. 数值积分到半长轴 a = 42164.2 km。
-5. 输出 MV5 熄火轨道。
+1. 从 MV3 控后轨道按 q2 推进到 MV4 远地点事件。
+2. 以 MV4 start offset 和 MV4 yaw offset 为变量。
+3. 对每个 MV4 候选：
+   a. 积分 MV4 到同步近地点高度和目标倾角附近；
+   b. 推进到下一近地点；
+   c. 在近地点名义开始点 +/- 3 min 内搜索 MV5；
+   d. MV5 积分到 target.a_km；
+   e. 在半长轴满足前提下选择最小 e5。
+4. 用 MV5 熄火经度和 MV4 倾角作为尾段目标函数主约束。
 ```
 
-### 7.3 熄火经度微调
+### 7.3 防回退规则
 
 ```text
-1. 固定所有偏航角和 MV5 点火规则。
-2. 计算当前 MV5 熄火经度误差：
-   dlon = wrap(lon5_cutoff - 120)
-3. 分别扰动 MV1-MV4 开始点，得到敏感度：
-   J_i = d(lon5_cutoff) / d(dt_i)
-4. 用 Nelder-Mead 或坐标搜索求 dt1..dt4。
-5. 重新传播完整 5 次变轨，确认：
-   lon5_cutoff ≈ 120 degE
-   a5 ≈ 42164.2 km
-   e5 保持较小
+不允许：
+  用 MV5 大范围移动点火开始点来追经度。
+
+必须保持：
+  abs(T_start_5 - T_nominal_5) <= 3 min
+  e5 <= 1.0e-3
 ```
 
-## 8. 当前固定方案结果
+## 8. 当前冻结回归
 
-### 8.1 事件点
+代码和测试固定以下边界：
+
+```text
+target.lon_degE in {100, 140}
+target.i_deg    in {6, 8}
+```
+
+每个边界点必须满足：
+
+```text
+脉冲规划 checks 全通过
+连续推力 hard_constraint_passed = true
+abs(MV4.post_i_deg - target.i_deg) <= terminal_tolerance.i_deg
+abs(MV5.cutoff_longitude_deg_e - target.lon_degE) <= terminal_tolerance.lon_deg
+abs(MV5.burn_start_min - MV5.initial_burn_start_min) <= 3 min
+MV5.post_e <= 1.0e-3
+```
+
+最近一次 3x3 手动扫频结果：
+
+```text
+target.lon_degE = 100 / 120 / 140 degE
+target.i_deg    = 6 / 7 / 8 deg
+脉冲规划：9/9 通过
+连续推力：9/9 通过
+MV5 点火偏移：全部 -2.00 min
+MV5 控后偏心率：约 4.6e-05 到 4.9e-05
+```
+
+### 8.1 历史参考事件点
+
+以下表格仅保留为历史参考，不是算法约束；当前算法以配置目标和脉冲规划结果为准。
 
 | 变轨 | 事件位置 | 事件航时/min | 事件时间 BJT | 事件经度/degE |
 |---|---|---:|---|---:|
@@ -301,7 +299,7 @@ MV5 控后半长轴 = 42164.199921 km
 | MV4 | 远地点 | 9552.969301 | 2026-05-21 12:22:17 | 153.001293 |
 | MV5 | 近地点 | 10393.915527 | 2026-05-22 02:23:13 | 119.977161 |
 
-### 8.2 点火参数
+### 8.2 历史参考点火参数
 
 | 变轨 | 位置 | 开始时间 BJT | 熄火时间 BJT | 点火时长/min | 偏航角/deg | 开始经度/degE | 熄火经度/degE | 推进剂/kg | 控后质量/kg |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|
@@ -311,7 +309,7 @@ MV5 控后半长轴 = 42164.199921 km
 | MV4 | 远地点 | 2026-05-21 11:47:49 | 2026-05-21 12:59:00 | 71.193361 | 14.590538 | 156.700446 | 149.989446 | 654.118117 | 4125.998034 |
 | MV5 | 近地点 | 2026-05-22 02:08:50 | 2026-05-22 02:34:54 | 26.071913 | -178.537754 | 119.769418 | 120.000000 | 216.000427 | 3909.997608 |
 
-### 8.3 控后轨道参数
+### 8.3 历史参考控后轨道参数
 
 | 变轨 | 半长轴/km | 偏心率 | 倾角/deg | 近地点高度/km | 远地点高度/km | 目标说明 |
 |---|---:|---:|---:|---:|---:|---|
@@ -327,11 +325,11 @@ MV5 控后半长轴 = 42164.199921 km
 2605.002392 kg
 ```
 
-## 9. 实现建议
+## 9. 实现约束
 
-### 9.1 服务层函数拆分
+### 9.1 服务层函数
 
-建议在 `smart.services.design_maneuver_strategy` 中新增独立流程：
+当前入口：
 
 ```text
 optimize_continuous_thrust_chain_parameters()
@@ -342,16 +340,16 @@ optimize_continuous_thrust_chain_parameters()
 - 5 次连续推力参数表。
 - 每次点火前后轨道状态。
 - 每次点火数值积分历史。
-- 经度微调诊断信息。
+- 经度/倾角/偏心率约束状态。
 
-### 9.2 优化步骤实现
+### 9.2 优化阶段
 
-建议实现为三个阶段：
+当前实现阶段：
 
 ```text
-Phase 1: optimize_apogee_yaws_for_terminal_inclination()
-Phase 2: solve_mv5_min_duration_to_target_a()
-Phase 3: tune_apogee_start_offsets_for_mv5_longitude()
+Phase 1: MV1-MV3 follow pulse q/yaw/event seeds.
+Phase 2: optimize MV4 start offset and yaw offset for longitude/inclination.
+Phase 3: keep MV5 near perigee and minimize eccentricity at target semi-major axis.
 ```
 
 ### 9.3 数值检查
@@ -360,14 +358,15 @@ Phase 3: tune_apogee_start_offsets_for_mv5_longitude()
 
 - 所有点火时长不超过配置上限。
 - MV1-MV4 控后近地点目标满足误差阈值。
-- MV4 控后倾角接近 `6 deg`。
-- MV5 控后半长轴接近 `42164.2 km`。
-- MV5 熄火经度接近 `120 degE`。
-- MV5 控后偏心率保持小量。
+- MV4 控后倾角接近 `target.i_deg`。
+- MV5 控后半长轴接近 `target.a_km`。
+- MV5 熄火经度接近 `target.lon_degE`。
+- MV5 点火开始点保持在名义近地点开始点 `3 min` 内。
+- MV5 控后偏心率不超过 `1.0e-3`。
 
 ## 10. 风险与后续
 
 - 当前方案使用常值偏航角，不能代表闭环制导。
 - MV5 低推力弧段不是瞬时脉冲，若同时硬约束近地点高度、远地点高度、经度和最短点火时长，可能需要增加闭环指向或末端修正段。
-- 经度微调目前只动 MV1-MV4 开始点，若未来目标经度误差较大，应增加 MV5 开始点或 q 序列作为备用变量。
+- 终端经度闭合当前由 MV4 开始点/偏航角负责；若未来目标经度误差较大，应优先扩展 MV4 或 q 序列搜索，不能直接放开 MV5 近地点锁定。
 - 当前数值结果依赖项目配置和积分步长；修改发动机、目标轨道、J2 开关或积分步长后需要重新生成。

@@ -28,8 +28,8 @@ _MAX_RECENT_PROJECTS = 8
 _NAV_KEYS = [
     "nav.dashboard",
     "nav.orbit_design",
-    "nav.maneuver_strategy",
     "nav.design_maneuver_strategy",
+    "nav.maneuver_strategy",
     "nav.launch_window",
     "nav.tracking_arc",
     "nav.flight_program",
@@ -98,8 +98,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._pages = [
             self._dashboard_page,
             self._satellite_page,
-            self._maneuver_page,
             self._design_maneuver_page,
+            self._maneuver_page,
             self._launch_window_page,
             self._tracking_arc_page,
             self._flight_program_page,

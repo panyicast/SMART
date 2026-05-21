@@ -18,6 +18,7 @@ from smart.domain.models import (
 from smart.services.earth_orientation import format_utc, parse_utc, utc_now_iso_z
 from smart.services.design_maneuver_strategy import (
     DesignManeuverResult,
+    continuous_thrust_result_to_maneuver_strategy_payload,
     design_maneuver_result_from_payload,
     design_maneuver_result_to_payload,
     default_design_maneuver_strategy_payload,
@@ -39,6 +40,7 @@ SATELLITE_SETTINGS_FILE = "satellite_status.json"
 ORBIT_INITIALIZATION_FILE = "orbit_initialization.json"
 MANEUVER_STRATEGY_FILE = "maneuver_strategy.json"
 DESIGN_MANEUVER_STRATEGY_FILE = "design_maneuver_strategy.json"
+DESIGN_IMPORT_MANEUVER_STRATEGY_FILE = "design_import_maneuver_strategy.json"
 DESIGN_MANEUVER_RESULTS_FILE = "design_maneuver_results.json"
 LAUNCH_WINDOW_FILE = "launch_window.json"
 TRACKING_ARC_FILE = "tracking_arc.json"
@@ -182,6 +184,9 @@ class ProjectWorkspace:
     def design_maneuver_strategy_path(self) -> Path:
         return self.config_dir() / DESIGN_MANEUVER_STRATEGY_FILE
 
+    def design_import_maneuver_strategy_path(self) -> Path:
+        return self.config_dir() / DESIGN_IMPORT_MANEUVER_STRATEGY_FILE
+
     def design_maneuver_results_path(self) -> Path:
         return self.data_dir() / DESIGN_MANEUVER_RESULTS_FILE
 
@@ -286,6 +291,28 @@ class ProjectWorkspace:
             return None
         payload = _read_json(file_path)
         return normalize_design_maneuver_strategy_payload(payload)
+
+    def save_design_import_maneuver_strategy(self, strategy: dict[str, Any]) -> Path:
+        payload = _normalize_maneuver_strategy_payload(strategy)
+        file_path = self.design_import_maneuver_strategy_path()
+        _write_json(file_path, payload)
+        self._touch_updated_time()
+        return file_path
+
+    def load_design_import_maneuver_strategy(self) -> dict[str, Any] | None:
+        file_path = self.design_import_maneuver_strategy_path()
+        if not file_path.exists():
+            return None
+        payload = _read_json(file_path)
+        return _normalize_maneuver_strategy_payload(payload)
+
+    def save_continuous_thrust_import_maneuver_strategy(
+        self,
+        result: Any,
+        design_config: dict[str, Any],
+    ) -> Path:
+        payload = continuous_thrust_result_to_maneuver_strategy_payload(result, design_config)
+        return self.save_design_import_maneuver_strategy(payload)
 
     def save_design_maneuver_results(self, result: DesignManeuverResult) -> Path:
         file_path = self.design_maneuver_results_path()
@@ -702,6 +729,8 @@ def _default_maneuver_step_payload(maneuver_index: int) -> dict[str, Any]:
         "burn_duration_min": 0.0,
         "control_fuel_%": 0.0,
         "settle_duration_s": 240.0,
+        "direction_mode": "delta_tangent",
+        "yaw_angle_deg": 0.0,
         "delta_deg": 0.0,
         "dv_direction": 1,
         "orbit_control_thrust_n": 490.0,
@@ -716,6 +745,12 @@ def _normalize_maneuver_step_payload(step: dict[str, Any], fallback_index: int) 
     maneuver_index = int(step.get("maneuver_index", default["maneuver_index"]))
     if maneuver_index <= 0:
         maneuver_index = int(default["maneuver_index"])
+    direction_mode = str(step.get("direction_mode", default["direction_mode"]))
+    if direction_mode not in {"delta_tangent", "local_horizontal_yaw"}:
+        raise ValueError(
+            "Invalid maneuver strategy JSON payload: 'direction_mode' must be "
+            "'delta_tangent' or 'local_horizontal_yaw'."
+        )
     return {
         "maneuver_index": maneuver_index,
         "Tn_start_min": _coerce_minutes_value(
@@ -738,6 +773,8 @@ def _normalize_maneuver_step_payload(step: dict[str, Any], fallback_index: int) 
             step.get("control_fuel_%", step.get("control_fuel_percent", default["control_fuel_%"]))
         ),
         "settle_duration_s": float(step.get("settle_duration_s", default["settle_duration_s"])),
+        "direction_mode": direction_mode,
+        "yaw_angle_deg": float(step.get("yaw_angle_deg", default["yaw_angle_deg"])),
         "delta_deg": float(step.get("delta_deg", step.get("delta", default["delta_deg"]))),
         "dv_direction": _coerce_dv_direction(step.get("dv_direction", default["dv_direction"])),
         "orbit_control_thrust_n": float(step.get("orbit_control_thrust_n", default["orbit_control_thrust_n"])),

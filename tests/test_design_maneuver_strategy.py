@@ -1,13 +1,22 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
+import zipfile
+from xml.etree import ElementTree as ET
 
 import pytest
 
 from PySide6 import QtCore, QtWidgets
 
 import smart.services.design_maneuver_strategy as design_strategy
+import scripts.satellite_dynamics_equation as dynamics
+from smart.services.design_continuous_thrust_optimizer import (
+    MV5_LOCKED_MAX_ECCENTRICITY,
+    MV5_NEAR_PERIGEE_START_WINDOW_MIN,
+)
 from smart.services.design_maneuver_strategy import (
+    continuous_thrust_result_to_maneuver_strategy_payload,
     default_design_maneuver_strategy_payload,
     export_continuous_thrust_orbit_history_csv,
     find_feasible_q_sequences,
@@ -75,6 +84,7 @@ def test_continuous_thrust_parameter_optimizer_uses_pulse_targets(tmp_path: Path
     assert continuous_result.time_step_s == pytest.approx(10.0)
     assert continuous_result.yaw_step_deg == pytest.approx(0.05)
     assert len(continuous_result.parameters) == 5
+    assert continuous_result.hard_constraint_passed, continuous_result.failed_constraints
     first = continuous_result.parameters[0]
     assert first.maneuver_index == pulse_result.burns[0].index
     assert first.flight_revolution == pulse_result.burns[0].flight_revolution
@@ -107,6 +117,62 @@ def test_continuous_thrust_parameter_optimizer_uses_pulse_targets(tmp_path: Path
     assert history_path.exists()
     assert "semi_major_axis_m" in history_path.read_text(encoding="utf-8-sig").splitlines()[0]
     assert continuous_result.objective_delta_g_kg == pytest.approx(continuous_result.total_propellant_kg)
+    import_payload = continuous_thrust_result_to_maneuver_strategy_payload(continuous_result, pulse_result.config)
+    assert import_payload["source"]["type"] == "design_continuous_thrust"
+    assert import_payload["launch_mass_kg"] == pytest.approx(pulse_result.config["initial"]["m0_kg"])
+    assert import_payload["t0_orbit"]["semi_major_axis_m"] == pytest.approx(pulse_result.config["initial"]["a_km"] * 1000.0)
+    assert import_payload["maneuver_count"] == len(continuous_result.parameters)
+    assert import_payload["maneuvers"][0]["Tn_start_min"] == pytest.approx(continuous_result.parameters[0].burn_start_min)
+    assert import_payload["maneuvers"][0]["burn_duration_min"] == pytest.approx(
+        continuous_result.parameters[0].cutoff_min - continuous_result.parameters[0].burn_start_min
+    )
+    assert import_payload["maneuvers"][0]["control_fuel_%"] == pytest.approx(
+        pulse_result.config["engine"]["attitude_control_efficiency"] * 100.0
+    )
+    assert import_payload["maneuvers"][0]["direction_mode"] == "local_horizontal_yaw"
+    assert import_payload["maneuvers"][0]["yaw_angle_deg"] == pytest.approx(
+        continuous_result.parameters[0].yaw_angle_deg
+    )
+    assert import_payload["maneuvers"][-1]["dv_direction"] in {-1, 1}
+    strategy_path = tmp_path / "design_import_strategy.json"
+    strategy_path.write_text(json.dumps(import_payload), encoding="utf-8")
+    _csv_path, import_rows = dynamics.simulate_with_maneuver_strategy_config(
+        strategy_config_path=strategy_path,
+        output_csv_path=tmp_path / "import_history.csv",
+        extra_free_flight_s=24.0 * 3600.0,
+    )
+    import_summaries = dynamics.build_maneuver_result_rows(
+        dynamics.load_maneuver_strategy_steps(strategy_path),
+        import_rows,
+    )
+    assert len(import_summaries) == len(continuous_result.parameters)
+    for summary, parameter in zip(import_summaries, continuous_result.parameters):
+        assert summary["elapsed_time_min"] == pytest.approx(parameter.cutoff_min)
+        assert summary["semi_major_axis_m"] == pytest.approx(parameter.post_a_km * 1000.0, abs=1.0e-4)
+        assert summary["inclination_deg"] == pytest.approx(parameter.post_i_deg, abs=1.0e-9)
+
+
+@pytest.mark.parametrize(("target_lon_deg", "target_i_deg"), [(100.0, 6.0), (100.0, 8.0), (140.0, 6.0), (140.0, 8.0)])
+def test_continuous_thrust_optimizer_handles_target_longitude_and_inclination_bounds(
+    target_lon_deg: float,
+    target_i_deg: float,
+) -> None:
+    payload = default_design_maneuver_strategy_payload()
+    payload["target"]["lon_degE"] = target_lon_deg
+    payload["target"]["i_deg"] = target_i_deg
+
+    pulse_result = plan_design_maneuver_strategy(payload)
+    continuous_result = optimize_continuous_thrust_model_parameters(pulse_result)
+
+    assert all(check["passed"] for check in pulse_result.checks)
+    assert continuous_result.hard_constraint_passed, continuous_result.failed_constraints
+    mv4 = continuous_result.parameters[3]
+    mv5 = continuous_result.parameters[4]
+    lon_error = ((mv5.cutoff_longitude_deg_e - target_lon_deg + 180.0) % 360.0) - 180.0
+    assert abs(mv4.post_i_deg - target_i_deg) <= pulse_result.config["terminal_tolerance"]["i_deg"]
+    assert abs(lon_error) <= pulse_result.config["terminal_tolerance"]["lon_deg"]
+    assert abs(mv5.burn_start_min - mv5.initial_burn_start_min) <= MV5_NEAR_PERIGEE_START_WINDOW_MIN
+    assert mv5.post_e <= MV5_LOCKED_MAX_ECCENTRICITY
 
 
 def test_feasible_q_scan_ignores_current_user_q_constraint() -> None:
@@ -183,6 +249,20 @@ def test_v51_user_sequence_and_perigee_targets_drive_planner() -> None:
         plan_design_maneuver_strategy(payload)
 
 
+def test_v51_low_target_inclination_error_reports_geometry_limit() -> None:
+    payload = default_design_maneuver_strategy_payload()
+    payload["target"]["i_deg"] = 5.0
+
+    with pytest.raises(RuntimeError) as excinfo:
+        plan_design_maneuver_strategy(payload)
+
+    message = str(excinfo.value)
+    assert "首个远地点参考解失败" in message
+    assert "目标倾角 5.000 deg" in message
+    assert "几何允许下限" in message
+    assert "点火点地心纬度" in message
+
+
 def test_v51_single_fixed_perigee_target_keeps_duration_hard_limit(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = default_design_maneuver_strategy_payload()
     payload["hard_constraint_planner"]["fixed_hp_targets_km"] = {"1": 3940.0}
@@ -250,11 +330,15 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path, monkeyp
     assert not hasattr(page, "_summary_card")
     assert not hasattr(page, "_summary_table")
     assert not hasattr(page, "_check_table")
-    assert page._config_panel.maximumHeight() <= 178
-    assert page._config_overview_table.maximumHeight() <= 118
+    assert page._config_panel.maximumHeight() <= 218
+    assert page._parameter_config_button.minimumHeight() >= 44
+    assert page._config_overview_table.maximumHeight() <= 150
     assert page._config_overview_table.rowCount() == 4
     assert page._burn_table.maximumHeight() <= 210
     assert page._continuous_thrust_button.text() == "优化连续推力模型参数"
+    assert page._continuous_thrust_button.minimumHeight() >= 40
+    assert page._export_continuous_strategy_button.text() == "导出变轨策略"
+    assert page._export_continuous_strategy_button.minimumWidth() >= 150
     assert page._continuous_thrust_table.columnCount() == 16
     assert page._result_panel.layout().indexOf(page._continuous_thrust_table.parentWidget()) >= 0
     perigee_layout = page._mv1_hp_target_label.parentWidget().layout()
@@ -317,6 +401,13 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path, monkeyp
     assert page._burn_table.rowCount() == 6
     page._continuous_thrust_button.click()
     assert page._continuous_thrust_table.rowCount() == 5
+    assert workspace.design_import_maneuver_strategy_path().exists()
+    import_strategy = workspace.load_design_import_maneuver_strategy()
+    assert import_strategy is not None
+    assert import_strategy["maneuver_count"] == 5
+    assert import_strategy["maneuvers"][0]["Tn_start_min"] == pytest.approx(
+        page._continuous_thrust_result.parameters[0].burn_start_min
+    )
     assert page._continuous_thrust_table.item(0, 0).text().startswith("MV1 / ")
     assert "固定链路优化" in page._continuous_thrust_table.item(0, 0).text()
     assert "近地点面内减速" in page._continuous_thrust_table.item(4, 0).text()
@@ -326,6 +417,26 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path, monkeyp
     assert page._continuous_thrust_table.horizontalHeaderItem(15).text() == "控后远地点高度/km"
     assert page._continuous_thrust_table.item(0, 12).text()
     assert "连续推力参数优化" in page._status_label.text()
+    opened_urls: list[str] = []
+    monkeypatch.setattr(
+        design_page_module.QtGui.QDesktopServices,
+        "openUrl",
+        lambda url: opened_urls.append(url.toLocalFile()) or True,
+    )
+    exported_xlsx = page.export_continuous_thrust_strategy()
+    assert exported_xlsx == workspace.data_dir() / "design_continuous_thrust_maneuver_strategy.xlsx"
+    assert exported_xlsx.exists()
+    assert [Path(value) for value in opened_urls] == [exported_xlsx]
+    assert "连续推力变轨策略已导出" in page._status_label.text()
+    xlsx_values, xlsx_merges = _read_xlsx_sheet_values(exported_xlsx)
+    assert xlsx_values["B1"] == "星舰分离T0"
+    assert xlsx_values["C1"] == "第1次变轨点火点"
+    assert xlsx_values["D1"] == "第1次变轨熄火点"
+    assert xlsx_values["A20"] == "点火偏航角 (度)"
+    assert xlsx_values["A25"] == "变轨发动机工作时长(min)"
+    assert xlsx_values["B20"] == "-"
+    assert "C20:D20" in xlsx_merges
+    assert "K25:L25" in xlsx_merges
     assert page._burn_table.columnCount() == 16
     assert page._burn_table.horizontalHeaderItem(4).text() == "星下点经度/degE"
     assert page._burn_table.horizontalHeaderItem(8).text() == "控后偏心率"
@@ -359,6 +470,23 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path, monkeyp
     assert replans == []
     page._apply_hp_targets_button.click()
     assert replans == [True]
+
+
+def _read_xlsx_sheet_values(path: Path) -> tuple[dict[str, str], set[str]]:
+    ns = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+    with zipfile.ZipFile(path) as archive:
+        root = ET.fromstring(archive.read("xl/worksheets/sheet1.xml"))
+    values: dict[str, str] = {}
+    for cell in root.findall(".//x:c", ns):
+        ref = cell.attrib["r"]
+        inline_text = cell.find("x:is/x:t", ns)
+        value = cell.find("x:v", ns)
+        if inline_text is not None:
+            values[ref] = inline_text.text or ""
+        elif value is not None:
+            values[ref] = value.text or ""
+    merges = {node.attrib["ref"] for node in root.findall(".//x:mergeCell", ns)}
+    return values, merges
     q_values = [int(value) for value in candidate_q.split(",")]
     q_config = page.config()
     assert q_config["apsis"]["pattern_mode"] == "user"

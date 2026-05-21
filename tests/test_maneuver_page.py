@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 from PySide6 import QtCore
 from PySide6 import QtWidgets
 
@@ -23,6 +24,7 @@ def test_maneuver_page_uses_readonly_summary_and_edit_dialog(tmp_path) -> None:
     assert page._ground_track_title_label.text() == "星下点轨迹"
     assert page._initial_state_header_label.text() == "配置参数"
     assert page._edit_config_button.text().endswith("修改配置")
+    assert page._import_design_strategy_button.text().endswith("引入变轨策略")
     assert page._calculate_button.text() == "计算变轨策略"
     assert page._calculate_button.property("variant") == "primaryAction"
     assert isinstance(page._ground_track_plot.getViewBox(), _GroundTrackViewBox)
@@ -59,6 +61,63 @@ def test_maneuver_page_uses_readonly_summary_and_edit_dialog(tmp_path) -> None:
     assert not hasattr(page, "_add_button")
     assert not hasattr(page, "_remove_button")
 
+    design_strategy = {
+        "launch_mass_kg": 6400.0,
+        "t0_epoch": "2026-04-24T13:54:27Z",
+        "t0_orbit": {
+            "semi_major_axis_m": 29478137.0,
+            "eccentricity": 0.77684692,
+            "inclination_deg": 16.5,
+            "argument_of_perigee_deg": 200.0,
+            "raan_deg": 8.53237,
+            "mean_anomaly_deg": 1.85437,
+        },
+        "maneuver_count": 2,
+        "maneuvers": [
+            {
+                "maneuver_index": 1,
+                "Tn_start_min": 10.0,
+                "burn_duration_min": 2.5,
+                "control_fuel_%": 1.73,
+                "settle_duration_s": 60.0,
+                "direction_mode": "local_horizontal_yaw",
+                "yaw_angle_deg": 12.5,
+                "delta_deg": 2.5,
+                "dv_direction": 1,
+                "orbit_control_thrust_n": 490.0,
+                "orbit_control_isp_s": 314.1,
+                "settle_thrust_n": 20.0,
+                "settle_isp_s": 290.0,
+            },
+            {
+                "maneuver_index": 2,
+                "Tn_start_min": 120.0,
+                "burn_duration_min": 3.0,
+                "control_fuel_%": 1.73,
+                "settle_duration_s": 60.0,
+                "direction_mode": "local_horizontal_yaw",
+                "yaw_angle_deg": -178.5,
+                "delta_deg": -1.0,
+                "dv_direction": -1,
+                "orbit_control_thrust_n": 490.0,
+                "orbit_control_isp_s": 314.1,
+                "settle_thrust_n": 20.0,
+                "settle_isp_s": 290.0,
+            },
+        ],
+    }
+    workspace.save_design_import_maneuver_strategy(design_strategy)
+    page._import_design_strategy_button.click()
+    imported = workspace.load_maneuver_strategy()
+    assert imported is not None
+    assert imported["launch_mass_kg"] == pytest.approx(6400.0)
+    assert imported["maneuver_count"] == 2
+    assert imported["maneuvers"][1]["direction_mode"] == "local_horizontal_yaw"
+    assert imported["maneuvers"][1]["yaw_angle_deg"] == pytest.approx(-178.5)
+    assert imported["maneuvers"][1]["dv_direction"] == -1
+    assert page._strategy_table.rowCount() == 2
+    assert "已从设计变轨策略导入配置" in page._status_label.text()
+
     dialog = _ManeuverConfigDialog(page._i18n, page.strategy(), page._COLUMNS, page)
     assert not dialog.findChildren(QtWidgets.QTabWidget)
     assert dialog._table.minimumHeight() == dialog._table.maximumHeight()
@@ -68,7 +127,7 @@ def test_maneuver_page_uses_readonly_summary_and_edit_dialog(tmp_path) -> None:
         widget = dialog._table.cellWidget(0, column)
         assert widget is not None
         assert dialog._table.rowHeight(0) >= widget.sizeHint().height()
-    direction_widget = dialog._table.cellWidget(0, 6)
+    direction_widget = dialog._table.cellWidget(0, 7)
     assert isinstance(direction_widget, QtWidgets.QComboBox)
     assert direction_widget.maxVisibleItems() == 2
     beijing_tz = QtCore.QTimeZone(b"Asia/Shanghai")
@@ -80,4 +139,8 @@ def test_maneuver_page_uses_readonly_summary_and_edit_dialog(tmp_path) -> None:
 
     assert edited["launch_mass_kg"] == 7000.0
     assert edited["t0_epoch"] == "2024-01-01T00:00:00Z"
-    assert len(edited["maneuvers"]) == len(strategy["maneuvers"])
+    assert len(edited["maneuvers"]) == len(imported["maneuvers"])
+    assert edited["maneuvers"][0]["direction_mode"] == "local_horizontal_yaw"
+    assert edited["maneuvers"][0]["yaw_angle_deg"] == pytest.approx(12.5)
+    dialog.close()
+    dialog.deleteLater()

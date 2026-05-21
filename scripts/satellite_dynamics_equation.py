@@ -22,6 +22,12 @@ from smart.services.earth_orientation import (
     inertial_raan_deg_from_ascending_node_longitude_deg,
     utc_now_iso_z,
 )
+from smart.services.design_maneuver_strategy import (
+    _coe_to_rv as _design_coe_to_rv,
+    _propagate_state_to_elapsed as _design_propagate_state_to_elapsed,
+    _rk4_low_thrust_step as _design_rk4_low_thrust_step,
+)
+from smart.services.thrust_direction import local_horizontal_yaw_direction
 
 Vector3 = NDArray[np.float64]
 StateVector = NDArray[np.float64]  # [x, y, z, vx, vy, vz, m] in SI
@@ -47,6 +53,7 @@ class ThrustCommand:
     alpha_rad: float     # rad
     delta_rad: float     # rad
     isp_s: float         # s
+    direction_eci: Vector3 | None = None
 
 
 @dataclass(frozen=True)
@@ -95,6 +102,8 @@ class ManeuverStrategyStep:
     settle_thrust_n: float
     settle_isp_s: float
     dv_direction: int = 1
+    direction_mode: str = "delta_tangent"
+    yaw_angle_deg: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -109,6 +118,8 @@ class PropagationSegment:
     delta_deg: float
     maneuver_index: int | None = None
     dv_direction: int = 1
+    direction_mode: str = "delta_tangent"
+    yaw_angle_deg: float = 0.0
 
 
 # T0 default data from the figure / configuration template.
@@ -176,6 +187,11 @@ def _strategy_step_from_payload(payload: dict[str, Any], fallback_index: int) ->
     dv_direction = int(float(payload.get("dv_direction", 1)))
     if dv_direction not in {-1, 1}:
         raise ValueError(f"Maneuver {maneuver_index} dv_direction must be 1 or -1.")
+    direction_mode = str(payload.get("direction_mode", "delta_tangent"))
+    if direction_mode not in {"delta_tangent", "local_horizontal_yaw"}:
+        raise ValueError(
+            f"Maneuver {maneuver_index} direction_mode must be 'delta_tangent' or 'local_horizontal_yaw'."
+        )
     return ManeuverStrategyStep(
         maneuver_index=maneuver_index,
         Tn_start_min=_time_in_minutes_from_payload(
@@ -200,6 +216,8 @@ def _strategy_step_from_payload(payload: dict[str, Any], fallback_index: int) ->
         settle_thrust_n=float(payload.get("settle_thrust_n", 20.0)),
         settle_isp_s=float(payload.get("settle_isp_s", 290.0)),
         dv_direction=dv_direction,
+        direction_mode=direction_mode,
+        yaw_angle_deg=float(payload.get("yaw_angle_deg", 0.0)),
     )
 
 
@@ -260,6 +278,32 @@ def _orbital_elements_from_t0_payload(payload: object, *, t0_epoch_utc: str) -> 
         ),
         true_anomaly_deg=true_anomaly_deg,
     ).validate()
+
+
+def _earth_config_from_strategy_payload(
+    payload: dict[str, Any],
+    constants: DynamicsConstants,
+) -> dict[str, Any]:
+    earth_payload = payload.get("earth", {})
+    earth = earth_payload if isinstance(earth_payload, dict) else {}
+    return {
+        "mu_km3_s2": float(earth.get("mu_km3_s2", constants.mu / 1.0e9)),
+        "Re_km": float(earth.get("Re_km", constants.r0 / 1000.0)),
+        "J2": float(earth.get("J2", constants.j2)),
+        "omega_e_rad_s": float(earth.get("omega_e_rad_s", constants.earth_rotation_rate_rad_s)),
+        "use_J2": bool(earth.get("use_J2", True)),
+    }
+
+
+def _constants_from_earth_config(earth: dict[str, Any], fallback: DynamicsConstants) -> DynamicsConstants:
+    return DynamicsConstants(
+        mu=float(earth["mu_km3_s2"]) * 1.0e9,
+        r0=float(earth["Re_km"]) * 1000.0,
+        j2=float(earth["J2"]),
+        g0=fallback.g0,
+        earth_rotation_rate_rad_s=float(earth["omega_e_rad_s"]),
+        earth_flattening=fallback.earth_flattening,
+    )
 
 
 def load_maneuver_strategy_config(config_path: str | Path) -> dict[str, Any]:
@@ -640,6 +684,16 @@ def thrust_direction(alpha_rad: float, delta_rad: float) -> Vector3:
     return np.array([cos_a * cos_d, sin_a * cos_d, sin_d], dtype=np.float64)
 
 
+def _command_direction_eci(command: ThrustCommand) -> Vector3:
+    if command.direction_eci is not None:
+        direction = np.asarray(command.direction_eci, dtype=np.float64)
+        norm = float(np.linalg.norm(direction))
+        if norm <= 0.0:
+            raise ValueError("Thrust command direction_eci must be non-zero.")
+        return direction / norm
+    return thrust_direction(command.alpha_rad, command.delta_rad)
+
+
 def _alpha_candidates_from_delta(state: StateVector, delta_rad: float, tol: float = 1e-10) -> list[float]:
     """
     Return alpha candidates from tangency constraint:
@@ -750,7 +804,7 @@ def satellite_dynamics(
     ay += j2_factor * y * (-1.5 + 7.5 * zr2)
     az += j2_factor * z * (-4.5 + 7.5 * zr2)
 
-    u = thrust_direction(command.alpha_rad, command.delta_rad)
+    u = _command_direction_eci(command)
     thrust_over_mass = command.thrust_n / mass
     ax += thrust_over_mass * float(u[0])
     ay += thrust_over_mass * float(u[1])
@@ -855,7 +909,8 @@ def build_propagation_segments_from_strategy(
       - burn_duration_min is the total burn window including settle and orbit-control phases
       - orbit-control thruster: starts after settle_duration_s and ends at Tn_start_min + burn_duration_min
       - orbit-control Isp: orbit_control_isp_s / (1 + control_fuel_% / 100)
-      - dv_direction: 1 selects the tangent solution along velocity, -1 selects the one against velocity.
+      - direction_mode=delta_tangent: delta_deg and dv_direction select the tangent solution.
+      - direction_mode=local_horizontal_yaw: yaw_angle_deg is fixed during ignition.
       - between burns: coast
       - after last burn: append extra_free_flight_s coast.
     """
@@ -872,6 +927,10 @@ def build_propagation_segments_from_strategy(
             raise ValueError(f"Maneuver {step.maneuver_index} burn_duration_min must be >= 0.")
         if step.dv_direction not in {-1, 1}:
             raise ValueError(f"Maneuver {step.maneuver_index} dv_direction must be 1 or -1.")
+        if step.direction_mode not in {"delta_tangent", "local_horizontal_yaw"}:
+            raise ValueError(
+                f"Maneuver {step.maneuver_index} direction_mode must be 'delta_tangent' or 'local_horizontal_yaw'."
+            )
 
         control_fuel_factor = 1.0 + step.control_fuel_percent / 100.0
         if control_fuel_factor <= 0.0:
@@ -905,6 +964,8 @@ def build_propagation_segments_from_strategy(
                     delta_deg=step.delta_deg,
                     maneuver_index=step.maneuver_index,
                     dv_direction=step.dv_direction,
+                    direction_mode=step.direction_mode,
+                    yaw_angle_deg=step.yaw_angle_deg,
                 )
             )
 
@@ -919,6 +980,8 @@ def build_propagation_segments_from_strategy(
                     delta_deg=step.delta_deg,
                     maneuver_index=step.maneuver_index,
                     dv_direction=step.dv_direction,
+                    direction_mode=step.direction_mode,
+                    yaw_angle_deg=step.yaw_angle_deg,
                 )
             )
 
@@ -950,6 +1013,8 @@ def build_propagation_segments_from_strategy(
                     delta_deg=0.0,
                     maneuver_index=None,
                     dv_direction=1,
+                    direction_mode="delta_tangent",
+                    yaw_angle_deg=0.0,
                 )
             )
         if thrust_segment.end_s > cursor_s + tol:
@@ -964,6 +1029,8 @@ def build_propagation_segments_from_strategy(
                     delta_deg=thrust_segment.delta_deg,
                     maneuver_index=thrust_segment.maneuver_index,
                     dv_direction=thrust_segment.dv_direction,
+                    direction_mode=thrust_segment.direction_mode,
+                    yaw_angle_deg=thrust_segment.yaw_angle_deg,
                 )
             )
             cursor_s = thrust_segment.end_s
@@ -979,6 +1046,8 @@ def build_propagation_segments_from_strategy(
                 delta_deg=0.0,
                 maneuver_index=None,
                 dv_direction=1,
+                direction_mode="delta_tangent",
+                yaw_angle_deg=0.0,
             )
         )
 
@@ -1014,6 +1083,16 @@ def _command_for_segment(segment: PropagationSegment, state: StateVector) -> Thr
         )
     if segment.isp_s <= 0.0:
         raise ValueError(f"Segment ISP must be positive for thrusting phase '{segment.phase_name}'.")
+    if segment.direction_mode == "local_horizontal_yaw":
+        return ThrustCommand(
+            thrust_n=segment.thrust_n,
+            alpha_rad=math.radians(segment.yaw_angle_deg),
+            delta_rad=0.0,
+            isp_s=segment.isp_s,
+            direction_eci=local_horizontal_yaw_direction(state[:3], segment.yaw_angle_deg),
+        )
+    if segment.direction_mode != "delta_tangent":
+        raise ValueError(f"Segment direction_mode must be 'delta_tangent' or 'local_horizontal_yaw'.")
     if segment.dv_direction not in {-1, 1}:
         raise ValueError(f"Segment dv_direction must be 1 or -1 for thrusting phase '{segment.phase_name}'.")
     delta_rad = math.radians(segment.delta_deg)
@@ -1089,7 +1168,7 @@ def _thrust_history_values(
     if command.thrust_n <= 0.0:
         return empty
 
-    direction_eci = thrust_direction(command.alpha_rad, command.delta_rad)
+    direction_eci = _command_direction_eci(command)
     direction_ecef = eci_to_ecef(
         direction_eci,
         elapsed_time_s=elapsed_time_s,
@@ -1097,8 +1176,9 @@ def _thrust_history_values(
         theta_g0_rad=theta_g0_rad,
     )
     longitude_deg, latitude_deg = _direction_longitude_latitude_deg(direction_ecef)
+    alpha_deg = segment.yaw_angle_deg if segment.direction_mode == "local_horizontal_yaw" else math.degrees(command.alpha_rad)
     return {
-        "thrust_alpha_deg": _wrap_degrees_180(math.degrees(command.alpha_rad)),
+        "thrust_alpha_deg": _wrap_degrees_180(alpha_deg),
         "thrust_beta_deg": math.degrees(command.delta_rad),
         "thrust_longitude_deg": longitude_deg,
         "thrust_latitude_deg": latitude_deg,
@@ -1171,6 +1251,121 @@ def propagate_by_segments(
         np.asarray(output_times, dtype=np.float64),
         np.asarray(output_states, dtype=np.float64),
         output_phases,
+    )
+
+
+def _design_continuous_initial_state_km(
+    strategy_config: dict[str, Any],
+    earth: dict[str, Any],
+) -> tuple[Vector3, Vector3]:
+    t0_epoch_utc = _t0_epoch_from_strategy_payload(strategy_config)
+    orbit_payload = strategy_config.get("t0_orbit", {})
+    orbit = orbit_payload if isinstance(orbit_payload, dict) else {}
+    lon_node_deg = float(orbit.get("raan_deg", DEFAULT_T0_ORBIT_PAYLOAD["raan_deg"]))
+    raan_rad = math.radians((lon_node_deg + math.degrees(greenwich_angle_at_utc(t0_epoch_utc))) % 360.0)
+    return _design_coe_to_rv(
+        float(orbit.get("semi_major_axis_m", DEFAULT_T0_ORBIT_PAYLOAD["semi_major_axis_m"])) / 1000.0,
+        float(orbit.get("eccentricity", DEFAULT_T0_ORBIT_PAYLOAD["eccentricity"])),
+        math.radians(float(orbit.get("inclination_deg", DEFAULT_T0_ORBIT_PAYLOAD["inclination_deg"]))),
+        raan_rad,
+        math.radians(float(orbit.get("argument_of_perigee_deg", DEFAULT_T0_ORBIT_PAYLOAD["argument_of_perigee_deg"]))),
+        math.radians(float(orbit.get("mean_anomaly_deg", DEFAULT_T0_ORBIT_PAYLOAD["mean_anomaly_deg"]))),
+        mu=float(earth["mu_km3_s2"]),
+    )
+
+
+def _propagate_design_continuous_segments(
+    *,
+    strategy_config: dict[str, Any],
+    initial_mass_kg: float,
+    segments: list[PropagationSegment],
+    sample_interval_s: float,
+    max_step_s: float,
+    coast_max_step_s: float | None,
+    constants: DynamicsConstants,
+) -> tuple[NDArray[np.float64], NDArray[np.float64], list[str], DynamicsConstants]:
+    if not segments:
+        raise ValueError("At least one propagation segment is required.")
+    if any(segment.thrust_n > 0.0 and segment.direction_mode != "local_horizontal_yaw" for segment in segments):
+        raise ValueError("design_continuous_thrust strategy requires local_horizontal_yaw thrust segments.")
+
+    earth = _earth_config_from_strategy_payload(strategy_config, constants)
+    design_config = {"earth": earth}
+    design_constants = _constants_from_earth_config(earth, constants)
+    r0_km, v0_km_s = _design_continuous_initial_state_km(strategy_config, earth)
+    state = np.asarray(
+        [r0_km[0], r0_km[1], r0_km[2], v0_km_s[0], v0_km_s[1], v0_km_s[2], initial_mass_kg],
+        dtype=float,
+    )
+
+    current_time_s = 0.0
+    output_times: list[float] = [current_time_s]
+    output_states: list[StateVector] = [
+        np.asarray(
+            [state[0] * 1000.0, state[1] * 1000.0, state[2] * 1000.0, state[3] * 1000.0, state[4] * 1000.0, state[5] * 1000.0, state[6]],
+            dtype=np.float64,
+        )
+    ]
+    output_phases: list[str] = [segments[0].phase_name]
+
+    for segment in segments:
+        if abs(segment.start_s - current_time_s) > 1.0e-7:
+            raise ValueError(
+                f"Non-continuous segment timeline: expected start {current_time_s:.6f}, got {segment.start_s:.6f}."
+            )
+        segment_max_step_s = (
+            coast_max_step_s
+            if coast_max_step_s is not None and segment.phase_name == "coast"
+            else max_step_s
+        )
+        for target_time_s in _targets_in_segment(segment.start_s, segment.end_s, sample_interval_s):
+            if segment.thrust_n <= 0.0:
+                r_km, v_km_s = _design_propagate_state_to_elapsed(
+                    design_config,
+                    state[:3],
+                    state[3:6],
+                    current_time_s,
+                    target_time_s,
+                )
+                state[:3] = r_km
+                state[3:6] = v_km_s
+                current_time_s = target_time_s
+            else:
+                while current_time_s < target_time_s - 1.0e-12:
+                    step_s = min(segment_max_step_s, target_time_s - current_time_s)
+                    state = _design_rk4_low_thrust_step(
+                        design_config,
+                        current_time_s,
+                        state,
+                        step_s,
+                        segment.yaw_angle_deg,
+                        segment.thrust_n,
+                        segment.isp_s,
+                    )
+                    current_time_s += step_s
+
+            output_times.append(current_time_s)
+            output_states.append(
+                np.asarray(
+                    [
+                        state[0] * 1000.0,
+                        state[1] * 1000.0,
+                        state[2] * 1000.0,
+                        state[3] * 1000.0,
+                        state[4] * 1000.0,
+                        state[5] * 1000.0,
+                        state[6],
+                    ],
+                    dtype=np.float64,
+                )
+            )
+            output_phases.append(segment.phase_name)
+
+    return (
+        np.asarray(output_times, dtype=np.float64),
+        np.asarray(output_states, dtype=np.float64),
+        output_phases,
+        design_constants,
     )
 
 
@@ -1357,28 +1552,41 @@ def simulate_with_maneuver_strategy_config(
 
     strategy_steps = load_maneuver_strategy_steps(strategy_config_path)
     segments = build_propagation_segments_from_strategy(strategy_steps, extra_free_flight_s=extra_free_flight_s)
-
-    t0_elements = t0_orbit.validate()
-    anomaly_source: Literal["mean", "true"] = "mean" if t0_elements.mean_anomaly_deg is not None else "true"
-    pos0, vel0 = orbital_elements_to_state_vector(
-        t0_elements,
-        mu_m3_s2=constants.mu,
-        anomaly_source=anomaly_source,
-    )
     theta_g0 = greenwich_angle_at_utc(t0_epoch_utc)
-    initial_state = np.array(
-        [pos0[0], pos0[1], pos0[2], vel0[0], vel0[1], vel0[2], initial_mass_kg],
-        dtype=np.float64,
-    )
+    source_payload = strategy_config.get("source", {})
+    source_type = source_payload.get("type") if isinstance(source_payload, dict) else None
+    if source_type == "design_continuous_thrust":
+        times_s, states, phases, row_constants = _propagate_design_continuous_segments(
+            strategy_config=strategy_config,
+            initial_mass_kg=initial_mass_kg,
+            segments=segments,
+            sample_interval_s=sample_interval_s,
+            max_step_s=max_step_s,
+            coast_max_step_s=coast_max_step_s,
+            constants=constants,
+        )
+    else:
+        t0_elements = t0_orbit.validate()
+        anomaly_source: Literal["mean", "true"] = "mean" if t0_elements.mean_anomaly_deg is not None else "true"
+        pos0, vel0 = orbital_elements_to_state_vector(
+            t0_elements,
+            mu_m3_s2=constants.mu,
+            anomaly_source=anomaly_source,
+        )
+        initial_state = np.array(
+            [pos0[0], pos0[1], pos0[2], vel0[0], vel0[1], vel0[2], initial_mass_kg],
+            dtype=np.float64,
+        )
 
-    times_s, states, phases = propagate_by_segments(
-        initial_state=initial_state,
-        segments=segments,
-        sample_interval_s=sample_interval_s,
-        max_step_s=max_step_s,
-        coast_max_step_s=coast_max_step_s,
-        constants=constants,
-    )
+        times_s, states, phases = propagate_by_segments(
+            initial_state=initial_state,
+            segments=segments,
+            sample_interval_s=sample_interval_s,
+            max_step_s=max_step_s,
+            coast_max_step_s=coast_max_step_s,
+            constants=constants,
+        )
+        row_constants = constants
 
     event_times_s = sorted(
         {
@@ -1400,7 +1608,7 @@ def simulate_with_maneuver_strategy_config(
         theta_g0_rad=theta_g0,
         event_times_s=event_times_s,
         segments=segments,
-        constants=constants,
+        constants=row_constants,
     )
     csv_path = export_orbit_history_csv(rows, output_csv_path)
     return csv_path, rows

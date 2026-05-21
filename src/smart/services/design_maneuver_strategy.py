@@ -8,6 +8,8 @@ import math
 from pathlib import Path
 from time import perf_counter
 from typing import Any
+import zipfile
+from xml.etree import ElementTree as ET
 
 import numpy as np
 
@@ -19,6 +21,7 @@ except Exception:  # pragma: no cover - optional runtime fallback
 
 from smart.domain.models import OrbitalElements
 from smart.services.earth_orientation import format_utc, greenwich_angle_at_utc, parse_utc, utc_now_iso_z
+from smart.services.thrust_direction import local_horizontal_yaw_direction
 
 BEIJING_OFFSET = timedelta(hours=8)
 G0_M_S2 = 9.80665
@@ -670,6 +673,465 @@ def export_continuous_thrust_orbit_history_csv(
         for row in result.orbit_history_rows:
             writer.writerow({key: row.get(key, "") for key in CONTINUOUS_THRUST_ORBIT_HISTORY_COLUMNS})
     return path
+
+
+def export_continuous_thrust_maneuver_strategy_xlsx(
+    result: ContinuousThrustOptimizationResult,
+    config: dict[str, Any],
+    output_path: str | Path,
+) -> Path:
+    normalized_config = normalize_design_maneuver_strategy_payload(config)
+    table = _continuous_thrust_strategy_export_table(result, normalized_config)
+    path = Path(output_path).expanduser().resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _write_minimal_xlsx(path, "连续推力变轨策略", table)
+    return path
+
+
+def continuous_thrust_result_to_maneuver_strategy_payload(
+    result: ContinuousThrustOptimizationResult,
+    config: dict[str, Any],
+) -> dict[str, Any]:
+    normalized_config = normalize_design_maneuver_strategy_payload(config)
+    parameters = sorted(result.parameters, key=lambda item: item.maneuver_index)
+    if not parameters:
+        raise ValueError("Continuous thrust result has no maneuver parameters.")
+
+    initial = normalized_config["initial"]
+    engine = normalized_config["engine"]
+    r_km, v_km_s = _initial_state_km(normalized_config)
+    elapsed_s = 0.0
+    mass_kg = float(initial["m0_kg"])
+    maneuvers: list[dict[str, Any]] = []
+
+    for parameter in parameters:
+        burn_start_s = float(parameter.burn_start_min) * 60.0
+        r_start, v_start = _propagate_state_to_elapsed(normalized_config, r_km, v_km_s, elapsed_s, burn_start_s)
+        delta_deg, dv_direction = _maneuver_strategy_direction_fields(
+            r_start,
+            v_start,
+            float(parameter.yaw_angle_deg),
+        )
+        total_burn_s = max(0.0, (float(parameter.cutoff_min) - float(parameter.burn_start_min)) * 60.0)
+        settle_duration_s = max(0.0, min(float(parameter.settle_duration_min) * 60.0, total_burn_s))
+        maneuvers.append(
+            {
+                "maneuver_index": int(parameter.maneuver_index),
+                "Tn_start_min": float(parameter.burn_start_min),
+                "burn_duration_min": total_burn_s / 60.0,
+                "control_fuel_%": float(engine["attitude_control_efficiency"]) * 100.0,
+                "settle_duration_s": settle_duration_s,
+                "direction_mode": "local_horizontal_yaw",
+                "yaw_angle_deg": float(parameter.yaw_angle_deg),
+                "delta_deg": delta_deg,
+                "dv_direction": dv_direction,
+                "orbit_control_thrust_n": float(engine["F_main_N"]),
+                "orbit_control_isp_s": float(engine["Isp_main_s"]),
+                "settle_thrust_n": float(engine["F_set_N"]),
+                "settle_isp_s": float(engine["Isp_set_s"]),
+            }
+        )
+
+        r_km, v_km_s, mass_kg = _propagate_continuous_parameter_to_cutoff(
+            normalized_config,
+            r_start,
+            v_start,
+            mass_kg,
+            parameter,
+        )
+        elapsed_s = float(parameter.cutoff_min) * 60.0
+
+    return {
+        "source": {
+            "type": "design_continuous_thrust",
+            "generated_utc": utc_now_iso_z(),
+            "hard_constraint_passed": bool(result.hard_constraint_passed),
+        },
+        "earth": dict(normalized_config["earth"]),
+        "launch_mass_kg": float(initial["m0_kg"]),
+        "t0_epoch": format_utc(str(initial["t0_epoch"])),
+        "t0_orbit": {
+            "semi_major_axis_m": float(initial["a_km"]) * 1000.0,
+            "eccentricity": float(initial["e"]),
+            "inclination_deg": float(initial["i_deg"]),
+            "argument_of_perigee_deg": float(initial["argp_deg"]),
+            "raan_deg": float(initial["lon_node_deg"]),
+            "mean_anomaly_deg": float(initial["mean_anomaly_deg"]),
+        },
+        "maneuver_count": len(maneuvers),
+        "maneuvers": maneuvers,
+    }
+
+
+def _propagate_continuous_parameter_to_cutoff(
+    config: dict[str, Any],
+    r_start_km: np.ndarray,
+    v_start_km_s: np.ndarray,
+    mass_kg: float,
+    parameter: ContinuousThrustManeuverParameter,
+) -> tuple[np.ndarray, np.ndarray, float]:
+    engine = config["engine"]
+    state = np.asarray(
+        [
+            float(r_start_km[0]),
+            float(r_start_km[1]),
+            float(r_start_km[2]),
+            float(v_start_km_s[0]),
+            float(v_start_km_s[1]),
+            float(v_start_km_s[2]),
+            max(1.0, float(mass_kg)),
+        ],
+        dtype=float,
+    )
+    current_s = float(parameter.burn_start_min) * 60.0
+    cutoff_s = float(parameter.cutoff_min) * 60.0
+    if cutoff_s <= current_s:
+        return state[:3].copy(), state[3:6].copy(), float(state[6])
+    main_isp_s = max(1.0, float(engine["Isp_main_s"]) / (1.0 + float(engine["attitude_control_efficiency"])))
+    phases = (
+        (
+            max(0.0, float(parameter.settle_duration_min) * 60.0),
+            max(0.0, float(engine["F_set_N"])),
+            max(1.0, float(engine["Isp_set_s"])),
+        ),
+        (
+            max(0.0, cutoff_s - current_s - max(0.0, float(parameter.settle_duration_min) * 60.0)),
+            max(0.0, float(engine["F_main_N"])),
+            main_isp_s,
+        ),
+    )
+    step_limit_s = max(0.5, float(config["continuous_thrust_optimizer"]["final_integration_step_s"]))
+    for duration_s, thrust_n, isp_s in phases:
+        phase_end_s = min(cutoff_s, current_s + duration_s)
+        while current_s < phase_end_s - 1.0e-12:
+            step_s = min(step_limit_s, phase_end_s - current_s)
+            state = _rk4_low_thrust_step(config, current_s, state, step_s, float(parameter.yaw_angle_deg), thrust_n, isp_s)
+            current_s += step_s
+    return state[:3].copy(), state[3:6].copy(), float(state[6])
+
+
+def _maneuver_strategy_direction_fields(r_km: np.ndarray, v_km_s: np.ndarray, yaw_angle_deg: float) -> tuple[float, int]:
+    desired = _local_horizontal_direction(np.asarray(r_km, dtype=float), float(yaw_angle_deg))
+    desired_norm = float(np.linalg.norm(desired))
+    if desired_norm <= 1.0e-12:
+        raise ValueError("Continuous thrust yaw direction produced a zero vector.")
+    desired = desired / desired_norm
+    z_component = max(-1.0, min(1.0, float(desired[2])))
+    delta_rad = math.asin(z_component)
+    delta_deg = math.degrees(delta_rad)
+    candidates = _tangent_direction_candidates_from_delta(np.asarray(r_km, dtype=float), delta_rad)
+    desired_index = max(
+        range(len(candidates)),
+        key=lambda index: float(np.dot(candidates[index], desired)),
+    )
+    velocity_scores = [float(np.dot(candidate, np.asarray(v_km_s, dtype=float))) for candidate in candidates]
+    prograde_index = max(range(len(candidates)), key=lambda index: velocity_scores[index])
+    dv_direction = 1 if desired_index == prograde_index else -1
+    return delta_deg, dv_direction
+
+
+def _tangent_direction_candidates_from_delta(r_km: np.ndarray, delta_rad: float) -> list[np.ndarray]:
+    x, y, z = (float(value) for value in r_km)
+    cos_delta = math.cos(delta_rad)
+    if abs(cos_delta) <= 1.0e-12:
+        return [np.asarray([0.0, 0.0, math.copysign(1.0, math.sin(delta_rad))], dtype=float)]
+    rho = math.hypot(x, y)
+    if rho <= 1.0e-12:
+        return [np.asarray([math.cos(0.0) * cos_delta, math.sin(0.0) * cos_delta, math.sin(delta_rad)], dtype=float)]
+    cos_term = max(-1.0, min(1.0, -z * math.tan(delta_rad) / rho))
+    phase = math.atan2(y, x)
+    offset = math.acos(cos_term)
+    candidates: list[np.ndarray] = []
+    for alpha in (phase + offset, phase - offset):
+        candidates.append(
+            np.asarray(
+                [
+                    math.cos(alpha) * cos_delta,
+                    math.sin(alpha) * cos_delta,
+                    math.sin(delta_rad),
+                ],
+                dtype=float,
+            )
+        )
+    return candidates
+
+
+_XLSX_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+_XLSX_REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
+
+
+def _continuous_thrust_strategy_export_table(
+    result: ContinuousThrustOptimizationResult,
+    config: dict[str, Any],
+) -> dict[str, Any]:
+    parameters = sorted(result.parameters, key=lambda item: item.maneuver_index)
+    if not parameters:
+        raise ValueError("Continuous thrust result has no maneuver parameters.")
+
+    columns: list[dict[str, Any]] = []
+    r_km, v_km_s = _initial_state_km(config)
+    elapsed_s = 0.0
+    mass_kg = float(config["initial"]["m0_kg"])
+    columns.append(
+        _continuous_export_state_column(
+            config,
+            "星舰分离T0",
+            elapsed_s,
+            r_km,
+            v_km_s,
+            mass_kg,
+            revolution=0,
+            position_label="",
+        )
+    )
+
+    burn_metrics: list[dict[str, float]] = []
+    for parameter in parameters:
+        burn_start_s = float(parameter.burn_start_min) * 60.0
+        r_start, v_start = _propagate_state_to_elapsed(config, r_km, v_km_s, elapsed_s, burn_start_s)
+        columns.append(
+            _continuous_export_state_column(
+                config,
+                f"第{parameter.maneuver_index}次变轨点火点",
+                burn_start_s,
+                r_start,
+                v_start,
+                mass_kg,
+                revolution=int(parameter.flight_revolution),
+                position_label=str(parameter.position_label),
+            )
+        )
+        r_km, v_km_s, mass_kg = _propagate_continuous_parameter_to_cutoff(
+            config,
+            r_start,
+            v_start,
+            mass_kg,
+            parameter,
+        )
+        columns.append(
+            _continuous_export_state_column(
+                config,
+                f"第{parameter.maneuver_index}次变轨熄火点",
+                float(parameter.cutoff_min) * 60.0,
+                r_km,
+                v_km_s,
+                mass_kg,
+                revolution=int(parameter.flight_revolution),
+                position_label=str(parameter.position_label),
+            )
+        )
+        elapsed_s = float(parameter.cutoff_min) * 60.0
+        burn_metrics.append(
+            {
+                "yaw_angle_deg": float(parameter.yaw_angle_deg),
+                "propellant_kg": float(parameter.propellant_kg),
+                "delta_v_mps": float(parameter.delta_v_mps),
+                "total_burn_time_min": float(parameter.total_burn_time_min),
+                "settle_duration_min": float(parameter.settle_duration_min),
+                "orbit_control_duration_min": float(parameter.orbit_control_duration_min),
+            }
+        )
+
+    return {"columns": columns, "burn_metrics": burn_metrics}
+
+
+def _continuous_export_state_column(
+    config: dict[str, Any],
+    header: str,
+    elapsed_s: float,
+    r_km: np.ndarray,
+    v_km_s: np.ndarray,
+    mass_kg: float,
+    *,
+    revolution: int,
+    position_label: str,
+) -> dict[str, Any]:
+    earth = config["earth"]
+    a_km, e_val, inc_rad, raan_rad, argp_rad, mean_rad, true_rad = _rv_to_coe(
+        np.asarray(r_km, dtype=float),
+        np.asarray(v_km_s, dtype=float),
+        mu=float(earth["mu_km3_s2"]),
+    )
+    elapsed_s = float(elapsed_s)
+    lon_deg_e = _longitude_deg(config, np.asarray(r_km, dtype=float), elapsed_s)
+    lat_deg, _alt_km = _spherical_latitude_altitude(config, np.asarray(r_km, dtype=float), elapsed_s)
+    period_min = 2.0 * math.pi * math.sqrt(float(a_km) ** 3 / float(earth["mu_km3_s2"])) / 60.0
+    drift_deg_per_rev = 360.0 - math.degrees(float(earth["omega_e_rad_s"]) * period_min * 60.0)
+    theta_deg = math.degrees(greenwich_angle_at_utc(parse_utc(str(config["initial"]["t0_epoch"])))) + math.degrees(
+        float(earth["omega_e_rad_s"]) * elapsed_s
+    )
+    ascending_node_longitude_deg = (math.degrees(float(raan_rad)) - theta_deg) % 360.0
+    return {
+        "header": header,
+        "航时(min)": elapsed_s / 60.0,
+        "圈次": revolution,
+        "轨道位置(远/近地点)": position_label,
+        "半长轴 a (km)": float(a_km),
+        "偏心率 e": float(e_val),
+        "倾角 i (度)": math.degrees(float(inc_rad)),
+        "近地点幅角 w (度)": math.degrees(float(argp_rad)) % 360.0,
+        "升交点经度 Ne (度)": ascending_node_longitude_deg,
+        "升交点赤经 N (度)": math.degrees(float(raan_rad)) % 360.0,
+        "平近点角 M (度)": math.degrees(float(mean_rad)) % 360.0,
+        "真近点角 f (度)": math.degrees(float(true_rad)) % 360.0,
+        "近地点高度(km)": float(a_km) * (1.0 - float(e_val)) - float(earth["Re_km"]),
+        "远地点高度(km)": float(a_km) * (1.0 + float(e_val)) - float(earth["Re_km"]),
+        "卫星重量 (kg)": float(mass_kg),
+        "星下点经度 (度)": _wrap180(lon_deg_e),
+        "星下点纬度 (度)": lat_deg,
+        "轨道周期(min)": period_min,
+        "经度漂移率(度/圈)": drift_deg_per_rev,
+    }
+
+
+def _write_minimal_xlsx(path: Path, sheet_name: str, table: dict[str, Any]) -> None:
+    rows, merges = _continuous_export_xlsx_rows(table)
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", _xlsx_content_types_xml())
+        archive.writestr("_rels/.rels", _xlsx_root_rels_xml())
+        archive.writestr("xl/workbook.xml", _xlsx_workbook_xml(sheet_name))
+        archive.writestr("xl/_rels/workbook.xml.rels", _xlsx_workbook_rels_xml())
+        archive.writestr("xl/styles.xml", _xlsx_styles_xml())
+        archive.writestr("xl/worksheets/sheet1.xml", _xlsx_sheet_xml(rows, merges))
+
+
+def _continuous_export_xlsx_rows(table: dict[str, Any]) -> tuple[list[list[Any]], list[str]]:
+    columns = list(table["columns"])
+    burn_metrics = list(table["burn_metrics"])
+    labels = [
+        "航时(min)",
+        "圈次",
+        "轨道位置(远/近地点)",
+        "半长轴 a (km)",
+        "偏心率 e",
+        "倾角 i (度)",
+        "近地点幅角 w (度)",
+        "升交点经度 Ne (度)",
+        "升交点赤经 N (度)",
+        "平近点角 M (度)",
+        "真近点角 f (度)",
+        "近地点高度(km)",
+        "远地点高度(km)",
+        "卫星重量 (kg)",
+        "星下点经度 (度)",
+        "星下点纬度 (度)",
+        "轨道周期(min)",
+        "经度漂移率(度/圈)",
+    ]
+    rows: list[list[Any]] = [["", *(column["header"] for column in columns)]]
+    for label in labels:
+        rows.append([label, *(column.get(label, "") for column in columns)])
+
+    metric_rows = [
+        ("点火偏航角 (度)", "yaw_angle_deg"),
+        ("本次点火所耗推进剂 (kg)", "propellant_kg"),
+        ("本次点火速度增量 (m/s)", "delta_v_mps"),
+        ("本次点火工作时间(min)", "total_burn_time_min"),
+        ("沉底发动机工作时长(min)", "settle_duration_min"),
+        ("变轨发动机工作时长(min)", "orbit_control_duration_min"),
+    ]
+    merges: list[str] = []
+    for label, key in metric_rows:
+        row_values: list[Any] = [label, "-"]
+        for metric in burn_metrics:
+            row_values.extend([metric[key], ""])
+        row_number = len(rows) + 1
+        for burn_index in range(len(burn_metrics)):
+            start_col = 3 + burn_index * 2
+            end_col = start_col + 1
+            merges.append(f"{_xlsx_col_name(start_col)}{row_number}:{_xlsx_col_name(end_col)}{row_number}")
+        rows.append(row_values)
+    return rows, merges
+
+
+def _xlsx_sheet_xml(rows: list[list[Any]], merges: list[str]) -> str:
+    ET.register_namespace("", _XLSX_NS)
+    worksheet = ET.Element(f"{{{_XLSX_NS}}}worksheet")
+    ET.SubElement(worksheet, f"{{{_XLSX_NS}}}dimension", {"ref": f"A1:{_xlsx_col_name(max(len(row) for row in rows))}{len(rows)}"})
+    sheet_views = ET.SubElement(worksheet, f"{{{_XLSX_NS}}}sheetViews")
+    ET.SubElement(sheet_views, f"{{{_XLSX_NS}}}sheetView", {"workbookViewId": "0"})
+    cols = ET.SubElement(worksheet, f"{{{_XLSX_NS}}}cols")
+    ET.SubElement(cols, f"{{{_XLSX_NS}}}col", {"min": "1", "max": "1", "width": "25", "customWidth": "1"})
+    ET.SubElement(cols, f"{{{_XLSX_NS}}}col", {"min": "2", "max": "12", "width": "18", "customWidth": "1"})
+    sheet_data = ET.SubElement(worksheet, f"{{{_XLSX_NS}}}sheetData")
+    for row_index, row_values in enumerate(rows, start=1):
+        row = ET.SubElement(sheet_data, f"{{{_XLSX_NS}}}row", {"r": str(row_index)})
+        for col_index, value in enumerate(row_values, start=1):
+            _append_xlsx_cell(row, row_index, col_index, value, style_id=1 if row_index == 1 or col_index == 1 else 2)
+    if merges:
+        merge_cells = ET.SubElement(worksheet, f"{{{_XLSX_NS}}}mergeCells", {"count": str(len(merges))})
+        for ref in merges:
+            ET.SubElement(merge_cells, f"{{{_XLSX_NS}}}mergeCell", {"ref": ref})
+    return ET.tostring(worksheet, encoding="utf-8", xml_declaration=True).decode("utf-8")
+
+
+def _append_xlsx_cell(row: ET.Element, row_index: int, col_index: int, value: Any, *, style_id: int) -> None:
+    cell = ET.SubElement(row, f"{{{_XLSX_NS}}}c", {"r": f"{_xlsx_col_name(col_index)}{row_index}", "s": str(style_id)})
+    if value is None or value == "":
+        return
+    if isinstance(value, str):
+        cell.set("t", "inlineStr")
+        inline = ET.SubElement(cell, f"{{{_XLSX_NS}}}is")
+        text = ET.SubElement(inline, f"{{{_XLSX_NS}}}t")
+        text.text = value
+        return
+    value_node = ET.SubElement(cell, f"{{{_XLSX_NS}}}v")
+    value_node.text = f"{float(value):.12g}"
+
+
+def _xlsx_col_name(index: int) -> str:
+    name = ""
+    while index > 0:
+        index, remainder = divmod(index - 1, 26)
+        name = chr(65 + remainder) + name
+    return name
+
+
+def _xlsx_content_types_xml() -> str:
+    return """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+</Types>"""
+
+
+def _xlsx_root_rels_xml() -> str:
+    return f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="{_REL_NS}">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>"""
+
+
+def _xlsx_workbook_rels_xml() -> str:
+    return f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="{_REL_NS}">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>"""
+
+
+def _xlsx_workbook_xml(sheet_name: str) -> str:
+    escaped_name = sheet_name.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+    return f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="{_XLSX_NS}" xmlns:r="{_XLSX_REL_NS}">
+  <sheets><sheet name="{escaped_name}" sheetId="1" r:id="rId1"/></sheets>
+</workbook>"""
+
+
+def _xlsx_styles_xml() -> str:
+    return f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="{_XLSX_NS}">
+  <fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>
+  <fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFD9EAF7"/><bgColor indexed="64"/></patternFill></fill></fills>
+  <borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color auto="1"/></left><right style="thin"><color auto="1"/></right><top style="thin"><color auto="1"/></top><bottom style="thin"><color auto="1"/></bottom><diagonal/></border></borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf></cellXfs>
+  <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>"""
 
 
 def optimize_continuous_thrust_model_parameters(
@@ -1478,53 +1940,77 @@ def _rk4_low_thrust_step(
     thrust_n: float,
     isp_s: float,
 ) -> np.ndarray:
-    def dynamics(t_local: float, state_local: np.ndarray) -> np.ndarray:
-        return _low_thrust_state_derivative(config, t_local, state_local, yaw_angle_deg, thrust_n, isp_s)
+    yaw_rad = math.radians(float(yaw_angle_deg))
+    yaw_cos = math.cos(yaw_rad)
+    yaw_sin = math.sin(yaw_rad)
+    earth = config["earth"]
+    mu = float(earth["mu_km3_s2"])
+    use_j2 = bool(earth.get("use_J2", True))
+    j2_mu_re2 = float(earth["J2"]) * mu * float(earth["Re_km"]) ** 2 if use_j2 else 0.0
 
     h = float(step_s)
-    k1 = dynamics(time_s, state)
-    k2 = dynamics(time_s + 0.5 * h, state + 0.5 * h * k1)
-    k3 = dynamics(time_s + 0.5 * h, state + 0.5 * h * k2)
-    k4 = dynamics(time_s + h, state + h * k3)
+    k1 = _low_thrust_state_derivative(state, yaw_cos, yaw_sin, thrust_n, isp_s, mu, use_j2, j2_mu_re2)
+    k2 = _low_thrust_state_derivative(
+        state + 0.5 * h * k1,
+        yaw_cos,
+        yaw_sin,
+        thrust_n,
+        isp_s,
+        mu,
+        use_j2,
+        j2_mu_re2,
+    )
+    k3 = _low_thrust_state_derivative(
+        state + 0.5 * h * k2,
+        yaw_cos,
+        yaw_sin,
+        thrust_n,
+        isp_s,
+        mu,
+        use_j2,
+        j2_mu_re2,
+    )
+    k4 = _low_thrust_state_derivative(state + h * k3, yaw_cos, yaw_sin, thrust_n, isp_s, mu, use_j2, j2_mu_re2)
     next_state = state + (h / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
     next_state[6] = max(1.0, float(next_state[6]))
     return next_state
 
 
 def _low_thrust_state_derivative(
-    config: dict[str, Any],
-    _time_s: float,
     state: np.ndarray,
-    yaw_angle_deg: float,
+    yaw_cos: float,
+    yaw_sin: float,
     thrust_n: float,
     isp_s: float,
+    mu: float,
+    use_j2: bool,
+    j2_mu_re2: float,
 ) -> np.ndarray:
-    r = np.asarray(state[:3], dtype=float)
-    v = np.asarray(state[3:6], dtype=float)
+    rx, ry, rz = float(state[0]), float(state[1]), float(state[2])
+    vx, vy, vz = float(state[3]), float(state[4]), float(state[5])
     mass_kg = max(1.0, float(state[6]))
-    radius = float(np.linalg.norm(r))
+    radius = math.sqrt(rx * rx + ry * ry + rz * rz)
     if radius <= 0.0:
         raise ValueError("Position norm must be positive.")
-    earth = config["earth"]
-    mu = float(earth["mu_km3_s2"])
-    accel = -mu * r / (radius**3)
-    if bool(earth.get("use_J2", True)):
-        z = float(r[2])
-        zr2 = (z / radius) ** 2
-        factor = float(earth["J2"]) * mu * float(earth["Re_km"]) ** 2 / (radius**5)
-        accel += factor * np.asarray(
-            [
-                float(r[0]) * (-1.5 + 7.5 * zr2),
-                float(r[1]) * (-1.5 + 7.5 * zr2),
-                z * (-4.5 + 7.5 * zr2),
-            ],
-            dtype=float,
-        )
+    radius3 = radius * radius * radius
+    accel_x = -mu * rx / radius3
+    accel_y = -mu * ry / radius3
+    accel_z = -mu * rz / radius3
+    if use_j2:
+        zr2 = (rz / radius) ** 2
+        factor = j2_mu_re2 / (radius**5)
+        accel_x += factor * rx * (-1.5 + 7.5 * zr2)
+        accel_y += factor * ry * (-1.5 + 7.5 * zr2)
+        accel_z += factor * rz * (-4.5 + 7.5 * zr2)
     mdot = 0.0
     if thrust_n > 0.0:
-        accel += (float(thrust_n) / mass_kg / 1000.0) * _local_horizontal_direction_fast(r, yaw_angle_deg)
+        thrust_accel = float(thrust_n) / mass_kg / 1000.0
+        thrust_x, thrust_y, thrust_z = _local_horizontal_direction_components(rx, ry, rz, yaw_cos, yaw_sin)
+        accel_x += thrust_accel * thrust_x
+        accel_y += thrust_accel * thrust_y
+        accel_z += thrust_accel * thrust_z
         mdot = -float(thrust_n) / (max(1.0, float(isp_s)) * G0_M_S2)
-    return np.asarray([v[0], v[1], v[2], accel[0], accel[1], accel[2], mdot], dtype=float)
+    return np.asarray([vx, vy, vz, accel_x, accel_y, accel_z, mdot], dtype=float)
 
 
 def _semi_major_axis_from_rv(r: np.ndarray, v: np.ndarray, mu: float) -> float:
@@ -1538,11 +2024,24 @@ def _semi_major_axis_from_rv(r: np.ndarray, v: np.ndarray, mu: float) -> float:
 
 def _local_horizontal_direction_fast(r: np.ndarray, alpha_deg: float) -> np.ndarray:
     x, y, z = float(r[0]), float(r[1]), float(r[2])
+    yaw_rad = math.radians(float(alpha_deg))
+    direction = _local_horizontal_direction_components(x, y, z, math.cos(yaw_rad), math.sin(yaw_rad))
+    return np.asarray(direction, dtype=float)
+
+
+def _local_horizontal_direction_components(
+    x: float,
+    y: float,
+    z: float,
+    yaw_cos: float,
+    yaw_sin: float,
+) -> tuple[float, float, float]:
     xy_norm = math.hypot(x, y)
     if xy_norm <= 1.0e-12:
         east_x, east_y, east_z = 0.0, 1.0, 0.0
     else:
         east_x, east_y, east_z = -y / xy_norm, x / xy_norm, 0.0
+
     r_norm = math.sqrt(x * x + y * y + z * z)
     inv_r2 = 1.0 / max(1.0e-24, r_norm * r_norm)
     north_x = -z * x * inv_r2
@@ -1552,19 +2051,15 @@ def _local_horizontal_direction_fast(r: np.ndarray, alpha_deg: float) -> np.ndar
     if north_norm <= 1.0e-12:
         north_x, north_y, north_z = -east_y, east_x, 0.0
         north_norm = math.sqrt(north_x * north_x + north_y * north_y + north_z * north_z)
-    north_x /= north_norm
-    north_y /= north_norm
-    north_z /= north_norm
-    alpha = math.radians(alpha_deg)
-    cos_a = math.cos(alpha)
-    sin_a = math.sin(alpha)
-    return np.asarray(
-        [
-            cos_a * east_x - sin_a * north_x,
-            cos_a * east_y - sin_a * north_y,
-            cos_a * east_z - sin_a * north_z,
-        ],
-        dtype=float,
+    inv_north_norm = 1.0 / north_norm
+    north_x *= inv_north_norm
+    north_y *= inv_north_norm
+    north_z *= inv_north_norm
+
+    return (
+        yaw_cos * east_x - yaw_sin * north_x,
+        yaw_cos * east_y - yaw_sin * north_y,
+        yaw_cos * east_z - yaw_sin * north_z,
     )
 
 
@@ -2084,7 +2579,7 @@ def find_feasible_q_sequences(payload: dict[str, Any] | None) -> list[dict[str, 
     first_elapsed, first_r, first_v, first_lon = _find_initial_burn_event(config, *_initial_state_km(config), "A")
     reference = _v51_apogee_to_rp_i(config, first_r, first_v, a_target, i_target)
     if reference is None:
-        raise RuntimeError("首个远地点无法一次完成目标近地点与倾角参考解。")
+        raise RuntimeError(_v51_apogee_to_rp_i_failure_message(config, first_r, first_v, a_target, i_target))
 
     raw_design_dv = max(1.0, float(config["burn_limit"]["design_dv_per_burn_mps"]))
     v51_recommended_total = max(2, int(math.ceil(float(reference["dv_mps"]) / raw_design_dv)) + 1)
@@ -2162,7 +2657,7 @@ def _plan_v51_hard_constrained(
     first_elapsed, first_r, first_v, first_lon = _find_initial_burn_event(config, *_initial_state_km(config), "A")
     reference = _v51_apogee_to_rp_i(config, first_r, first_v, a_target, i_target)
     if reference is None:
-        raise RuntimeError("首个远地点无法一次完成目标近地点与倾角参考解。")
+        raise RuntimeError(_v51_apogee_to_rp_i_failure_message(config, first_r, first_v, a_target, i_target))
 
     raw_design_dv = max(1.0, float(config["burn_limit"]["design_dv_per_burn_mps"]))
     v51_recommended_total = max(2, int(math.ceil(float(reference["dv_mps"]) / raw_design_dv)) + 1)
@@ -2650,6 +3145,58 @@ def _v51_apogee_to_rp_i(
         if low - 1.0e-9 <= alpha_deg <= high + 1.0e-9:
             candidates.append({"dv_mps": dv_mps, "alpha_deg": alpha_deg, "v_plus": v_plus, "post_a_km": post_a})
     return min(candidates, key=lambda item: item["dv_mps"]) if candidates else None
+
+
+def _v51_apogee_to_rp_i_failure_message(
+    config: dict[str, Any],
+    r: np.ndarray,
+    v: np.ndarray,
+    rp_target_km: float,
+    i_target_deg: float,
+) -> str:
+    radius = float(np.linalg.norm(r))
+    if not math.isfinite(radius) or radius <= 0.0:
+        return "首个远地点参考解失败：点火点半径无效，无法一次完成目标近地点与倾角。"
+    if rp_target_km >= radius:
+        return (
+            "首个远地点参考解失败：目标近地点半径 "
+            f"{rp_target_km:.3f} km 不小于当前远地点半径 {radius:.3f} km，"
+            "无法构造从该远地点降近地点的参考椭圆。"
+        )
+    r_hat = r / radius
+    latitude_deg = math.degrees(math.asin(float(np.clip(r_hat[2], -1.0, 1.0))))
+    min_i_deg = abs(latitude_deg)
+    cos_delta = math.sqrt(max(0.0, 1.0 - float(r_hat[2]) ** 2))
+    if cos_delta <= 1.0e-12:
+        return (
+            "首个远地点参考解失败：点火点接近地心极区，局部水平参考方向退化，"
+            "无法一次完成目标近地点与倾角。"
+        )
+    cos_beta = math.cos(math.radians(i_target_deg)) / cos_delta
+    if abs(cos_beta) > 1.0 + 1.0e-12:
+        return (
+            "首个远地点参考解失败：目标倾角 "
+            f"{i_target_deg:.3f} deg 低于该点几何允许下限 {min_i_deg:.3f} deg"
+            f"（点火点地心纬度约 {latitude_deg:.3f} deg），"
+            "无法在此远地点一次完成目标近地点与倾角；请提高目标倾角，"
+            "或改用多次降倾角/其它点火点方案。"
+        )
+
+    beta_abs = math.acos(float(np.clip(cos_beta, -1.0, 1.0)))
+    post_a = 0.5 * (radius + rp_target_km)
+    v_required = math.sqrt(float(config["earth"]["mu_km3_s2"]) * (2.0 / radius - 1.0 / post_a))
+    east, _north, south = _local_horizontal_basis(r)
+    low, high = _v51_front_alpha_bounds(config)
+    candidate_alpha: list[float] = []
+    for beta in (beta_abs, -beta_abs):
+        v_plus = v_required * (math.cos(beta) * east + math.sin(beta) * south)
+        candidate_alpha.append(_alpha_from_local_horizontal_vector(r, v_plus - v))
+    alpha_text = ", ".join(f"{value:.3f}" for value in candidate_alpha)
+    return (
+        "首个远地点参考解失败：几何解存在，但所需偏航角 "
+        f"{alpha_text} deg 超出前段允许范围 [{low:.3f}, {high:.3f}] deg；"
+        "请调整目标倾角、偏航角边界或改用多次降倾角方案。"
+    )
 
 
 def _v51_terminal_perigee_burn(config: dict[str, Any], r: np.ndarray, v: np.ndarray) -> dict[str, Any]:
@@ -4671,9 +5218,7 @@ def _longitude_deg(config: dict[str, Any], r: np.ndarray, elapsed_s: float) -> f
 
 
 def _local_horizontal_direction(r: np.ndarray, alpha_deg: float) -> np.ndarray:
-    east, _north, south = _local_horizontal_basis(r)
-    alpha = math.radians(alpha_deg)
-    return math.cos(alpha) * east + math.sin(alpha) * south
+    return local_horizontal_yaw_direction(r, alpha_deg)
 
 
 def _local_horizontal_basis(r: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:

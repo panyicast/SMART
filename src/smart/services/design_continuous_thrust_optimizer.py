@@ -1,9 +1,28 @@
+"""Continuous-thrust expansion for the design maneuver strategy.
+
+Frozen algorithm rules:
+- MV1-MV3 follow the pulse planner q sequence, event timing, yaw seeds, and perigee targets.
+- MV4 is the only tail phasing lever: optimize its start time and yaw to close target longitude
+  while satisfying target inclination.
+- MV5 must remain near perigee and may only make a small start-time adjustment. It minimizes
+  post-control eccentricity while cutting off at target semi-major axis. Do not use MV5 as a
+  large longitude phasing burn.
+
+Update the regression tests and `doc/design_continuous_thrust_parameter_optimization_algorithm.md`
+before changing these invariants.
+"""
+
 from __future__ import annotations
 
 import math
 from typing import Any
 
 import numpy as np
+
+try:
+    from scipy.optimize import minimize
+except Exception:  # pragma: no cover - SciPy is optional at runtime.
+    minimize = None
 
 from smart.services.design_maneuver_strategy import (
     ContinuousThrustManeuverParameter,
@@ -17,20 +36,13 @@ from smart.services.design_maneuver_strategy import (
     _propagate_state_to_elapsed,
     _rv_to_coe,
     _initial_state_km,
+    _wrap180,
     normalize_design_maneuver_strategy_payload,
 )
 
-APOGEE_Q_SEQUENCE = (3, 3, 2)
-APOGEE_YAW_DEG = (5.4697515926771, 10.07424228394379, 15.480018642775008, 14.590538356850521)
-APOGEE_START_OFFSET_MIN = (
-    -0.009883392622896827,
-    0.20278334571313972,
-    -0.4816358074136771,
-    0.5977446920169744,
-)
-FINAL_PERIGEE_START_OFFSET_MIN = -14.39197851350676
-FINAL_SEMI_MAJOR_AXIS_TARGET_KM = 42164.2
-LONGITUDE_TARGET_DEG_E = 120.0
+FALLBACK_APOGEE_Q_SEQUENCE = (3, 3, 3)
+MV5_NEAR_PERIGEE_START_WINDOW_MIN = 3.0
+MV5_LOCKED_MAX_ECCENTRICITY = 1.0e-3
 
 
 def optimize_continuous_thrust_chain_parameters(
@@ -46,7 +58,9 @@ def optimize_continuous_thrust_chain_parameters(
     yaw_step_deg = max(0.001, float(continuous_cfg["yaw_step_deg"]))
     final_integration_step_s = max(0.5, float(continuous_cfg["final_integration_step_s"]))
     sync_a_km = float(config["target"]["a_km"])
-    duration_limit_s = float(config["burn_limit"]["max_total_burn_time_min"]) * 60.0
+    target_lon_deg = float(config["target"]["lon_degE"])
+    target_i_deg = float(config["target"]["i_deg"])
+    apogee_q_sequence = _apogee_q_sequence(result)
 
     r, v = _initial_state_km(config)
     elapsed_s = 0.0
@@ -56,7 +70,7 @@ def optimize_continuous_thrust_chain_parameters(
 
     _append_history(config, history_rows, 0.0, r, v, mass_kg, "coast", True)
 
-    for burn_position in range(4):
+    for burn_position in range(3):
         burn = burns[burn_position]
         if burn_position == 0:
             event_s = float(burn.elapsed_min) * 60.0
@@ -67,22 +81,22 @@ def optimize_continuous_thrust_chain_parameters(
                 v,
                 elapsed_s,
                 "A",
-                APOGEE_Q_SEQUENCE[burn_position - 1],
+                apogee_q_sequence[burn_position - 1],
             )
         nominal_start_s = event_s - 0.5 * float(burn.total_burn_time_min) * 60.0
-        burn_start_s = nominal_start_s + APOGEE_START_OFFSET_MIN[burn_position] * 60.0
-        target_a_km = sync_a_km if burn_position == 3 else float(
+        target_a_km = float(
             burn.target_post_a_km if burn.target_post_a_km is not None else burn.post_a_km
         )
-        candidate = _evaluate_first_continuous_thrust_candidate(
+        candidate = _evaluate_apogee_candidate(
             config,
-            *(_propagate_state_to_elapsed(config, r, v, elapsed_s, burn_start_s)),
-            burn_start_s,
+            r,
+            v,
+            elapsed_s,
             mass_kg,
             burn,
             target_a_km,
-            APOGEE_YAW_DEG[burn_position],
-            "m",
+            nominal_start_s,
+            float(burn.alpha_deg),
             integration_step_s=final_integration_step_s,
         )
         if candidate is None:
@@ -99,43 +113,81 @@ def optimize_continuous_thrust_chain_parameters(
                 objective_formula="m",
             )
         )
-        _append_history(config, history_rows, burn_start_s, candidate["r_cutoff"], candidate["v_cutoff"], candidate["post_mass_kg"], "orbit_control", True)
+        _append_history(
+            config,
+            history_rows,
+            float(candidate["burn_start_s"]),
+            candidate["r_cutoff"],
+            candidate["v_cutoff"],
+            candidate["post_mass_kg"],
+            "orbit_control",
+            True,
+        )
         r = np.asarray(candidate["r_cutoff"], dtype=float)
         v = np.asarray(candidate["v_cutoff"], dtype=float)
         elapsed_s = float(candidate["cutoff_s"])
         mass_kg = float(candidate["post_mass_kg"])
 
-    perigee_s, _perigee_r, _perigee_v = _next_apsis(config, r, v, elapsed_s, "P", 1)
+    mv4_burn = burns[3]
     final_burn = burns[-1]
-    final_start_s = perigee_s + FINAL_PERIGEE_START_OFFSET_MIN * 60.0
-    r_start, v_start = _propagate_state_to_elapsed(config, r, v, elapsed_s, final_start_s)
-    final_result = _integrate_low_thrust_to_target_metric(
+    mv4_event_s, _mv4_event_r, _mv4_event_v = _next_apsis(
         config,
-        r_start,
-        v_start,
+        r,
+        v,
+        elapsed_s,
+        "A",
+        apogee_q_sequence[2],
+    )
+    mv4_nominal_start_s = mv4_event_s - 0.5 * float(mv4_burn.total_burn_time_min) * 60.0
+    mv4_candidate, final_candidate, nominal_final_start_s = _optimize_tail_for_longitude_and_eccentricity(
+        config,
+        r,
+        v,
+        elapsed_s,
         mass_kg,
-        final_start_s,
-        "a",
-        FINAL_SEMI_MAJOR_AXIS_TARGET_KM,
-        float(final_burn.alpha_deg),
+        mv4_burn,
+        final_burn,
+        mv4_nominal_start_s,
+        target_lon_deg,
+        target_i_deg,
         integration_step_s=final_integration_step_s,
     )
-    if final_result is None:
-        raise ValueError("MV5 连续推力积分未到达半长轴目标。")
-    final_candidate = _final_candidate(config, final_result, r_start, v_start, final_start_s, mass_kg, float(final_burn.alpha_deg))
+    if mv4_candidate is None or final_candidate is None:
+        raise ValueError("连续推力尾段优化未能生成 MV4/MV5 目标解。")
+    parameters.append(
+        _parameter_from_candidate(
+            config,
+            mv4_burn,
+            mv4_candidate,
+            sync_a_km,
+            mv4_nominal_start_s,
+            float(mv4_burn.alpha_deg),
+            mode="终端经度/倾角联合优化",
+            objective_formula="m",
+        )
+    )
     parameters.append(
         _parameter_from_candidate(
             config,
             final_burn,
             final_candidate,
-            FINAL_SEMI_MAJOR_AXIS_TARGET_KM,
-            perigee_s + FINAL_PERIGEE_START_OFFSET_MIN * 60.0,
+            sync_a_km,
+            nominal_final_start_s,
             float(final_burn.alpha_deg),
             mode="近地点面内减速",
             objective_formula="m",
         )
     )
-    _append_history(config, history_rows, final_start_s, final_candidate["r_cutoff"], final_candidate["v_cutoff"], final_candidate["post_mass_kg"], "orbit_control", True)
+    _append_history(
+        config,
+        history_rows,
+        float(final_candidate["burn_start_s"]),
+        final_candidate["r_cutoff"],
+        final_candidate["v_cutoff"],
+        final_candidate["post_mass_kg"],
+        "orbit_control",
+        True,
+    )
 
     failed = _failed_constraints(config, parameters)
     total_propellant = sum(item.propellant_kg for item in parameters)
@@ -149,6 +201,261 @@ def optimize_continuous_thrust_chain_parameters(
         failed_constraints=failed,
         orbit_history_rows=history_rows,
     )
+
+
+def _apogee_q_sequence(result: DesignManeuverResult) -> tuple[int, int, int]:
+    raw = str(result.summary.get("q_sequence", "") or "")
+    values: list[int] = []
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            values.append(int(part))
+        except ValueError:
+            continue
+    if len(values) >= 3:
+        return (max(1, values[0]), max(1, values[1]), max(1, values[2]))
+    return FALLBACK_APOGEE_Q_SEQUENCE
+
+
+def _evaluate_apogee_candidate(
+    config: dict[str, Any],
+    r: np.ndarray,
+    v: np.ndarray,
+    elapsed_s: float,
+    mass_kg: float,
+    burn: Any,
+    target_a_km: float,
+    burn_start_s: float,
+    yaw_angle_deg: float,
+    *,
+    integration_step_s: float,
+) -> dict[str, Any] | None:
+    r_start, v_start = _propagate_state_to_elapsed(config, r, v, elapsed_s, burn_start_s)
+    return _evaluate_first_continuous_thrust_candidate(
+        config,
+        r_start,
+        v_start,
+        burn_start_s,
+        mass_kg,
+        burn,
+        target_a_km,
+        yaw_angle_deg,
+        "m",
+        integration_step_s=integration_step_s,
+    )
+
+
+def _optimize_tail_for_longitude_and_eccentricity(
+    config: dict[str, Any],
+    r: np.ndarray,
+    v: np.ndarray,
+    elapsed_s: float,
+    mass_kg: float,
+    mv4_burn: Any,
+    final_burn: Any,
+    mv4_center_start_s: float,
+    target_lon_deg: float,
+    target_i_deg: float,
+    *,
+    integration_step_s: float,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, float]:
+    cache: dict[tuple[float, float], tuple[dict[str, Any], dict[str, Any], float] | None] = {}
+    target_a_km = float(config["target"]["a_km"])
+    search_integration_step_s = max(float(integration_step_s), 120.0)
+
+    def evaluate(
+        offset_min: float,
+        yaw_delta_deg: float,
+        *,
+        step_s: float = search_integration_step_s,
+        use_cache: bool = True,
+    ) -> tuple[dict[str, Any], dict[str, Any], float] | None:
+        key = (round(float(offset_min), 4), round(float(yaw_delta_deg), 4))
+        if use_cache and key in cache:
+            return cache[key]
+        mv4_start_s = max(float(elapsed_s), float(mv4_center_start_s) + float(offset_min) * 60.0)
+        mv4_candidate = _evaluate_apogee_candidate(
+            config,
+            r,
+            v,
+            elapsed_s,
+            mass_kg,
+            mv4_burn,
+            target_a_km,
+            mv4_start_s,
+            float(mv4_burn.alpha_deg) + float(yaw_delta_deg),
+            integration_step_s=step_s,
+        )
+        if mv4_candidate is None:
+            if use_cache:
+                cache[key] = None
+            return None
+        mv4_r = np.asarray(mv4_candidate["r_cutoff"], dtype=float)
+        mv4_v = np.asarray(mv4_candidate["v_cutoff"], dtype=float)
+        mv4_elapsed_s = float(mv4_candidate["cutoff_s"])
+        perigee_s, _perigee_r, _perigee_v = _next_apsis(config, mv4_r, mv4_v, mv4_elapsed_s, "P", 1)
+        final_center_start_s = perigee_s - 0.5 * float(final_burn.total_burn_time_min) * 60.0
+        final_candidate = _optimize_final_perigee_burn_for_eccentricity(
+            config,
+            mv4_r,
+            mv4_v,
+            mv4_elapsed_s,
+            float(mv4_candidate["post_mass_kg"]),
+            final_burn,
+            final_center_start_s,
+            integration_step_s=step_s,
+        )
+        if final_candidate is None:
+            if use_cache:
+                cache[key] = None
+            return None
+        result = (mv4_candidate, final_candidate, final_center_start_s)
+        if use_cache:
+            cache[key] = result
+        return result
+
+    def score(offset_min: float, yaw_delta_deg: float) -> float:
+        item = evaluate(offset_min, yaw_delta_deg)
+        if item is None:
+            return 1.0e12
+        mv4_candidate, final_candidate, _final_center_start_s = item
+        tolerance = config["terminal_tolerance"]
+        lon_error = abs(_wrap180(float(final_candidate["cutoff_longitude_deg_e"]) - float(target_lon_deg)))
+        mv4_i_error = abs(float(mv4_candidate["post_i_deg"]) - float(target_i_deg))
+        final_i_error = abs(float(final_candidate["post_i_deg"]) - float(target_i_deg))
+        lon_excess = max(0.0, lon_error - float(tolerance["lon_deg"]))
+        mv4_i_excess = max(0.0, mv4_i_error - float(tolerance["i_deg"]))
+        return (
+            1.0e8 * lon_excess * lon_excess
+            + 1.0e8 * mv4_i_excess * mv4_i_excess
+            + 2.0e3 * float(final_candidate["post_e"])
+            + 50.0 * final_i_error
+            + lon_error
+            + 100.0 * mv4_i_error
+            + 0.02 * abs(float(offset_min))
+        )
+
+    seeds = [
+        (0.0, 0.0),
+        (-60.0, -2.0),
+        (-60.0, 0.0),
+        (-60.0, 2.0),
+        (-30.0, -1.0),
+        (-30.0, 1.0),
+        (30.0, -1.0),
+        (30.0, 1.0),
+        (60.0, -2.0),
+        (60.0, 0.0),
+        (60.0, 2.0),
+    ]
+    best_x = min(seeds, key=lambda item: score(item[0], item[1]))
+    if minimize is not None:
+        result = minimize(
+            lambda x: score(float(x[0]), float(x[1])),
+            np.asarray(best_x, dtype=float),
+            method="Powell",
+            bounds=[(-90.0, 90.0), (-6.0, 6.0)],
+            options={"maxiter": 55, "maxfev": 140, "xtol": 0.05, "ftol": 1.0e-5},
+        )
+        if bool(getattr(result, "success", False)) or hasattr(result, "x"):
+            candidate_x = (float(result.x[0]), float(result.x[1]))
+            if score(candidate_x[0], candidate_x[1]) < score(best_x[0], best_x[1]):
+                best_x = candidate_x
+    fine_offsets = _grid_values(float(best_x[0]), span=3.0, step=0.5)
+    fine_yaws = _grid_values(float(best_x[1]), span=0.2, step=0.05)
+    for offset_min in fine_offsets:
+        for yaw_delta_deg in fine_yaws:
+            if score(offset_min, yaw_delta_deg) < score(best_x[0], best_x[1]):
+                best_x = (offset_min, yaw_delta_deg)
+    best = evaluate(best_x[0], best_x[1], step_s=integration_step_s, use_cache=False)
+    if best is None:
+        return None, None, 0.0
+    return best
+
+
+def _optimize_final_perigee_burn_for_eccentricity(
+    config: dict[str, Any],
+    r: np.ndarray,
+    v: np.ndarray,
+    elapsed_s: float,
+    mass_kg: float,
+    burn: Any,
+    center_start_s: float,
+    *,
+    integration_step_s: float,
+) -> dict[str, Any] | None:
+    target_a_km = float(config["target"]["a_km"])
+    yaw_angle_deg = float(burn.alpha_deg)
+
+    def evaluate(offset_min: float) -> dict[str, Any] | None:
+        burn_start_s = max(float(elapsed_s), float(center_start_s) + offset_min * 60.0)
+        r_start, v_start = _propagate_state_to_elapsed(config, r, v, elapsed_s, burn_start_s)
+        burn_result = _integrate_low_thrust_to_target_metric(
+            config,
+            r_start,
+            v_start,
+            mass_kg,
+            burn_start_s,
+            "a",
+            target_a_km,
+            yaw_angle_deg,
+            integration_step_s=integration_step_s,
+        )
+        if burn_result is None:
+            return None
+        candidate = _final_candidate(config, burn_result, r_start, v_start, burn_start_s, mass_kg, yaw_angle_deg)
+        candidate["search_evaluations"] = int(candidate.get("search_evaluations", 0)) + 1
+        candidate["seed_time_offset_s"] = abs(offset_min) * 60.0
+        return candidate
+
+    best = _best_from_grid(
+        _grid_values(0.0, span=MV5_NEAR_PERIGEE_START_WINDOW_MIN, step=0.5),
+        evaluate,
+        lambda candidate: _final_eccentricity_score(candidate, config),
+    )
+    if best is None:
+        return None
+    best_offset_min = (float(best["burn_start_s"]) - float(center_start_s)) / 60.0
+    return _best_from_grid(
+        _grid_values(best_offset_min, span=0.5, step=0.1),
+        evaluate,
+        lambda candidate: _final_eccentricity_score(candidate, config),
+        initial=best,
+    )
+
+
+def _final_eccentricity_score(candidate: dict[str, Any], config: dict[str, Any]) -> tuple[float, float, float]:
+    return (
+        float(candidate["post_e"]),
+        abs(float(candidate["post_a_km"]) - float(config["target"]["a_km"])),
+        abs(float(candidate.get("seed_time_offset_s", 0.0))),
+    )
+
+
+def _best_from_grid(
+    values: list[float],
+    evaluate: Any,
+    score: Any,
+    *,
+    initial: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    best = initial
+    for value in values:
+        candidate = evaluate(float(value))
+        if candidate is None:
+            continue
+        if best is None or score(candidate) < score(best):
+            best = candidate
+    return best
+
+
+def _grid_values(center: float, span: float, step: float) -> list[float]:
+    if step <= 0.0:
+        return [float(center)]
+    count = max(0, int(math.ceil(float(span) / float(step))))
+    return [float(center) + index * float(step) for index in range(-count, count + 1)]
 
 
 def _parameter_from_candidate(
@@ -264,13 +571,14 @@ def _failed_constraints(config: dict[str, Any], parameters: list[ContinuousThrus
     re_km = float(config["earth"]["Re_km"])
     sync_a_km = float(config["target"]["a_km"])
     target_i_deg = float(config["target"]["i_deg"])
+    tolerance = config["terminal_tolerance"]
     if abs(mv4.post_a_km * (1.0 - mv4.post_e) - re_km - (sync_a_km - re_km)) > 0.05:
         failed.append("MV4近地点高度")
-    if abs(mv4.post_i_deg - target_i_deg) > 0.01:
+    if abs(mv4.post_i_deg - target_i_deg) > float(tolerance["i_deg"]):
         failed.append("MV4倾角")
-    if abs(mv5.post_a_km - FINAL_SEMI_MAJOR_AXIS_TARGET_KM) > 0.01:
+    if abs(mv5.post_a_km - sync_a_km) > float(tolerance["a_km"]):
         failed.append("MV5半长轴")
-    if abs(((mv5.cutoff_longitude_deg_e - LONGITUDE_TARGET_DEG_E + 180.0) % 360.0) - 180.0) > 0.001:
+    if abs(_wrap180(mv5.cutoff_longitude_deg_e - float(config["target"]["lon_degE"]))) > float(tolerance["lon_deg"]):
         failed.append("MV5熄火经度")
     if not all(item.duration_ok for item in parameters):
         failed.append("总点火时长")
