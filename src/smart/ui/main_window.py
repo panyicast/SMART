@@ -23,6 +23,11 @@ from smart.ui.widgets.satellite_status_page import SatelliteStatusPage
 from smart.ui.widgets.spice_kernel_page import SpiceKernelPage
 from smart.ui.widgets.stk_link_page import StkLinkPage
 from smart.ui.widgets.tracking_arc_page import TrackingArcPage
+from smart.ui.widgets.common_orbital_tools import (
+    HohmannTransferDialog,
+    OrbitalConversionDialog,
+    SolarLunarPositionDialog,
+)
 
 _MAX_RECENT_PROJECTS = 8
 _NAV_KEYS = [
@@ -157,6 +162,20 @@ class MainWindow(QtWidgets.QMainWindow):
         self._refresh_recent_project_actions()
         self._refresh_project_actions()
 
+        self._common_tools_menu = self.menuBar().addMenu("")
+
+        self._orbit_conversion_action = QtGui.QAction(self)
+        self._orbit_conversion_action.triggered.connect(self._open_orbit_conversion_tool)
+        self._common_tools_menu.addAction(self._orbit_conversion_action)
+
+        self._sun_moon_position_action = QtGui.QAction(self)
+        self._sun_moon_position_action.triggered.connect(self._open_sun_moon_position_tool)
+        self._common_tools_menu.addAction(self._sun_moon_position_action)
+
+        self._hohmann_transfer_action = QtGui.QAction(self)
+        self._hohmann_transfer_action.triggered.connect(self._open_hohmann_transfer_tool)
+        self._common_tools_menu.addAction(self._hohmann_transfer_action)
+
     def _build_sidebar(self) -> QtWidgets.QWidget:
         sidebar = QtWidgets.QFrame()
         sidebar.setProperty("role", "sidebar")
@@ -220,6 +239,15 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self._apply_sidebar_collapsed(self._sidebar_collapsed, persist=False)
         return sidebar
+
+    def _open_orbit_conversion_tool(self) -> None:
+        OrbitalConversionDialog(self._i18n, self).exec()
+
+    def _open_sun_moon_position_tool(self) -> None:
+        SolarLunarPositionDialog(self._i18n, self._spice_manager, self).exec()
+
+    def _open_hohmann_transfer_tool(self) -> None:
+        HohmannTransferDialog(self._i18n, self).exec()
 
     def _toggle_sidebar_collapsed(self) -> None:
         self._apply_sidebar_collapsed(not self._sidebar_collapsed, persist=True)
@@ -612,6 +640,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self._close_project_action.setText(t("project.action_close"))
         self._recent_projects_header_action.setText(t("project.recent_header"))
         self._no_recent_projects_action.setText(t("project.recent_empty"))
+        self._common_tools_menu.setTitle(t("common_tools.menu_title"))
+        self._orbit_conversion_action.setText(t("common_tools.action.orbit_conversion"))
+        self._sun_moon_position_action.setText(t("common_tools.action.sun_moon_position"))
+        self._hohmann_transfer_action.setText(t("common_tools.action.hohmann_transfer"))
         self._refresh_recent_project_actions()
         self._refresh_project_actions()
 

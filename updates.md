@@ -530,6 +530,10 @@
 - 提交：`8342309`
 - 影响文件：自动刷新记录，无额外文件。
 
-## 2026-05-21T12:58:41+08:00 | chore: ignore doc images
-- 提交：`本次提交`
+## 2026-05-21T12:58:46+08:00 | chore: ignore doc images
+- 提交：`f7162f3`
 - 影响文件：`.gitignore`、`HANDOFF.md`、`doc/1.jpg`、`doc/1.png`、`doc/10.jpg`、`doc/11.jpg`、`doc/12.jpg`、`doc/13.jpg` 等 30 个文件。
+
+## 2026-05-21T13:00:42+08:00 | Add common orbital tools menu
+- 提交：`本次提交`
+- 影响文件：`src/smart/ui/i18n.py`、`src/smart/ui/main_window.py`、`src/smart/ui/widgets/common_orbital_tools.py`、`tests/test_common_orbital_tools.py`、`tests/test_sidebar_navigation.py`、`HANDOFF.md`。

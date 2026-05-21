@@ -77,6 +77,21 @@ def test_project_menu_has_save_as_and_close_actions(tmp_path) -> None:
         window.deleteLater()
 
 
+def test_common_tools_menu_exposes_orbital_analysis_actions() -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    window = MainWindow()
+    try:
+        assert window._common_tools_menu.title() == "常用工具"
+        assert [action.text() for action in window._common_tools_menu.actions()] == [
+            "轨道六根数 / 状态矢量转换",
+            "太阳月亮位置计算",
+            "霍夫曼转移计算",
+        ]
+    finally:
+        window.deleteLater()
+
+
 def test_sidebar_toggle_collapses_and_restores_labels() -> None:
     _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
 
