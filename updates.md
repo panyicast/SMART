@@ -522,6 +522,14 @@
 - 提交：`81524d5`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`HANDOFF.md`。
 
-## 2026-05-21T12:36:06+08:00 | Checkpoint remaining SMART project updates
-- 提交：`本次提交`
+## 2026-05-21T12:36:11+08:00 | Checkpoint remaining SMART project updates
+- 提交：`1ca7163`
 - 影响文件：`src/smart/ui/main_window.py`、`tests/test_sidebar_navigation.py`、`projects/F4/config/design_import_maneuver_strategy.json`、`projects/F4/config/design_maneuver_strategy.json`、`projects/F4/config/maneuver_strategy.json`、`projects/F4/data/design_maneuver_results.json`、`projects/F4/smart_project.json`、`"/346/210/252/345/233/276//345/261/217/345/271/225/346/210/252/345/233/276 2026-05-20 185455.png"` 等 22 个文件。
+
+## 2026-05-21T12:37:05+08:00 | Merge codex/deepseek
+- 提交：`8342309`
+- 影响文件：自动刷新记录，无额外文件。
+
+## 2026-05-21T12:58:41+08:00 | chore: ignore doc images
+- 提交：`本次提交`
+- 影响文件：`.gitignore`、`HANDOFF.md`、`doc/1.jpg`、`doc/1.png`、`doc/10.jpg`、`doc/11.jpg`、`doc/12.jpg`、`doc/13.jpg` 等 30 个文件。

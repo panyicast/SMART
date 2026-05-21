@@ -30,3 +30,12 @@ data/smoke_ai_report.pdf
 /task_plan.md
 /findings.md
 /progress.md
+
+# Local documentation images
+/doc/**/*.png
+/doc/**/*.jpg
+/doc/**/*.jpeg
+/doc/**/*.gif
+/doc/**/*.webp
+/doc/**/*.bmp
+/doc/**/*.svg
