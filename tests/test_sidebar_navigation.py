@@ -9,6 +9,8 @@ from smart.ui.nav_icons import chevron_icon, has_icon, nav_icon
 def test_each_nav_key_has_an_icon() -> None:
     _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
 
+    assert _NAV_KEYS.index("nav.design_maneuver_strategy") < _NAV_KEYS.index("nav.maneuver_strategy")
+
     for key in _NAV_KEYS:
         assert has_icon(key), f"nav key {key} is missing an icon"
         icon = nav_icon(key)

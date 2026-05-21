@@ -3,7 +3,7 @@
     "planner": {
       "version": "V4.2_simplified_transfer_type",
       "auto_recommend_count": true,
-      "maneuver_count_user": 5,
+      "maneuver_count_user": 6,
       "force_user_count": true
     },
     "initial": {
@@ -70,7 +70,7 @@
     "maneuver_count": {
       "min": 1,
       "max": 5,
-      "user": 5,
+      "user": 6,
       "engineering_min_count": 1,
       "engineering_min_count_supersync": 5,
       "engineering_min_count_standard": 3,
@@ -213,24 +213,24 @@
     "design_single_burn_delta_v_mps": 312.123863802907,
     "reference_apogee_delta_v_mps": 1373.6981052909678,
     "recommended_count": 5,
-    "user_count": 5,
+    "user_count": 6,
     "actual_count": 5,
     "apsis_pattern": "A,A,A,A,P",
     "q_sequence": "3,3,2,0",
     "phase_optimized": true,
     "phase_delta_v_optimized": true,
     "phase_alpha_optimized": true,
-    "optimized_propellant_kg": 2596.364497280947,
+    "optimized_propellant_kg": 2596.3644972809466,
     "phase_lon_error_before_deg": null,
     "duration_ok": true,
     "longitude_ok": true,
-    "uniform_spread_mps": 93.91824376314185,
+    "uniform_spread_mps": 93.91824376318078,
     "uniform_ok": true,
     "terminal_errors": {
-      "a_km": 2.9103830456733704e-11,
-      "e": 1.1527756336890508e-16,
-      "i_deg": -3.4638958368304884e-14,
-      "lon_deg": -0.009901909251084362
+      "a_km": 3.637978807091713e-11,
+      "e": 2.2247786310271853e-16,
+      "i_deg": 8.704148513061227e-14,
+      "lon_deg": -0.009901909250260132
     },
     "phase_diagnostics": {
       "optimizer_method": "V5.1 hard-constrained",
@@ -261,7 +261,7 @@
       "optimized_hp_targets_km": [
         3932.999999999999,
         8544.211073253395,
-        17422.254742375648
+        17422.254742375662
       ],
       "top_candidates": [
         {
@@ -274,19 +274,19 @@
           "score": [
             0.0,
             0.0,
-            2596.364497280947,
-            1538.969252294258,
-            70.13322975742776,
-            0.009901909251084362
+            2596.3644972809466,
+            1538.9692522942576,
+            70.13322975743408,
+            0.009901909250260132
           ],
-          "propellant_kg": 2596.364497280947,
-          "total_delta_v_mps": 1538.969252294258,
-          "lon_error_deg": -0.009901909251084362,
-          "max_burn_duration_min": 70.13322975742776,
+          "propellant_kg": 2596.3644972809466,
+          "total_delta_v_mps": 1538.9692522942576,
+          "lon_error_deg": -0.009901909250260132,
+          "max_burn_duration_min": 70.13322975743408,
           "hp_targets_km": [
             3932.999999999999,
             8544.211073253395,
-            17422.254742375648
+            17422.254742375662
           ],
           "feasible": true
         },
@@ -299,16 +299,16 @@
           ],
           "score": [
             1.0,
-            3.282376423580605,
-            2596.360146716075,
-            1538.9657865899696,
-            69.34566702740594,
-            1.8217329890413225
+            3.2823764235775155,
+            2596.360146716074,
+            1538.9657865899687,
+            69.34566702739208,
+            1.8217329890404699
           ],
-          "propellant_kg": 2596.360146716075,
-          "total_delta_v_mps": 1538.9657865899696,
-          "lon_error_deg": -1.8217329890413225,
-          "max_burn_duration_min": 69.34566702740594,
+          "propellant_kg": 2596.360146716074,
+          "total_delta_v_mps": 1538.9657865899687,
+          "lon_error_deg": -1.8217329890404699,
+          "max_burn_duration_min": 69.34566702739208,
           "hp_targets_km": [
             3932.999999999999,
             8544.211073253395,
@@ -325,16 +325,16 @@
           ],
           "score": [
             1.0,
-            10.069614930132795,
-            2596.4367344747147,
-            1539.025245635412,
-            69.40655093363196,
-            3.183265657037367
+            10.069614930137666,
+            2596.4367344747134,
+            1539.0252456354108,
+            69.4065509336329,
+            3.1832656570381346
           ],
-          "propellant_kg": 2596.4367344747147,
-          "total_delta_v_mps": 1539.025245635412,
-          "lon_error_deg": 3.183265657037367,
-          "max_burn_duration_min": 69.40655093363196,
+          "propellant_kg": 2596.4367344747134,
+          "total_delta_v_mps": 1539.0252456354108,
+          "lon_error_deg": 3.1832656570381346,
+          "max_burn_duration_min": 69.4065509336329,
           "hp_targets_km": [
             3932.999999999999,
             8252.550761407303,
@@ -351,12 +351,12 @@
             2,
             0
           ],
-          "lon_error_deg": -0.009901909251084362,
-          "max_burn_duration_min": 70.13322975742776,
+          "lon_error_deg": -0.009901909250260132,
+          "max_burn_duration_min": 70.13322975743408,
           "hp_targets_km": [
             3932.999999999999,
             8544.211073253395,
-            17422.254742375648
+            17422.254742375662
           ]
         }
       ]
@@ -370,20 +370,20 @@
       "elapsed_min": 1254.5583719855176,
       "beijing_time": "2026-05-15 18:03:52.502319",
       "longitude_deg_e": 73.47563112766493,
-      "delta_v_mps": 307.2762985642505,
-      "alpha_deg": 11.926209699559744,
+      "delta_v_mps": 307.2762985642554,
+      "alpha_deg": 11.926209699561927,
       "target_post_a_km": 31344.636967894032,
-      "total_burn_time_min": 68.58663554708797,
-      "propellant_kg": 628.807478820138,
+      "total_burn_time_min": 68.58663554708893,
+      "propellant_kg": 628.8074788201475,
       "post_a_km": 31344.636967894032,
-      "post_e": 0.671039833367297,
-      "post_i_deg": 11.823527045195672,
+      "post_e": 0.6710398333672969,
+      "post_i_deg": 11.823527045195299,
       "duration_ok": true,
       "longitude_ok": true,
       "flight_revolution": 2,
       "position_label": "远地点",
       "orbit_period_min": 920.4593135821598,
-      "post_mass_kg": 5886.192521179862,
+      "post_mass_kg": 5886.1925211798525,
       "semi_major_axis_control_km": 1866.4999678940185
     },
     {
@@ -392,91 +392,91 @@
       "apsis": "A",
       "elapsed_min": 4015.509491504419,
       "beijing_time": "2026-05-17 16:04:49.569490",
-      "longitude_deg_e": 101.56304980465679,
-      "delta_v_mps": 272.0622733555813,
-      "alpha_deg": 11.835895742442954,
-      "target_post_a_km": 33650.24250452073,
-      "total_burn_time_min": 55.93014917505945,
-      "propellant_kg": 505.91624097187855,
-      "post_a_km": 33650.24250452073,
-      "post_e": 0.5565456007858294,
-      "post_i_deg": 9.168435781640495,
+      "longitude_deg_e": 101.56304980465677,
+      "delta_v_mps": 272.0622733555811,
+      "alpha_deg": 11.835895742443007,
+      "target_post_a_km": 33650.24250452072,
+      "total_burn_time_min": 55.930149175059306,
+      "propellant_kg": 505.91624097187713,
+      "post_a_km": 33650.24250452072,
+      "post_e": 0.5565456007858292,
+      "post_i_deg": 9.168435781640214,
       "duration_ok": true,
       "longitude_ok": true,
       "flight_revolution": 5,
       "position_label": "远地点",
-      "orbit_period_min": 1023.8634214321175,
-      "post_mass_kg": 5380.276280207983,
+      "orbit_period_min": 1023.8634214321173,
+      "post_mass_kg": 5380.276280207975,
       "semi_major_axis_control_km": 2305.6055366266955
     },
     {
       "index": 3,
       "burn_type": "front",
       "apsis": "A",
-      "elapsed_min": 7086.799201032674,
+      "elapsed_min": 7086.799201032673,
       "beijing_time": "2026-05-19 19:16:06.952062",
-      "longitude_deg_e": 51.7632584294636,
-      "delta_v_mps": 359.59943495180903,
-      "alpha_deg": 11.634317721715181,
+      "longitude_deg_e": 51.763258429463995,
+      "delta_v_mps": 359.59943495176503,
+      "alpha_deg": 11.634317721690556,
       "target_post_a_km": 38089.264339081856,
-      "total_burn_time_min": 65.88565445239404,
-      "propellant_kg": 602.5816448584108,
+      "total_burn_time_min": 65.88565445238682,
+      "propellant_kg": 602.5816448583406,
       "post_a_km": 38089.264339081856,
-      "post_e": 0.37514173205085966,
-      "post_i_deg": 7.089944144693497,
+      "post_e": 0.37514173205085927,
+      "post_i_deg": 7.089944144695765,
       "duration_ok": true,
       "longitude_ok": true,
       "flight_revolution": 8,
       "position_label": "远地点",
       "orbit_period_min": 1233.0015064189408,
-      "post_mass_kg": 4777.694635349572,
-      "semi_major_axis_control_km": 4439.021834561128
+      "post_mass_kg": 4777.694635349634,
+      "semi_major_axis_control_km": 4439.021834561136
     },
     {
       "index": 4,
       "burn_type": "terminal_apogee",
       "apsis": "A",
-      "elapsed_min": 9552.664464709726,
+      "elapsed_min": 9552.664464709724,
       "beijing_time": "2026-05-21 12:21:58.867883",
-      "longitude_deg_e": 153.65239498809635,
-      "delta_v_mps": 438.20366064140273,
-      "alpha_deg": 11.54994104932362,
+      "longitude_deg_e": 153.65239498809672,
+      "delta_v_mps": 438.20366064144156,
+      "alpha_deg": 11.549941049342479,
       "target_post_a_km": 47271.16846789402,
-      "total_burn_time_min": 70.13322975742776,
-      "propellant_kg": 643.8245120923152,
+      "total_burn_time_min": 70.13322975743408,
+      "propellant_kg": 643.8245120923766,
       "post_a_km": 47271.16846789404,
       "post_e": 0.1080355877253723,
-      "post_i_deg": 5.999999999999965,
+      "post_i_deg": 6.000000000000087,
       "duration_ok": true,
       "longitude_ok": true,
       "flight_revolution": 10,
       "position_label": "远地点",
       "orbit_period_min": 1704.7246317419733,
-      "post_mass_kg": 4133.870123257257,
-      "semi_major_axis_control_km": 9181.904128812203
+      "post_mass_kg": 4133.870123257258,
+      "semi_major_axis_control_km": 9181.90412881218
     },
     {
       "index": 5,
       "burn_type": "terminal_perigee",
       "apsis": "P",
-      "elapsed_min": 10405.001554616569,
+      "elapsed_min": 10405.001554616565,
       "beijing_time": "2026-05-22 02:34:19.093277",
-      "longitude_deg_e": 119.9900980907489,
-      "delta_v_mps": 161.82758478121437,
-      "alpha_deg": -178.5377537482738,
+      "longitude_deg_e": 119.99009809074974,
+      "delta_v_mps": 161.8275847812144,
+      "alpha_deg": -178.53775374827376,
       "target_post_a_km": 42164.2,
-      "total_burn_time_min": 25.993043551950386,
-      "propellant_kg": 215.2346205382044,
-      "post_a_km": 42164.200000000026,
-      "post_e": 1.1527756336890508e-16,
-      "post_i_deg": 5.999999999999965,
+      "total_burn_time_min": 25.99304355195044,
+      "propellant_kg": 215.23462053820492,
+      "post_a_km": 42164.20000000003,
+      "post_e": 2.2247786310271853e-16,
+      "post_i_deg": 6.000000000000087,
       "duration_ok": true,
       "longitude_ok": true,
       "flight_revolution": 10,
       "position_label": "近地点",
-      "orbit_period_min": 1436.0697268587753,
-      "post_mass_kg": 3918.635502719052,
-      "semi_major_axis_control_km": -5106.9684678940175
+      "orbit_period_min": 1436.0697268587755,
+      "post_mass_kg": 3918.6355027190525,
+      "semi_major_axis_control_km": -5106.96846789401
     }
   ],
   "checks": [
@@ -507,13 +507,13 @@
     {
       "item": "终端偏心率误差",
       "requirement": "<= 0.0001",
-      "result": "1.15278e-16",
+      "result": "2.22478e-16",
       "passed": true
     },
     {
       "item": "终端倾角误差",
       "requirement": "<= 0.010 deg",
-      "result": "-0.000000 deg",
+      "result": "0.000000 deg",
       "passed": true
     },
     {
@@ -523,5 +523,7 @@
       "passed": true
     }
   ],
-  "warnings": []
+  "warnings": [
+    "用户 q 序列定义 5 次点火，已覆盖用户指定次数 6。"
+  ]
 }
