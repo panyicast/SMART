@@ -337,21 +337,24 @@ def _optimize_tail_for_longitude_and_eccentricity(
             + 0.02 * abs(float(offset_min))
         )
 
-    seeds = [
-        (0.0, 0.0),
-        (-60.0, -2.0),
-        (-60.0, 0.0),
-        (-60.0, 2.0),
-        (-30.0, -1.0),
-        (-30.0, 1.0),
-        (30.0, -1.0),
-        (30.0, 1.0),
-        (60.0, -2.0),
-        (60.0, 0.0),
-        (60.0, 2.0),
-    ]
+    if bool(config["earth"].get("use_J2", True)):
+        seeds = [(0.0, 0.0), (-30.0, 0.0), (30.0, 0.0), (0.0, -1.0), (0.0, 1.0)]
+    else:
+        seeds = [
+            (0.0, 0.0),
+            (-60.0, -2.0),
+            (-60.0, 0.0),
+            (-60.0, 2.0),
+            (-30.0, -1.0),
+            (-30.0, 1.0),
+            (30.0, -1.0),
+            (30.0, 1.0),
+            (60.0, -2.0),
+            (60.0, 0.0),
+            (60.0, 2.0),
+        ]
     best_x = min(seeds, key=lambda item: score(item[0], item[1]))
-    if minimize is not None:
+    if minimize is not None and not bool(config["earth"].get("use_J2", True)):
         result = minimize(
             lambda x: score(float(x[0]), float(x[1])),
             np.asarray(best_x, dtype=float),
@@ -363,8 +366,12 @@ def _optimize_tail_for_longitude_and_eccentricity(
             candidate_x = (float(result.x[0]), float(result.x[1]))
             if score(candidate_x[0], candidate_x[1]) < score(best_x[0], best_x[1]):
                 best_x = candidate_x
-    fine_offsets = _grid_values(float(best_x[0]), span=3.0, step=0.5)
-    fine_yaws = _grid_values(float(best_x[1]), span=0.2, step=0.05)
+    if bool(config["earth"].get("use_J2", True)):
+        fine_offsets = _grid_values(float(best_x[0]), span=1.0, step=1.0)
+        fine_yaws = _grid_values(float(best_x[1]), span=0.1, step=0.1)
+    else:
+        fine_offsets = _grid_values(float(best_x[0]), span=3.0, step=0.5)
+        fine_yaws = _grid_values(float(best_x[1]), span=0.2, step=0.05)
     for offset_min in fine_offsets:
         for yaw_delta_deg in fine_yaws:
             if score(offset_min, yaw_delta_deg) < score(best_x[0], best_x[1]):
@@ -409,6 +416,13 @@ def _optimize_final_perigee_burn_for_eccentricity(
         candidate["search_evaluations"] = int(candidate.get("search_evaluations", 0)) + 1
         candidate["seed_time_offset_s"] = abs(offset_min) * 60.0
         return candidate
+
+    if bool(config["earth"].get("use_J2", True)):
+        return _best_from_grid(
+            _grid_values(0.0, span=1.0, step=1.0),
+            evaluate,
+            lambda candidate: _final_eccentricity_score(candidate, config),
+        )
 
     best = _best_from_grid(
         _grid_values(0.0, span=MV5_NEAR_PERIGEE_START_WINDOW_MIN, step=0.5),

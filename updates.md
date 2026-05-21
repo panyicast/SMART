@@ -550,6 +550,10 @@
 - 提交：`7f77750`
 - 影响文件：`src/smart/domain/models.py`、`src/smart/services/orbital_mechanics.py`、`src/smart/ui/i18n.py`、`src/smart/ui/main_window.py`、`src/smart/ui/widgets/common_orbital_tools.py`、`tests/test_common_orbital_tools.py`、`tests/test_orbital_mechanics.py`、`tests/test_sidebar_navigation.py` 等 9 个文件。
 
-## 2026-05-21T20:52:38+08:00 | Use numerical J2 for design maneuver propagation
-- 提交：`本次提交`
+## 2026-05-21T20:52:43+08:00 | Use numerical J2 for design maneuver propagation
+- 提交：`f46bd9f`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`doc/design_continuous_thrust_parameter_optimization_algorithm.md`、`doc/design_maneuver_pulse_planning_algorithm.md`、`HANDOFF.md`。
+
+## 2026-05-21T21:25:18+08:00 | Tune full J2 maneuver terminal burn and continuous search
+- 提交：`本次提交`
+- 影响文件：`src/smart/services/design_continuous_thrust_optimizer.py`、`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。

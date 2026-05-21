@@ -3211,8 +3211,17 @@ def _v51_apogee_to_rp_i_failure_message(
 def _v51_terminal_perigee_burn(config: dict[str, Any], r: np.ndarray, v: np.ndarray) -> dict[str, Any]:
     radius = float(np.linalg.norm(r))
     speed = float(np.linalg.norm(v))
-    v_required = math.sqrt(float(config["earth"]["mu_km3_s2"]) / radius)
-    dv_vec = (v_required / speed - 1.0) * v
+    if speed <= 0.0:
+        raise RuntimeError("终端近地点速度无效，无法反解 Δv。")
+    target_a_km = float(config["target"]["a_km"])
+    retrograde = -v / speed
+    alpha_deg = _alpha_from_local_horizontal_vector(r, retrograde)
+    dv_mps = _solve_dv_for_target_a(r, v, alpha_deg, target_a_km)
+    if dv_mps is None:
+        v_required = math.sqrt(float(config["earth"]["mu_km3_s2"]) / radius)
+        dv_vec = (v_required / speed - 1.0) * v
+    else:
+        dv_vec = (dv_mps / 1000.0) * _local_horizontal_direction(r, alpha_deg)
     return {
         "dv_mps": float(np.linalg.norm(dv_vec) * 1000.0),
         "alpha_deg": _alpha_from_local_horizontal_vector(r, dv_vec),

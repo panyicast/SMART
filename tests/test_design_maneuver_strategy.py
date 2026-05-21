@@ -71,7 +71,7 @@ def test_supersynchronous_design_planner_outputs_fixed_tail() -> None:
     assert result.burns[-1].burn_type == "terminal_perigee"
     assert result.burns[-2].target_post_a_km == pytest.approx(47162.703327, rel=1e-6)
     assert result.burns[-1].target_post_a_km == pytest.approx(42164.2)
-    assert result.burns[-1].post_a_km == pytest.approx(42161.928467, rel=1e-6)
+    assert result.burns[-1].post_a_km == pytest.approx(42164.2, rel=1e-6)
     assert result.burns[0].elapsed_min == pytest.approx(1248.032844, rel=1e-6)
     assert result.burns[0].longitude_deg_e == pytest.approx(75.071657, rel=1e-6)
     assert result.summary["phase_diagnostics"]["optimizer_method"] == "V5.1 hard-constrained"
@@ -91,7 +91,6 @@ def test_supersynchronous_design_planner_outputs_fixed_tail() -> None:
     assert result.checks[-1]["item"] == "终端经度误差"
     assert [check["item"] for check in result.checks if not check["passed"]] == [
         "总点火时长",
-        "终端半长轴误差",
         "终端经度误差",
     ]
     assert result.warnings and "完整 J2 数值传播未找到完全满足硬约束的候选" in result.warnings[-1]
