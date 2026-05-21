@@ -89,6 +89,53 @@ class HohmannTransferResult:
 
 
 @dataclass(slots=True)
+class CircularOrbitMetrics:
+    altitude_km: float
+    radius_km: float
+    period_s: float
+    circular_speed_km_s: float
+    escape_speed_km_s: float
+    mean_motion_rad_s: float
+
+
+@dataclass(slots=True)
+class ApsisOrbitMetrics:
+    perigee_altitude_km: float
+    apogee_altitude_km: float
+    perigee_radius_km: float
+    apogee_radius_km: float
+    semi_major_axis_km: float
+    eccentricity: float
+    period_s: float
+
+
+@dataclass(slots=True)
+class PlaneChangeResult:
+    initial_speed_km_s: float
+    target_speed_km_s: float
+    angle_deg: float
+    pure_plane_change_delta_v_km_s: float
+    combined_delta_v_km_s: float
+
+
+@dataclass(slots=True)
+class OrbitalAnomalySet:
+    eccentricity: float
+    true_anomaly_deg: float
+    eccentric_anomaly_deg: float
+    mean_anomaly_deg: float
+
+
+@dataclass(slots=True)
+class LambertTransferResult:
+    departure_velocity_km_s: NDArray[np.float64]
+    arrival_velocity_km_s: NDArray[np.float64]
+    time_of_flight_s: float
+    transfer_angle_deg: float
+    path: str
+
+
+@dataclass(slots=True)
 class AntennaConfig:
     name: str
     band: str

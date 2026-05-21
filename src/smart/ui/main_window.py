@@ -24,8 +24,13 @@ from smart.ui.widgets.spice_kernel_page import SpiceKernelPage
 from smart.ui.widgets.stk_link_page import StkLinkPage
 from smart.ui.widgets.tracking_arc_page import TrackingArcPage
 from smart.ui.widgets.common_orbital_tools import (
+    AnomalyConversionDialog,
+    ApsisParametersDialog,
+    CircularOrbitPeriodDialog,
     HohmannTransferDialog,
+    LambertTransferDialog,
     OrbitalConversionDialog,
+    PlaneChangeDialog,
     SolarLunarPositionDialog,
 )
 
@@ -168,6 +173,18 @@ class MainWindow(QtWidgets.QMainWindow):
         self._orbit_conversion_action.triggered.connect(self._open_orbit_conversion_tool)
         self._common_tools_menu.addAction(self._orbit_conversion_action)
 
+        self._apsis_parameters_action = QtGui.QAction(self)
+        self._apsis_parameters_action.triggered.connect(self._open_apsis_parameters_tool)
+        self._common_tools_menu.addAction(self._apsis_parameters_action)
+
+        self._circular_period_action = QtGui.QAction(self)
+        self._circular_period_action.triggered.connect(self._open_circular_period_tool)
+        self._common_tools_menu.addAction(self._circular_period_action)
+
+        self._anomaly_conversion_action = QtGui.QAction(self)
+        self._anomaly_conversion_action.triggered.connect(self._open_anomaly_conversion_tool)
+        self._common_tools_menu.addAction(self._anomaly_conversion_action)
+
         self._sun_moon_position_action = QtGui.QAction(self)
         self._sun_moon_position_action.triggered.connect(self._open_sun_moon_position_tool)
         self._common_tools_menu.addAction(self._sun_moon_position_action)
@@ -175,6 +192,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self._hohmann_transfer_action = QtGui.QAction(self)
         self._hohmann_transfer_action.triggered.connect(self._open_hohmann_transfer_tool)
         self._common_tools_menu.addAction(self._hohmann_transfer_action)
+
+        self._plane_change_action = QtGui.QAction(self)
+        self._plane_change_action.triggered.connect(self._open_plane_change_tool)
+        self._common_tools_menu.addAction(self._plane_change_action)
+
+        self._lambert_transfer_action = QtGui.QAction(self)
+        self._lambert_transfer_action.triggered.connect(self._open_lambert_transfer_tool)
+        self._common_tools_menu.addAction(self._lambert_transfer_action)
 
     def _build_sidebar(self) -> QtWidgets.QWidget:
         sidebar = QtWidgets.QFrame()
@@ -246,8 +271,23 @@ class MainWindow(QtWidgets.QMainWindow):
     def _open_sun_moon_position_tool(self) -> None:
         SolarLunarPositionDialog(self._i18n, self._spice_manager, self).exec()
 
+    def _open_apsis_parameters_tool(self) -> None:
+        ApsisParametersDialog(self._i18n, self).exec()
+
+    def _open_circular_period_tool(self) -> None:
+        CircularOrbitPeriodDialog(self._i18n, self).exec()
+
+    def _open_anomaly_conversion_tool(self) -> None:
+        AnomalyConversionDialog(self._i18n, self).exec()
+
     def _open_hohmann_transfer_tool(self) -> None:
         HohmannTransferDialog(self._i18n, self).exec()
+
+    def _open_plane_change_tool(self) -> None:
+        PlaneChangeDialog(self._i18n, self).exec()
+
+    def _open_lambert_transfer_tool(self) -> None:
+        LambertTransferDialog(self._i18n, self).exec()
 
     def _toggle_sidebar_collapsed(self) -> None:
         self._apply_sidebar_collapsed(not self._sidebar_collapsed, persist=True)
@@ -642,8 +682,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self._no_recent_projects_action.setText(t("project.recent_empty"))
         self._common_tools_menu.setTitle(t("common_tools.menu_title"))
         self._orbit_conversion_action.setText(t("common_tools.action.orbit_conversion"))
+        self._apsis_parameters_action.setText(t("common_tools.action.apsis_parameters"))
+        self._circular_period_action.setText(t("common_tools.action.circular_period"))
+        self._anomaly_conversion_action.setText(t("common_tools.action.anomaly_conversion"))
         self._sun_moon_position_action.setText(t("common_tools.action.sun_moon_position"))
         self._hohmann_transfer_action.setText(t("common_tools.action.hohmann_transfer"))
+        self._plane_change_action.setText(t("common_tools.action.plane_change"))
+        self._lambert_transfer_action.setText(t("common_tools.action.lambert_transfer"))
         self._refresh_recent_project_actions()
         self._refresh_project_actions()
 

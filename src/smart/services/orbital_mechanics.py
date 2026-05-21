@@ -1,16 +1,23 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 import math
 
 import numpy as np
 from numpy.typing import NDArray
+from scipy.optimize import brentq
 
 from smart.domain.models import (
+    ApsisOrbitMetrics,
+    CircularOrbitMetrics,
     EARTH_MU_KM3_S2,
     EARTH_RADIUS_KM,
     HohmannTransferResult,
+    LambertTransferResult,
     OrbitTrajectory,
+    OrbitalAnomalySet,
     OrbitalElements,
+    PlaneChangeResult,
 )
 from smart.services import spice_service
 
@@ -379,6 +386,312 @@ def hohmann_transfer_between_circular_orbits(
         transfer_time_s=float(transfer_time),
         transfer_semi_major_axis_km=transfer_semi_major_axis,
     )
+
+
+def circular_orbit_metrics_from_altitude(
+    altitude_km: float,
+    *,
+    mu_km3_s2: float = EARTH_MU_KM3_S2,
+    central_body_radius_km: float = EARTH_RADIUS_KM,
+) -> CircularOrbitMetrics:
+    if altitude_km < 0.0:
+        raise ValueError("Circular-orbit altitude must be non-negative.")
+    return _circular_orbit_metrics_from_radius(
+        central_body_radius_km + altitude_km,
+        mu_km3_s2=mu_km3_s2,
+        central_body_radius_km=central_body_radius_km,
+    )
+
+
+def circular_orbit_metrics_from_period(
+    period_s: float,
+    *,
+    mu_km3_s2: float = EARTH_MU_KM3_S2,
+    central_body_radius_km: float = EARTH_RADIUS_KM,
+) -> CircularOrbitMetrics:
+    if period_s <= 0.0:
+        raise ValueError("Circular-orbit period must be positive.")
+    radius_km = (mu_km3_s2 * (period_s / (2.0 * math.pi)) ** 2) ** (1.0 / 3.0)
+    if radius_km < central_body_radius_km:
+        raise ValueError("Circular-orbit period places the orbit below the central-body surface.")
+    return _circular_orbit_metrics_from_radius(
+        radius_km,
+        mu_km3_s2=mu_km3_s2,
+        central_body_radius_km=central_body_radius_km,
+    )
+
+
+def apsis_orbit_metrics_from_altitudes(
+    perigee_altitude_km: float,
+    apogee_altitude_km: float,
+    *,
+    mu_km3_s2: float = EARTH_MU_KM3_S2,
+    central_body_radius_km: float = EARTH_RADIUS_KM,
+) -> ApsisOrbitMetrics:
+    if perigee_altitude_km < 0.0 or apogee_altitude_km < 0.0:
+        raise ValueError("Apsis altitudes must be non-negative.")
+    if apogee_altitude_km < perigee_altitude_km:
+        raise ValueError("Apogee altitude must be greater than or equal to perigee altitude.")
+
+    perigee_radius_km = central_body_radius_km + perigee_altitude_km
+    apogee_radius_km = central_body_radius_km + apogee_altitude_km
+    semi_major_axis_km = 0.5 * (perigee_radius_km + apogee_radius_km)
+    eccentricity = (apogee_radius_km - perigee_radius_km) / (apogee_radius_km + perigee_radius_km)
+    period_s = 2.0 * math.pi * math.sqrt(semi_major_axis_km**3 / mu_km3_s2)
+    return ApsisOrbitMetrics(
+        perigee_altitude_km=perigee_altitude_km,
+        apogee_altitude_km=apogee_altitude_km,
+        perigee_radius_km=perigee_radius_km,
+        apogee_radius_km=apogee_radius_km,
+        semi_major_axis_km=semi_major_axis_km,
+        eccentricity=eccentricity,
+        period_s=period_s,
+    )
+
+
+def plane_change_delta_v(
+    initial_speed_km_s: float,
+    target_speed_km_s: float,
+    angle_deg: float,
+) -> PlaneChangeResult:
+    if initial_speed_km_s <= 0.0 or target_speed_km_s <= 0.0:
+        raise ValueError("Plane-change speeds must be positive.")
+    if not 0.0 <= angle_deg <= 180.0:
+        raise ValueError("Plane-change angle must stay within 0 to 180 degrees.")
+
+    angle_rad = math.radians(angle_deg)
+    pure_delta_v = 2.0 * initial_speed_km_s * math.sin(angle_rad / 2.0)
+    combined_delta_v = math.sqrt(
+        initial_speed_km_s**2
+        + target_speed_km_s**2
+        - 2.0 * initial_speed_km_s * target_speed_km_s * math.cos(angle_rad)
+    )
+    return PlaneChangeResult(
+        initial_speed_km_s=initial_speed_km_s,
+        target_speed_km_s=target_speed_km_s,
+        angle_deg=angle_deg,
+        pure_plane_change_delta_v_km_s=pure_delta_v,
+        combined_delta_v_km_s=combined_delta_v,
+    )
+
+
+def orbital_anomalies_from_angle(
+    angle_deg: float,
+    eccentricity: float,
+    source: str,
+) -> OrbitalAnomalySet:
+    if not 0.0 <= eccentricity < 1.0:
+        raise ValueError("Elliptic anomaly conversion requires 0 <= e < 1.")
+    normalized_source = source.strip().lower()
+    angle_rad = math.radians(angle_deg % 360.0)
+
+    if normalized_source == "true":
+        true_anomaly = angle_rad
+        eccentric_anomaly = _eccentric_anomaly_from_true_anomaly(true_anomaly, eccentricity)
+        mean_anomaly = eccentric_anomaly - eccentricity * math.sin(eccentric_anomaly)
+    elif normalized_source == "eccentric":
+        eccentric_anomaly = angle_rad
+        true_anomaly = _true_anomaly_from_eccentric_anomaly(eccentric_anomaly, eccentricity)
+        mean_anomaly = eccentric_anomaly - eccentricity * math.sin(eccentric_anomaly)
+    elif normalized_source == "mean":
+        mean_anomaly = angle_rad
+        eccentric_anomaly = _eccentric_anomaly_from_mean_anomaly(mean_anomaly, eccentricity)
+        true_anomaly = _true_anomaly_from_eccentric_anomaly(eccentric_anomaly, eccentricity)
+    else:
+        raise ValueError("Anomaly source must be 'true', 'eccentric', or 'mean'.")
+
+    return OrbitalAnomalySet(
+        eccentricity=eccentricity,
+        true_anomaly_deg=_normalized_angle_deg(true_anomaly),
+        eccentric_anomaly_deg=_normalized_angle_deg(eccentric_anomaly),
+        mean_anomaly_deg=_normalized_angle_deg(mean_anomaly),
+    )
+
+
+def lambert_transfer(
+    departure_position_km: np.ndarray | list[float] | tuple[float, float, float],
+    arrival_position_km: np.ndarray | list[float] | tuple[float, float, float],
+    time_of_flight_s: float,
+    *,
+    mu_km3_s2: float = EARTH_MU_KM3_S2,
+    long_path: bool = False,
+) -> LambertTransferResult:
+    """Solve the zero-revolution two-body Lambert transfer with universal variables."""
+    r1_vec = _three_vector(departure_position_km, name="Departure position")
+    r2_vec = _three_vector(arrival_position_km, name="Arrival position")
+    if time_of_flight_s <= 0.0:
+        raise ValueError("Lambert time of flight must be positive.")
+    if mu_km3_s2 <= 0.0:
+        raise ValueError("Lambert gravitational parameter must be positive.")
+
+    r1 = float(np.linalg.norm(r1_vec))
+    r2 = float(np.linalg.norm(r2_vec))
+    if r1 <= _VECTOR_TOLERANCE or r2 <= _VECTOR_TOLERANCE:
+        raise ValueError("Lambert positions must stay away from the central-body center.")
+
+    cos_transfer_angle = _clamp(float(np.dot(r1_vec, r2_vec)) / (r1 * r2))
+    short_angle = math.acos(cos_transfer_angle)
+    if short_angle <= 1e-8 or abs(math.pi - short_angle) <= 1e-8:
+        raise ValueError("Lambert transfer angle must not be collinear.")
+    transfer_angle = 2.0 * math.pi - short_angle if long_path else short_angle
+    sin_transfer_angle = math.sin(transfer_angle)
+    lambert_a = sin_transfer_angle * math.sqrt(r1 * r2 / (1.0 - math.cos(transfer_angle)))
+    if abs(lambert_a) <= _VECTOR_TOLERANCE:
+        raise ValueError("Lambert geometry cannot form a transfer arc.")
+
+    def residual(z: float) -> float | None:
+        y = _lambert_y(z, r1, r2, lambert_a)
+        c = _stumpff_c(z)
+        if y is None or c <= _VECTOR_TOLERANCE:
+            return None
+        return (
+            (y / c) ** 1.5 * _stumpff_s(z)
+            + lambert_a * math.sqrt(y)
+            - math.sqrt(mu_km3_s2) * time_of_flight_s
+        )
+
+    bracket = _lambert_zero_revolution_bracket(residual)
+    if bracket[0] == bracket[1]:
+        z_root = bracket[0]
+    else:
+        z_root = float(brentq(lambda z: _required_residual(residual(z)), *bracket, xtol=1e-12, rtol=1e-12))
+    y_root = _lambert_y(z_root, r1, r2, lambert_a)
+    if y_root is None:
+        raise ValueError("Lambert solution failed to produce a valid transfer arc.")
+
+    f_lagrange = 1.0 - y_root / r1
+    g_lagrange = lambert_a * math.sqrt(y_root / mu_km3_s2)
+    gdot_lagrange = 1.0 - y_root / r2
+    if abs(g_lagrange) <= _VECTOR_TOLERANCE:
+        raise ValueError("Lambert solution produced a singular velocity mapping.")
+
+    departure_velocity = (r2_vec - f_lagrange * r1_vec) / g_lagrange
+    arrival_velocity = (gdot_lagrange * r2_vec - r1_vec) / g_lagrange
+    return LambertTransferResult(
+        departure_velocity_km_s=np.asarray(departure_velocity, dtype=np.float64),
+        arrival_velocity_km_s=np.asarray(arrival_velocity, dtype=np.float64),
+        time_of_flight_s=time_of_flight_s,
+        transfer_angle_deg=math.degrees(transfer_angle),
+        path="long" if long_path else "short",
+    )
+
+
+def _circular_orbit_metrics_from_radius(
+    radius_km: float,
+    *,
+    mu_km3_s2: float,
+    central_body_radius_km: float,
+) -> CircularOrbitMetrics:
+    if radius_km < central_body_radius_km:
+        raise ValueError("Circular-orbit radius must stay above the central-body surface.")
+    period_s = 2.0 * math.pi * math.sqrt(radius_km**3 / mu_km3_s2)
+    mean_motion_rad_s = math.sqrt(mu_km3_s2 / radius_km**3)
+    return CircularOrbitMetrics(
+        altitude_km=radius_km - central_body_radius_km,
+        radius_km=radius_km,
+        period_s=period_s,
+        circular_speed_km_s=math.sqrt(mu_km3_s2 / radius_km),
+        escape_speed_km_s=math.sqrt(2.0 * mu_km3_s2 / radius_km),
+        mean_motion_rad_s=mean_motion_rad_s,
+    )
+
+
+def _eccentric_anomaly_from_true_anomaly(true_anomaly_rad: float, eccentricity: float) -> float:
+    return math.atan2(
+        math.sqrt(1.0 - eccentricity**2) * math.sin(true_anomaly_rad),
+        eccentricity + math.cos(true_anomaly_rad),
+    ) % (2.0 * math.pi)
+
+
+def _true_anomaly_from_eccentric_anomaly(eccentric_anomaly_rad: float, eccentricity: float) -> float:
+    return math.atan2(
+        math.sqrt(1.0 - eccentricity**2) * math.sin(eccentric_anomaly_rad),
+        math.cos(eccentric_anomaly_rad) - eccentricity,
+    ) % (2.0 * math.pi)
+
+
+def _eccentric_anomaly_from_mean_anomaly(mean_anomaly_rad: float, eccentricity: float) -> float:
+    eccentric_anomaly = mean_anomaly_rad if eccentricity < 0.8 else math.pi
+    for _ in range(50):
+        residual = eccentric_anomaly - eccentricity * math.sin(eccentric_anomaly) - mean_anomaly_rad
+        slope = 1.0 - eccentricity * math.cos(eccentric_anomaly)
+        step = residual / max(slope, 1e-12)
+        eccentric_anomaly -= step
+        if abs(step) <= 1e-13:
+            return eccentric_anomaly % (2.0 * math.pi)
+    raise ValueError("Kepler anomaly conversion did not converge.")
+
+
+def _normalized_angle_deg(angle_rad: float) -> float:
+    return math.degrees(angle_rad) % 360.0
+
+
+def _three_vector(values: np.ndarray | list[float] | tuple[float, float, float], *, name: str) -> NDArray[np.float64]:
+    vector = np.asarray(values, dtype=np.float64)
+    if vector.shape != (3,):
+        raise ValueError(f"{name} must contain three components.")
+    return vector
+
+
+def _lambert_y(z: float, r1: float, r2: float, lambert_a: float) -> float | None:
+    c = _stumpff_c(z)
+    if c <= _VECTOR_TOLERANCE:
+        return None
+    y = r1 + r2 + lambert_a * (z * _stumpff_s(z) - 1.0) / math.sqrt(c)
+    if y <= _VECTOR_TOLERANCE:
+        return None
+    return y
+
+
+def _stumpff_c(z: float) -> float:
+    if z > 1e-8:
+        root = math.sqrt(z)
+        return (1.0 - math.cos(root)) / z
+    if z < -1e-8:
+        root = math.sqrt(-z)
+        return (math.cosh(root) - 1.0) / (-z)
+    return 0.5 - z / 24.0 + z * z / 720.0
+
+
+def _stumpff_s(z: float) -> float:
+    if z > 1e-8:
+        root = math.sqrt(z)
+        return (root - math.sin(root)) / (root**3)
+    if z < -1e-8:
+        root = math.sqrt(-z)
+        return (math.sinh(root) - root) / (root**3)
+    return 1.0 / 6.0 - z / 120.0 + z * z / 5040.0
+
+
+def _lambert_zero_revolution_bracket(residual_fn: Callable[[float], float | None]) -> tuple[float, float]:
+    upper = (2.0 * math.pi) ** 2 - 1e-6
+    negative_limit = -(2.0 * math.pi) ** 2
+    for _ in range(8):
+        points = np.linspace(negative_limit, upper, 2401, dtype=np.float64)
+        previous_z: float | None = None
+        previous_value: float | None = None
+        for raw_z in points:
+            z = float(raw_z)
+            try:
+                value = residual_fn(z)
+            except OverflowError:
+                continue
+            if value is None or not math.isfinite(value):
+                continue
+            if abs(value) <= 1e-10:
+                return z, z
+            if previous_value is not None and previous_value * value < 0.0:
+                return float(previous_z), z
+            previous_z = z
+            previous_value = float(value)
+        negative_limit *= 4.0
+    raise ValueError("Lambert time of flight has no zero-revolution solution for this geometry.")
+
+
+def _required_residual(value: float | None) -> float:
+    if value is None or not math.isfinite(value):
+        raise ValueError("Lambert residual became invalid during root solving.")
+    return value
 
 
 def _clamp(value: float) -> float:

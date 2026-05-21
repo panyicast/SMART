@@ -6,8 +6,13 @@ from PySide6 import QtWidgets
 from smart.services.spice_service import BodyState
 from smart.ui.i18n import I18nManager
 from smart.ui.widgets.common_orbital_tools import (
+    AnomalyConversionDialog,
+    ApsisParametersDialog,
+    CircularOrbitPeriodDialog,
     HohmannTransferDialog,
+    LambertTransferDialog,
     OrbitalConversionDialog,
+    PlaneChangeDialog,
     SolarLunarPositionDialog,
 )
 
@@ -37,6 +42,38 @@ def test_hohmann_dialog_calculates_circular_transfer() -> None:
         assert float(dialog._result_table.item(0, 5).text()) > 0.0
         assert float(dialog._result_table.item(0, 6).text()) > 0.0
         assert dialog._status.text() == "计算完成。"
+    finally:
+        dialog.deleteLater()
+
+
+def test_apsis_circular_plane_and_anomaly_dialogs_calculate() -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    apsis = ApsisParametersDialog(I18nManager())
+    circular = CircularOrbitPeriodDialog(I18nManager())
+    plane = PlaneChangeDialog(I18nManager())
+    anomaly = AnomalyConversionDialog(I18nManager())
+    try:
+        assert float(apsis._metrics_table.item(0, 3).text()) > 0.0
+        assert float(circular._altitude_metrics_table.item(0, 2).text()) > 0.0
+        assert float(circular._period_metrics_table.item(0, 0).text()) > 0.0
+        assert float(plane._plane_change_table.item(0, 0).text()) > 0.0
+        assert float(anomaly._anomaly_table.item(0, 2).text()) >= 0.0
+    finally:
+        apsis.deleteLater()
+        circular.deleteLater()
+        plane.deleteLater()
+        anomaly.deleteLater()
+
+
+def test_lambert_dialog_calculates_default_quarter_arc() -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    dialog = LambertTransferDialog(I18nManager())
+    try:
+        assert dialog._status.text() == "计算完成。"
+        assert dialog._lambert_velocity_table.item(0, 0).text() == "出发速度"
+        assert float(dialog._lambert_summary_table.item(0, 0).text()) == 90.0
     finally:
         dialog.deleteLater()
 

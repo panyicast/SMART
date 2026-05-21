@@ -538,6 +538,10 @@
 - 提交：`acb29a8`
 - 影响文件：`src/smart/ui/i18n.py`、`src/smart/ui/main_window.py`、`src/smart/ui/widgets/common_orbital_tools.py`、`tests/test_common_orbital_tools.py`、`tests/test_sidebar_navigation.py`、`HANDOFF.md`。
 
-## 2026-05-21T13:06:18+08:00 | Add Sun Moon geographic coordinates
-- 提交：`本次提交`
+## 2026-05-21T13:06:24+08:00 | Add Sun Moon geographic coordinates
+- 提交：`fd5be70`
 - 影响文件：`src/smart/ui/widgets/common_orbital_tools.py`、`tests/test_common_orbital_tools.py`、`HANDOFF.md`。
+
+## 2026-05-21T13:23:43+08:00 | Expand common orbital analysis tools
+- 提交：`本次提交`
+- 影响文件：`src/smart/domain/models.py`、`src/smart/services/orbital_mechanics.py`、`src/smart/ui/i18n.py`、`src/smart/ui/main_window.py`、`src/smart/ui/widgets/common_orbital_tools.py`、`tests/test_common_orbital_tools.py`、`tests/test_orbital_mechanics.py`、`tests/test_sidebar_navigation.py` 等 9 个文件。

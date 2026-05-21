@@ -6,16 +6,22 @@ from typing import Callable
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from smart.domain.models import EARTH_MU_KM3_S2, EARTH_RADIUS_KM, OrbitalElements
+from smart.domain.models import CircularOrbitMetrics, EARTH_MU_KM3_S2, EARTH_RADIUS_KM, OrbitalElements
 from smart.services.earth_orientation import ecef_state_from_eci, format_utc, geodetic_point_from_ecef
 from smart.services.orbital_mechanics import (
+    apsis_orbit_metrics_from_altitudes,
+    circular_orbit_metrics_from_altitude,
+    circular_orbit_metrics_from_period,
     hohmann_transfer_between_circular_orbits,
+    lambert_transfer,
+    orbital_anomalies_from_angle,
     orbital_elements_from_state_vector,
+    plane_change_delta_v,
     state_from_true_anomaly,
 )
 from smart.services.spice_service import BodyState, SpiceKernelManager
 from smart.ui.i18n import I18nManager
-from smart.ui.widgets.spinboxes import NoWheelDateTimeEdit, NoWheelDoubleSpinBox
+from smart.ui.widgets.spinboxes import NoWheelComboBox, NoWheelDateTimeEdit, NoWheelDoubleSpinBox
 
 
 def _beijing_qtimezone() -> QtCore.QTimeZone:
@@ -482,6 +488,249 @@ class OrbitalConversionDialog(_CommonOrbitalToolDialog):
         )
 
 
+class ApsisParametersDialog(_CommonOrbitalToolDialog):
+    def __init__(self, i18n: I18nManager, parent: QtWidgets.QWidget | None = None) -> None:
+        super().__init__(i18n, "common_tools.apsis_parameters.title", parent)
+        self.resize(920, 560)
+
+        input_card = self._card()
+        input_layout = QtWidgets.QVBoxLayout(input_card)
+        input_layout.setContentsMargins(16, 16, 16, 16)
+        input_layout.setSpacing(12)
+        input_layout.addWidget(self._title("输入近远地点高度"))
+        input_layout.addWidget(self._caption("地球椭圆轨道，输入近地点和远地点相对地表高度。"))
+
+        grid = QtWidgets.QGridLayout()
+        grid.setHorizontalSpacing(16)
+        self._perigee_altitude_field = _number_field(400.0, 0.0, 2.0e6, 10.0, 6)
+        self._apogee_altitude_field = _number_field(1200.0, 0.0, 2.0e6, 10.0, 6)
+        grid.addWidget(QtWidgets.QLabel("近地点高度 hp (km)"), 0, 0)
+        grid.addWidget(self._perigee_altitude_field, 0, 1)
+        grid.addWidget(QtWidgets.QLabel("远地点高度 ha (km)"), 0, 2)
+        grid.addWidget(self._apogee_altitude_field, 0, 3)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(3, 1)
+        input_layout.addLayout(grid)
+        input_layout.addWidget(
+            self._primary_button("计算参数", self._calculate_apsis_metrics),
+            0,
+            QtCore.Qt.AlignmentFlag.AlignRight,
+        )
+        self.root_layout.addWidget(input_card)
+
+        output = self._panel()
+        output_layout = QtWidgets.QVBoxLayout(output)
+        output_layout.setContentsMargins(14, 14, 14, 14)
+        output_layout.setSpacing(8)
+        output_layout.addWidget(self._title("输出"))
+        self._status = self._caption("")
+        output_layout.addWidget(self._status)
+        self._metrics_table = self._output_table(
+            ["rp (km)", "ra (km)", "a (km)", "e", "周期 (min)"],
+            1,
+        )
+        output_layout.addWidget(self._metrics_table)
+        self.root_layout.addWidget(output, 1)
+        self._calculate_apsis_metrics()
+
+    def _calculate_apsis_metrics(self) -> None:
+        try:
+            metrics = apsis_orbit_metrics_from_altitudes(
+                self._perigee_altitude_field.value(),
+                self._apogee_altitude_field.value(),
+            )
+        except Exception as exc:
+            self._status.setText(f"计算失败：{exc}")
+            return
+
+        self._status.setText("计算完成。")
+        self._set_table_row(
+            self._metrics_table,
+            0,
+            [
+                f"{metrics.perigee_radius_km:.8f}",
+                f"{metrics.apogee_radius_km:.8f}",
+                f"{metrics.semi_major_axis_km:.8f}",
+                f"{metrics.eccentricity:.10f}",
+                f"{metrics.period_s / 60.0:.8f}",
+            ],
+        )
+
+
+class CircularOrbitPeriodDialog(_CommonOrbitalToolDialog):
+    def __init__(self, i18n: I18nManager, parent: QtWidgets.QWidget | None = None) -> None:
+        super().__init__(i18n, "common_tools.circular_period.title", parent)
+        self.resize(980, 620)
+
+        tabs = QtWidgets.QTabWidget()
+        tabs.addTab(self._build_altitude_tab(), "高度 -> 周期")
+        tabs.addTab(self._build_period_tab(), "周期 -> 高度")
+        self.root_layout.addWidget(tabs, 1)
+
+    def _build_altitude_tab(self) -> QtWidgets.QWidget:
+        tab = QtWidgets.QWidget()
+        layout = QtWidgets.QVBoxLayout(tab)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+        layout.addWidget(self._circular_input_card("输入圆轨道高度", "高度 (km)", "_altitude_field", 550.0))
+        panel, self._altitude_status, self._altitude_metrics_table = self._circular_output_panel()
+        layout.addWidget(panel, 1)
+        self._calculate_from_altitude()
+        return tab
+
+    def _build_period_tab(self) -> QtWidgets.QWidget:
+        tab = QtWidgets.QWidget()
+        layout = QtWidgets.QVBoxLayout(tab)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+        layout.addWidget(self._circular_input_card("输入圆轨道周期", "周期 (min)", "_period_field", 95.0))
+        panel, self._period_status, self._period_metrics_table = self._circular_output_panel()
+        layout.addWidget(panel, 1)
+        self._calculate_from_period()
+        return tab
+
+    def _circular_input_card(self, title: str, label: str, field_name: str, value: float) -> QtWidgets.QFrame:
+        card = self._card()
+        card_layout = QtWidgets.QVBoxLayout(card)
+        card_layout.setContentsMargins(16, 16, 16, 16)
+        card_layout.setSpacing(12)
+        card_layout.addWidget(self._title(title))
+        card_layout.addWidget(self._caption("地球圆轨道，两体快速换算。"))
+        row = QtWidgets.QHBoxLayout()
+        row.setSpacing(12)
+        row.addWidget(QtWidgets.QLabel(label))
+        field = _number_field(value, 0.0 if field_name == "_altitude_field" else 1.0, 2.0e6, 1.0, 8)
+        setattr(self, field_name, field)
+        row.addWidget(field, 1)
+        slot = self._calculate_from_altitude if field_name == "_altitude_field" else self._calculate_from_period
+        row.addWidget(self._primary_button("计算", slot))
+        card_layout.addLayout(row)
+        return card
+
+    def _circular_output_panel(self) -> tuple[QtWidgets.QFrame, QtWidgets.QLabel, QtWidgets.QTableWidget]:
+        panel = self._panel()
+        panel_layout = QtWidgets.QVBoxLayout(panel)
+        panel_layout.setContentsMargins(14, 14, 14, 14)
+        panel_layout.setSpacing(8)
+        panel_layout.addWidget(self._title("输出"))
+        status = self._caption("")
+        panel_layout.addWidget(status)
+        table = self._output_table(
+            ["高度 (km)", "半径 (km)", "周期 (min)", "圆轨道速度 (km/s)", "逃逸速度 (km/s)", "平运动 (rad/s)"],
+            1,
+        )
+        panel_layout.addWidget(table)
+        return panel, status, table
+
+    def _calculate_from_altitude(self) -> None:
+        try:
+            metrics = circular_orbit_metrics_from_altitude(self._altitude_field.value())
+        except Exception as exc:
+            self._altitude_status.setText(f"计算失败：{exc}")
+            return
+        self._set_circular_metrics(self._altitude_status, self._altitude_metrics_table, metrics)
+
+    def _calculate_from_period(self) -> None:
+        try:
+            metrics = circular_orbit_metrics_from_period(self._period_field.value() * 60.0)
+        except Exception as exc:
+            self._period_status.setText(f"计算失败：{exc}")
+            return
+        self._set_circular_metrics(self._period_status, self._period_metrics_table, metrics)
+
+    def _set_circular_metrics(
+        self,
+        status: QtWidgets.QLabel,
+        table: QtWidgets.QTableWidget,
+        metrics: CircularOrbitMetrics,
+    ) -> None:
+        status.setText("计算完成。")
+        self._set_table_row(
+            table,
+            0,
+            [
+                f"{metrics.altitude_km:.8f}",
+                f"{metrics.radius_km:.8f}",
+                f"{metrics.period_s / 60.0:.8f}",
+                f"{metrics.circular_speed_km_s:.10f}",
+                f"{metrics.escape_speed_km_s:.10f}",
+                f"{metrics.mean_motion_rad_s:.12f}",
+            ],
+        )
+
+
+class AnomalyConversionDialog(_CommonOrbitalToolDialog):
+    def __init__(self, i18n: I18nManager, parent: QtWidgets.QWidget | None = None) -> None:
+        super().__init__(i18n, "common_tools.anomaly_conversion.title", parent)
+        self.resize(920, 560)
+
+        input_card = self._card()
+        input_layout = QtWidgets.QVBoxLayout(input_card)
+        input_layout.setContentsMargins(16, 16, 16, 16)
+        input_layout.setSpacing(12)
+        input_layout.addWidget(self._title("输入椭圆轨道近点角"))
+        input_layout.addWidget(self._caption("给定偏心率和一个近点角，换算真近点角、偏近点角、平近点角。"))
+
+        grid = QtWidgets.QGridLayout()
+        grid.setHorizontalSpacing(16)
+        grid.setVerticalSpacing(10)
+        self._eccentricity_field = _number_field(0.2, 0.0, 0.999999, 0.001, 8)
+        self._anomaly_angle_field = _number_field(120.0, -360000.0, 360000.0, 1.0, 8)
+        self._anomaly_source_combo = NoWheelComboBox()
+        self._anomaly_source_combo.addItem("真近点角", "true")
+        self._anomaly_source_combo.addItem("偏近点角", "eccentric")
+        self._anomaly_source_combo.addItem("平近点角", "mean")
+        self._anomaly_source_combo.setMinimumHeight(38)
+        grid.addWidget(QtWidgets.QLabel("偏心率 e"), 0, 0)
+        grid.addWidget(self._eccentricity_field, 0, 1)
+        grid.addWidget(QtWidgets.QLabel("输入角类型"), 0, 2)
+        grid.addWidget(self._anomaly_source_combo, 0, 3)
+        grid.addWidget(QtWidgets.QLabel("输入角 (deg)"), 1, 0)
+        grid.addWidget(self._anomaly_angle_field, 1, 1)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(3, 1)
+        input_layout.addLayout(grid)
+        input_layout.addWidget(
+            self._primary_button("换算近点角", self._calculate_anomalies),
+            0,
+            QtCore.Qt.AlignmentFlag.AlignRight,
+        )
+        self.root_layout.addWidget(input_card)
+
+        output = self._panel()
+        output_layout = QtWidgets.QVBoxLayout(output)
+        output_layout.setContentsMargins(14, 14, 14, 14)
+        output_layout.setSpacing(8)
+        output_layout.addWidget(self._title("输出"))
+        self._status = self._caption("")
+        output_layout.addWidget(self._status)
+        self._anomaly_table = self._output_table(["真近点角 (deg)", "偏近点角 (deg)", "平近点角 (deg)"], 1)
+        output_layout.addWidget(self._anomaly_table)
+        self.root_layout.addWidget(output, 1)
+        self._calculate_anomalies()
+
+    def _calculate_anomalies(self) -> None:
+        try:
+            anomalies = orbital_anomalies_from_angle(
+                self._anomaly_angle_field.value(),
+                self._eccentricity_field.value(),
+                str(self._anomaly_source_combo.currentData()),
+            )
+        except Exception as exc:
+            self._status.setText(f"计算失败：{exc}")
+            return
+        self._status.setText("计算完成。")
+        self._set_table_row(
+            self._anomaly_table,
+            0,
+            [
+                f"{anomalies.true_anomaly_deg:.10f}",
+                f"{anomalies.eccentric_anomaly_deg:.10f}",
+                f"{anomalies.mean_anomaly_deg:.10f}",
+            ],
+        )
+
+
 class SolarLunarPositionDialog(_CommonOrbitalToolDialog):
     def __init__(
         self,
@@ -648,5 +897,176 @@ class HohmannTransferDialog(_CommonOrbitalToolDialog):
                 f"{result.delta_v2_km_s:.10f}",
                 f"{result.total_delta_v_km_s:.10f}",
                 f"{result.transfer_time_s / 60.0:.6f}",
+            ],
+        )
+
+
+class PlaneChangeDialog(_CommonOrbitalToolDialog):
+    def __init__(self, i18n: I18nManager, parent: QtWidgets.QWidget | None = None) -> None:
+        super().__init__(i18n, "common_tools.plane_change.title", parent)
+        self.resize(920, 560)
+
+        input_card = self._card()
+        input_layout = QtWidgets.QVBoxLayout(input_card)
+        input_layout.setContentsMargins(16, 16, 16, 16)
+        input_layout.setSpacing(12)
+        input_layout.addWidget(self._title("输入速度和转角"))
+        input_layout.addWidget(self._caption("同速时得到纯平面变轨；速度不同同时估算速度改变量与平面转角合并点火。"))
+
+        grid = QtWidgets.QGridLayout()
+        grid.setHorizontalSpacing(16)
+        grid.setVerticalSpacing(10)
+        self._initial_speed_field = _number_field(7.5, 0.000001, 1000.0, 0.1, 8)
+        self._target_speed_field = _number_field(7.5, 0.000001, 1000.0, 0.1, 8)
+        self._plane_angle_field = _number_field(5.0, 0.0, 180.0, 0.1, 8)
+        fields = [
+            ("点火前速度 v1 (km/s)", self._initial_speed_field),
+            ("点火后速度 v2 (km/s)", self._target_speed_field),
+            ("平面转角 (deg)", self._plane_angle_field),
+        ]
+        for index, (label, field) in enumerate(fields):
+            row = index // 2
+            column = (index % 2) * 2
+            grid.addWidget(QtWidgets.QLabel(label), row, column)
+            grid.addWidget(field, row, column + 1)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(3, 1)
+        input_layout.addLayout(grid)
+        input_layout.addWidget(
+            self._primary_button("计算变轨", self._calculate_plane_change),
+            0,
+            QtCore.Qt.AlignmentFlag.AlignRight,
+        )
+        self.root_layout.addWidget(input_card)
+
+        output = self._panel()
+        output_layout = QtWidgets.QVBoxLayout(output)
+        output_layout.setContentsMargins(14, 14, 14, 14)
+        output_layout.setSpacing(8)
+        output_layout.addWidget(self._title("输出"))
+        self._status = self._caption("")
+        output_layout.addWidget(self._status)
+        self._plane_change_table = self._output_table(
+            ["纯平面变轨 Δv@v1 (km/s)", "合并点火 Δv (km/s)"],
+            1,
+        )
+        output_layout.addWidget(self._plane_change_table)
+        self.root_layout.addWidget(output, 1)
+        self._calculate_plane_change()
+
+    def _calculate_plane_change(self) -> None:
+        try:
+            result = plane_change_delta_v(
+                self._initial_speed_field.value(),
+                self._target_speed_field.value(),
+                self._plane_angle_field.value(),
+            )
+        except Exception as exc:
+            self._status.setText(f"计算失败：{exc}")
+            return
+        self._status.setText("计算完成。")
+        self._set_table_row(
+            self._plane_change_table,
+            0,
+            [
+                f"{result.pure_plane_change_delta_v_km_s:.10f}",
+                f"{result.combined_delta_v_km_s:.10f}",
+            ],
+        )
+
+
+class LambertTransferDialog(_CommonOrbitalToolDialog):
+    def __init__(self, i18n: I18nManager, parent: QtWidgets.QWidget | None = None) -> None:
+        super().__init__(i18n, "common_tools.lambert.title", parent)
+        self.resize(1120, 680)
+
+        input_card = self._card()
+        input_layout = QtWidgets.QVBoxLayout(input_card)
+        input_layout.setContentsMargins(16, 16, 16, 16)
+        input_layout.setSpacing(12)
+        input_layout.addWidget(self._title("输入 Lambert 几何"))
+        input_layout.addWidget(self._caption("地心 J2000 位置 km，飞行时间 min。当前求零圈单圈两体 Lambert 解。"))
+
+        grid = QtWidgets.QGridLayout()
+        grid.setHorizontalSpacing(12)
+        grid.setVerticalSpacing(10)
+        self._lambert_fields: dict[str, NoWheelDoubleSpinBox] = {}
+        vector_defaults = {
+            "r1x": 7000.0,
+            "r1y": 0.0,
+            "r1z": 0.0,
+            "r2x": 0.0,
+            "r2y": 7000.0,
+            "r2z": 0.0,
+        }
+        for row, (title, prefix) in enumerate((("出发位置 r1", "r1"), ("到达位置 r2", "r2"))):
+            grid.addWidget(QtWidgets.QLabel(title), row, 0)
+            for offset, axis in enumerate(("x", "y", "z"), start=1):
+                field = _number_field(vector_defaults[f"{prefix}{axis}"], -2.0e7, 2.0e7, 10.0, 8)
+                self._lambert_fields[f"{prefix}{axis}"] = field
+                grid.addWidget(QtWidgets.QLabel(axis.upper()), row, offset * 2 - 1)
+                grid.addWidget(field, row, offset * 2)
+        for column in (2, 4, 6):
+            grid.setColumnStretch(column, 1)
+        input_layout.addLayout(grid)
+
+        option_row = QtWidgets.QHBoxLayout()
+        option_row.setSpacing(12)
+        self._lambert_tof_field = _number_field(24.285366, 0.000001, 1.0e9, 1.0, 8)
+        option_row.addWidget(QtWidgets.QLabel("飞行时间 (min)"))
+        option_row.addWidget(self._lambert_tof_field, 1)
+        self._lambert_path_combo = NoWheelComboBox()
+        self._lambert_path_combo.addItem("短路径", False)
+        self._lambert_path_combo.addItem("长路径", True)
+        self._lambert_path_combo.setMinimumHeight(38)
+        option_row.addWidget(QtWidgets.QLabel("路径"))
+        option_row.addWidget(self._lambert_path_combo)
+        option_row.addWidget(self._primary_button("求解 Lambert", self._calculate_lambert))
+        input_layout.addLayout(option_row)
+        self.root_layout.addWidget(input_card)
+
+        output = self._panel()
+        output_layout = QtWidgets.QVBoxLayout(output)
+        output_layout.setContentsMargins(14, 14, 14, 14)
+        output_layout.setSpacing(8)
+        output_layout.addWidget(self._title("输出"))
+        self._status = self._caption("")
+        output_layout.addWidget(self._status)
+        self._lambert_velocity_table = self._output_table(["量", "X (km/s)", "Y (km/s)", "Z (km/s)"], 2)
+        output_layout.addWidget(self._lambert_velocity_table)
+        self._lambert_summary_table = self._output_table(["转移角 (deg)", "飞行时间 (min)", "路径"], 1)
+        output_layout.addWidget(self._lambert_summary_table)
+        self.root_layout.addWidget(output, 1)
+        self._calculate_lambert()
+
+    def _calculate_lambert(self) -> None:
+        try:
+            result = lambert_transfer(
+                [self._lambert_fields[key].value() for key in ("r1x", "r1y", "r1z")],
+                [self._lambert_fields[key].value() for key in ("r2x", "r2y", "r2z")],
+                self._lambert_tof_field.value() * 60.0,
+                long_path=bool(self._lambert_path_combo.currentData()),
+            )
+        except Exception as exc:
+            self._status.setText(f"计算失败：{exc}")
+            return
+        self._status.setText("计算完成。")
+        self._set_table_row(
+            self._lambert_velocity_table,
+            0,
+            ["出发速度", *(f"{float(value):.10f}" for value in result.departure_velocity_km_s)],
+        )
+        self._set_table_row(
+            self._lambert_velocity_table,
+            1,
+            ["到达速度", *(f"{float(value):.10f}" for value in result.arrival_velocity_km_s)],
+        )
+        self._set_table_row(
+            self._lambert_summary_table,
+            0,
+            [
+                f"{result.transfer_angle_deg:.8f}",
+                f"{result.time_of_flight_s / 60.0:.8f}",
+                "长路径" if result.path == "long" else "短路径",
             ],
         )
