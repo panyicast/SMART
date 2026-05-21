@@ -337,6 +337,30 @@ def test_v51_single_fixed_low_perigee_refines_terminal_longitude(monkeypatch: py
     assert abs(result.summary["terminal_errors"]["lon_deg"]) <= result.config["terminal_tolerance"]["lon_deg"]
 
 
+def test_v51_yaw_refinement_keeps_post_a_and_terminal_apogee_inclination() -> None:
+    payload = default_design_maneuver_strategy_payload()
+    payload["initial"]["t0_epoch"] = "2026-05-14T13:09:19Z"
+    payload["maneuver_count"].update({"max": 5, "user": 6, "total_dv_est_user_mps": 0.0})
+    payload["planner"].update({"maneuver_count_user": 6, "force_user_count": True})
+    payload["apsis"]["pattern_mode"] = "user"
+    payload["hard_constraint_planner"]["q_AA_user"] = [3, 3, 2]
+    payload["hard_constraint_planner"]["q_AP_user"] = 0
+    payload["hard_constraint_planner"]["fixed_hp_targets_km"] = {"1": 3933.0}
+    payload["hard_constraint_planner"]["local_maxiter"] = 24
+
+    result = plan_design_maneuver_strategy(payload)
+    yaw_refinement = result.summary["phase_diagnostics"]["yaw_refinement"]
+
+    assert result.summary["phase_diagnostics"]["hard_constraint_feasible"] is True
+    assert yaw_refinement["enabled"] is True
+    assert yaw_refinement["saved_propellant_kg"] > 0.9
+    assert result.summary["optimized_propellant_kg"] < yaw_refinement["base_propellant_kg"]
+    for burn, target_post_a in zip(result.burns, yaw_refinement["target_post_a_km"]):
+        assert burn.post_a_km == pytest.approx(target_post_a, abs=1.0e-6)
+    assert result.burns[3].post_i_deg == pytest.approx(result.config["target"]["i_deg"], abs=1.0e-9)
+    assert abs(result.summary["terminal_errors"]["lon_deg"]) <= result.config["terminal_tolerance"]["lon_deg"]
+
+
 def test_standard_design_planner_honors_user_count() -> None:
     payload = default_design_maneuver_strategy_payload()
     payload["orbit_type"]["mode"] = "standard_transfer"

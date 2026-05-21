@@ -2759,6 +2759,14 @@ def _plan_v51_hard_constrained(
     best = records[0]
     if not best.get("success"):
         raise RuntimeError(str(best.get("reason") or "没有成功候选。"))
+    yaw_refined = _v51_refine_yaw_fixed_post_a(
+        config,
+        first=(first_elapsed, first_r, first_v, first_lon),
+        best=best,
+    )
+    if yaw_refined is not None:
+        best = yaw_refined
+        records.insert(0, yaw_refined)
 
     best_violations = _v51_feasibility_violations(config, best)
     feasible = _v51_is_feasible(config, best)
@@ -2815,6 +2823,14 @@ def _plan_v51_hard_constrained(
                 str(index): fixed_rp[index] - re_km for index in sorted(fixed_rp)
             },
             "optimized_hp_targets_km": [float(value) - re_km for value in best["rp_targets_km"]],
+            "yaw_refinement": best.get(
+                "yaw_refinement",
+                {
+                    "enabled": False,
+                    "method": None,
+                    "saved_propellant_kg": 0.0,
+                },
+            ),
             "top_candidates": unique_records,
             "feasible_q_sequences": feasible_q_sequences,
         },
@@ -3461,6 +3477,304 @@ def _v51_simulate_candidate(
             "max_planning_window_excess_deg": max(_window_distance(burn.longitude_deg_e, planning_window) for burn in burns),
         },
     }
+
+
+def _v51_alpha_refinement_bounds(config: dict[str, Any], burns: list[DesignManeuverBurn]) -> list[tuple[float, float]]:
+    front_low, front_high = _v51_front_alpha_bounds(config)
+    bounds: list[tuple[float, float]] = []
+    for burn in burns:
+        if burn.burn_type == "front":
+            bounds.append((float(front_low), float(front_high)))
+    return bounds
+
+
+def _v51_apogee_to_fixed_a_i(
+    config: dict[str, Any],
+    r: np.ndarray,
+    v: np.ndarray,
+    target_a_km: float,
+    i_target_deg: float,
+) -> dict[str, Any] | None:
+    radius = float(np.linalg.norm(r))
+    target_a_km = float(target_a_km)
+    if not math.isfinite(radius) or radius <= 0.0 or target_a_km <= 0.0:
+        return None
+    r_hat = r / radius
+    east, _north, south = _local_horizontal_basis(r)
+    cos_delta = math.sqrt(max(0.0, 1.0 - float(r_hat[2]) ** 2))
+    if cos_delta <= 1.0e-12:
+        return None
+    cos_beta = math.cos(math.radians(i_target_deg)) / cos_delta
+    if abs(cos_beta) > 1.0 + 1.0e-12:
+        return None
+    cos_beta = float(np.clip(cos_beta, -1.0, 1.0))
+    beta_abs = math.acos(cos_beta)
+    speed_sq = float(config["earth"]["mu_km3_s2"]) * (2.0 / radius - 1.0 / target_a_km)
+    if speed_sq <= 0.0:
+        return None
+    v_required = math.sqrt(speed_sq)
+    low, high = _number_pair(config["alpha"]["tail_apogee_bounds_deg"], [-20.0, 40.0])
+    low, high = min(low, high), max(low, high)
+    candidates: list[dict[str, Any]] = []
+    for beta in (beta_abs, -beta_abs):
+        v_plus = v_required * (math.cos(beta) * east + math.sin(beta) * south)
+        dv_vec = v_plus - v
+        dv_mps = float(np.linalg.norm(dv_vec) * 1000.0)
+        alpha_deg = _alpha_from_local_horizontal_vector(r, dv_vec)
+        if low - 1.0e-9 <= alpha_deg <= high + 1.0e-9:
+            candidates.append({"dv_mps": dv_mps, "alpha_deg": alpha_deg, "v_plus": v_plus})
+    return min(candidates, key=lambda item: item["dv_mps"]) if candidates else None
+
+
+def _v51_simulate_fixed_post_a_alpha_candidate(
+    config: dict[str, Any],
+    first: tuple[float, np.ndarray, np.ndarray, float],
+    target_post_a_values: list[float],
+    alpha_values: list[float],
+    q_aa: tuple[int, ...],
+    q_ap: int,
+    apsis_cache: dict[tuple[float, tuple[float, ...], tuple[float, ...], str, int], tuple[float, np.ndarray, np.ndarray]] | None = None,
+) -> dict[str, Any]:
+    if len(target_post_a_values) < 2 or len(alpha_values) != len(target_post_a_values) - 2:
+        return {"success": False, "reason": "fixed post-a alpha candidate dimension mismatch"}
+    elapsed_s, r, v, _lon = first
+    r = np.asarray(r, dtype=float)
+    v = np.asarray(v, dtype=float)
+    mass = float(config["initial"]["m0_kg"])
+    burns: list[DesignManeuverBurn] = []
+    raw_window = config["longitude"]["raw_window_degE"]
+    planning_window = config["longitude"]["planning_window_degE"]
+    n_burns = len(alpha_values)
+    n_front = len(alpha_values)
+    n_burns = len(target_post_a_values)
+    n_apogee = n_burns - 1
+
+    def append_burn(
+        *,
+        index: int,
+        burn_type: str,
+        apsis: str,
+        elapsed: float,
+        r_pre: np.ndarray,
+        v_pre: np.ndarray,
+        dv_mps: float,
+        alpha_deg: float,
+        v_plus: np.ndarray,
+        target_post_a: float,
+        flight_revolution: int,
+    ) -> None:
+        nonlocal mass
+        pre_a, *_ = _rv_to_coe(r_pre, v_pre)
+        post_a, post_e, post_i_rad, *_ = _rv_to_coe(r_pre, v_plus)
+        burn_time = _burn_time_for_delta_v(config, mass, dv_mps)
+        mass = max(1.0, mass - burn_time["propellant_kg"])
+        lon = _longitude_deg(config, r_pre, elapsed)
+        timestamp = parse_utc(str(config["initial"]["t0_epoch"])) + timedelta(seconds=elapsed)
+        burns.append(
+            DesignManeuverBurn(
+                index=index,
+                burn_type=burn_type,
+                apsis=apsis,
+                elapsed_min=elapsed / 60.0,
+                beijing_time=(timestamp + BEIJING_OFFSET).strftime("%Y-%m-%d %H:%M:%S.%f"),
+                longitude_deg_e=lon,
+                delta_v_mps=dv_mps,
+                alpha_deg=alpha_deg,
+                target_post_a_km=target_post_a,
+                total_burn_time_min=burn_time["total_burn_time_min"],
+                propellant_kg=burn_time["propellant_kg"],
+                post_a_km=post_a,
+                post_e=post_e,
+                post_i_deg=math.degrees(post_i_rad),
+                duration_ok=burn_time["total_burn_time_min"] <= float(config["burn_limit"]["max_total_burn_time_min"]) + 1.0e-9,
+                longitude_ok=_in_window(lon, planning_window),
+                flight_revolution=flight_revolution,
+                position_label="远地点" if apsis == "A" else "近地点",
+                orbit_period_min=_orbit_period_min(config, post_a),
+                post_mass_kg=mass,
+                semi_major_axis_control_km=post_a - pre_a,
+            )
+        )
+
+    flight_revolution = 2
+    for index, target_post_a in enumerate(target_post_a_values, start=1):
+        if index <= n_front:
+            apsis = "A"
+            burn_type = "front"
+            alpha_deg = float(alpha_values[index - 1])
+            dv_mps = _solve_dv_for_target_a(r, v, alpha_deg, float(target_post_a))
+            if dv_mps is None:
+                return {"success": False, "reason": f"fixed post-a yaw solve failed at burn {index}"}
+            v_after = v + (float(dv_mps) / 1000.0) * _local_horizontal_direction(r, alpha_deg)
+        elif index == n_apogee:
+            apsis = "A"
+            burn_type = "terminal_apogee"
+            terminal = _v51_apogee_to_fixed_a_i(config, r, v, float(target_post_a), float(config["target"]["i_deg"]))
+            if terminal is None:
+                return {"success": False, "reason": "fixed post-a terminal inclination solve failed"}
+            dv_mps = float(terminal["dv_mps"])
+            alpha_deg = float(terminal["alpha_deg"])
+            v_after = np.asarray(terminal["v_plus"], dtype=float)
+        else:
+            apsis = "P"
+            burn_type = "terminal_perigee"
+            circ = _v51_terminal_perigee_burn(config, r, v)
+            dv_mps = float(circ["dv_mps"])
+            alpha_deg = float(circ["alpha_deg"])
+            v_after = np.asarray(circ["v_plus"], dtype=float)
+        append_burn(
+            index=index,
+            burn_type=burn_type,
+            apsis=apsis,
+            elapsed=elapsed_s,
+            r_pre=r,
+            v_pre=v,
+            dv_mps=float(dv_mps),
+            alpha_deg=float(alpha_deg),
+            v_plus=v_after,
+            target_post_a=float(target_post_a),
+            flight_revolution=flight_revolution,
+        )
+        if index < n_apogee:
+            q_next = int(q_aa[index - 1])
+            elapsed_s, r, v = _v51_next_apsis_cached(config, r, v_after, elapsed_s, "A", q_next, apsis_cache)
+            flight_revolution += q_next
+        elif index == n_apogee:
+            elapsed_s, r, v = _v51_next_apsis_cached(config, r, v_after, elapsed_s, "P", int(q_ap) + 1, apsis_cache)
+            flight_revolution += int(q_ap)
+
+    final = burns[-1]
+    return {
+        "success": True,
+        "q_AA": list(q_aa),
+        "q_AP": int(q_ap),
+        "rp_targets_km": [
+            float(burn.post_a_km * (1.0 - burn.post_e))
+            for burn in burns
+            if burn.burn_type == "front"
+        ],
+        "burns": burns,
+        "terminal": {
+            "a_error_km": final.post_a_km - float(config["target"]["a_km"]),
+            "e_error": final.post_e - float(config["target"]["e"]),
+            "i_error_deg": final.post_i_deg - float(config["target"]["i_deg"]),
+            "lon_error_deg": _wrap180(final.longitude_deg_e - float(config["target"]["lon_degE"])),
+            "total_dv_mps": sum(burn.delta_v_mps for burn in burns),
+            "total_propellant_kg": sum(burn.propellant_kg for burn in burns),
+            "max_total_burn_min": max(burn.total_burn_time_min for burn in burns),
+            "max_raw_window_excess_deg": max(_window_distance(burn.longitude_deg_e, raw_window) for burn in burns),
+            "max_planning_window_excess_deg": max(_window_distance(burn.longitude_deg_e, planning_window) for burn in burns),
+        },
+    }
+
+
+def _v51_refine_yaw_fixed_post_a(
+    config: dict[str, Any],
+    *,
+    first: tuple[float, np.ndarray, np.ndarray, float],
+    best: dict[str, Any],
+) -> dict[str, Any] | None:
+    if minimize is None or not best.get("success") or not _v51_is_feasible(config, best):
+        return None
+    base_burns = list(best.get("burns") or [])
+    if len(base_burns) < 2:
+        return None
+    q_aa = tuple(int(value) for value in best.get("q_AA", []))
+    q_ap = int(best.get("q_AP", 0))
+    if len(q_aa) != max(0, len(base_burns) - 2):
+        return None
+    seed = [float(burn.alpha_deg) for burn in base_burns if burn.burn_type == "front"]
+    target_post_a_values = [float(burn.post_a_km) for burn in base_burns]
+    bounds = _v51_alpha_refinement_bounds(config, base_burns)
+    if len(seed) != len(bounds):
+        return None
+    apsis_cache: dict[tuple[float, tuple[float, ...], tuple[float, ...], str, int], tuple[float, np.ndarray, np.ndarray]] = {}
+
+    def clipped(values: list[float] | np.ndarray) -> list[float]:
+        return [
+            min(max(float(value), low), high)
+            for value, (low, high) in zip(values, bounds)
+        ]
+
+    eval_cache: dict[tuple[float, ...], dict[str, Any]] = {}
+
+    def evaluate(values: list[float] | np.ndarray) -> dict[str, Any]:
+        alphas = clipped(values)
+        key = tuple(round(value, 6) for value in alphas)
+        cached = eval_cache.get(key)
+        if cached is not None:
+            return cached
+        rec = _v51_simulate_fixed_post_a_alpha_candidate(
+            config,
+            first,
+            target_post_a_values,
+            alphas,
+            q_aa,
+            q_ap,
+            apsis_cache=apsis_cache,
+        )
+        eval_cache[key] = rec
+        return rec
+
+    def score(values: list[float] | np.ndarray) -> float:
+        rec = evaluate(values)
+        if not rec.get("success"):
+            return 1.0e18
+        violations = _v51_feasibility_violations(config, rec)
+        violation_sum = sum(value * value for value in violations.values())
+        terminal = rec["terminal"]
+        if violation_sum > 0.0:
+            return 1.0e12 * violation_sum + 1.0e9 + float(terminal["total_propellant_kg"])
+        return float(terminal["total_propellant_kg"])
+
+    current = clipped(seed)
+    current_score = score(current)
+    max_evaluations = max(12, min(24, int(config["hard_constraint_planner"]["local_maxiter"])))
+    for step in (2.0, 1.0, 0.5, 0.25, 0.1):
+        improved = True
+        while improved and len(eval_cache) < max_evaluations:
+            improved = False
+            for index in range(len(current)):
+                if len(eval_cache) >= max_evaluations:
+                    break
+                best_trial = current
+                best_score = current_score
+                for direction in (-1.0, 1.0):
+                    trial = list(current)
+                    trial[index] += direction * step
+                    trial = clipped(trial)
+                    trial_score = score(trial)
+                    if trial_score + 1.0e-7 < best_score:
+                        best_score = trial_score
+                        best_trial = trial
+                if best_trial != current:
+                    current = list(best_trial)
+                    current_score = best_score
+                    improved = True
+    refined = evaluate(current)
+    refined["optimizer"] = {
+        "method": "fixed_post_a_yaw_coordinate",
+        "success": True,
+        "nfev": len(eval_cache),
+    }
+    if not refined.get("success") or not _v51_is_feasible(config, refined):
+        return None
+    base_propellant = float(best["terminal"]["total_propellant_kg"])
+    refined_propellant = float(refined["terminal"]["total_propellant_kg"])
+    if refined_propellant >= base_propellant - 1.0e-6:
+        return None
+    refined["yaw_refinement"] = {
+        "enabled": True,
+        "method": "fixed_post_a_yaw_coordinate",
+        "base_propellant_kg": base_propellant,
+        "refined_propellant_kg": refined_propellant,
+        "saved_propellant_kg": base_propellant - refined_propellant,
+        "base_alpha_deg": [float(burn.alpha_deg) for burn in base_burns],
+        "refined_alpha_deg": [float(burn.alpha_deg) for burn in refined["burns"]],
+        "target_post_a_km": target_post_a_values,
+        "nfev": len(eval_cache),
+    }
+    return refined
 
 
 def _v51_feasibility_violations(config: dict[str, Any], rec: dict[str, Any]) -> dict[str, float]:
