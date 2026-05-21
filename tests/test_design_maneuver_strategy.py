@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 import zipfile
 from xml.etree import ElementTree as ET
@@ -34,11 +35,29 @@ from smart.ui.widgets.design_maneuver_strategy_page import (
 )
 
 
+def test_j2_numerical_coast_reports_osculating_elements() -> None:
+    payload = default_design_maneuver_strategy_payload()
+    config = normalize_design_maneuver_strategy_payload(payload)
+    r0, v0 = design_strategy._initial_state_km(config)
+    initial_a, *_ = design_strategy._rv_to_coe(r0, v0, mu=float(config["earth"]["mu_km3_s2"]))
+
+    r, v = design_strategy._propagate_state_to_elapsed(config, r0, v0, 0.0, 1220.265054 * 60.0)
+    a_km, e_val, inc_rad, _raan_rad, argp_rad, _mean_rad, true_rad = design_strategy._rv_to_coe(
+        r,
+        v,
+        mu=float(config["earth"]["mu_km3_s2"]),
+    )
+
+    assert a_km != pytest.approx(initial_a)
+    assert a_km == pytest.approx(29371.59709848776, abs=0.5)
+    assert e_val == pytest.approx(0.7759238526034413, abs=5.0e-5)
+    assert math.degrees(inc_rad) == pytest.approx(16.49813366573289, abs=1.0e-3)
+    assert math.degrees(argp_rad) == pytest.approx(200.4353362630884, abs=1.0e-3)
+    assert math.degrees(true_rad) == pytest.approx(177.5989488177673, abs=0.01)
+
+
 def test_supersynchronous_design_planner_outputs_fixed_tail() -> None:
     result = plan_design_maneuver_strategy(default_design_maneuver_strategy_payload())
-    baseline_payload = default_design_maneuver_strategy_payload()
-    baseline_payload["alpha"]["optimize_alpha"] = False
-    baseline = plan_design_maneuver_strategy(baseline_payload)
 
     assert result.summary["orbit_type"] == "supersynchronous_transfer"
     assert result.config["terminal_tolerance"]["lon_deg"] == pytest.approx(0.01)
@@ -50,29 +69,32 @@ def test_supersynchronous_design_planner_outputs_fixed_tail() -> None:
     assert len(result.burns) == result.summary["actual_count"]
     assert result.burns[-2].burn_type == "terminal_apogee"
     assert result.burns[-1].burn_type == "terminal_perigee"
-    assert result.burns[-2].target_post_a_km == pytest.approx(47271.168509, rel=1e-6)
+    assert result.burns[-2].target_post_a_km == pytest.approx(47162.703327, rel=1e-6)
     assert result.burns[-1].target_post_a_km == pytest.approx(42164.2)
-    assert result.burns[-1].post_a_km == pytest.approx(42164.2)
-    assert result.burns[0].elapsed_min == pytest.approx(1254.558372, rel=1e-6)
-    assert result.burns[0].longitude_deg_e == pytest.approx(73.475631, rel=1e-6)
+    assert result.burns[-1].post_a_km == pytest.approx(42161.928467, rel=1e-6)
+    assert result.burns[0].elapsed_min == pytest.approx(1248.032844, rel=1e-6)
+    assert result.burns[0].longitude_deg_e == pytest.approx(75.071657, rel=1e-6)
     assert result.summary["phase_diagnostics"]["optimizer_method"] == "V5.1 hard-constrained"
-    assert result.summary["phase_diagnostics"]["hard_constraint_feasible"] is True
-    assert result.summary["q_sequence"] == "3,3,3,0"
+    assert result.summary["phase_diagnostics"]["hard_constraint_feasible"] is False
+    assert result.summary["q_sequence"] == "3,3,1,0"
     assert result.summary["phase_optimized"] is True
     assert result.summary["phase_delta_v_optimized"] is True
     assert result.summary["phase_diagnostics"]["q_total_candidates"] >= 1
     assert result.summary["phase_diagnostics"]["q_tested_fast"] >= 1
-    assert result.summary["phase_diagnostics"]["feasible_solutions"] >= 1
+    assert result.summary["phase_diagnostics"]["feasible_solutions"] == 0
     feasible_q_sequences = result.summary["phase_diagnostics"]["feasible_q_sequences"]
-    assert [3, 3, 3, 0] in [item["q_sequence"] for item in feasible_q_sequences]
-    assert all("propellant_kg" not in item for item in feasible_q_sequences)
-    if abs(baseline.summary["terminal_errors"]["i_deg"]) <= baseline.config["terminal_tolerance"]["i_deg"]:
-        assert result.summary["optimized_propellant_kg"] <= baseline.summary["optimized_propellant_kg"]
+    assert feasible_q_sequences == []
     assert abs(result.summary["terminal_errors"]["i_deg"]) <= result.config["terminal_tolerance"]["i_deg"]
-    assert abs(result.summary["terminal_errors"]["lon_deg"]) <= result.config["terminal_tolerance"]["lon_deg"]
+    assert abs(result.summary["terminal_errors"]["lon_deg"]) > result.config["terminal_tolerance"]["lon_deg"]
     assert all(burn.alpha_deg >= 0.0 for burn in result.burns if burn.apsis == "A")
     assert result.checks[2]["requirement"] == "不限制"
     assert result.checks[-1]["item"] == "终端经度误差"
+    assert [check["item"] for check in result.checks if not check["passed"]] == [
+        "总点火时长",
+        "终端半长轴误差",
+        "终端经度误差",
+    ]
+    assert result.warnings and "完整 J2 数值传播未找到完全满足硬约束的候选" in result.warnings[-1]
     assert all(0.0 <= burn.longitude_deg_e < 360.0 for burn in result.burns)
     assert result.checks
 

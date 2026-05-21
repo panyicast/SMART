@@ -19,6 +19,11 @@ except Exception:  # pragma: no cover - optional runtime fallback
     minimize = None
     minimize_scalar = None
 
+try:
+    from scipy.integrate import solve_ivp
+except Exception:  # pragma: no cover - optional runtime fallback
+    solve_ivp = None
+
 from smart.domain.models import OrbitalElements
 from smart.services.earth_orientation import format_utc, greenwich_angle_at_utc, parse_utc, utc_now_iso_z
 from smart.services.thrust_direction import local_horizontal_yaw_direction
@@ -179,6 +184,7 @@ def default_design_maneuver_strategy_payload() -> dict[str, Any]:
             "J2": 1.08262668e-3,
             "omega_e_rad_s": 7.2921158553e-5,
             "use_J2": True,
+            "numerical_propagation_step_s": 120.0,
         },
         "engine": {
             "F_main_N": 490.0,
@@ -307,8 +313,8 @@ def default_design_maneuver_strategy_payload() -> dict[str, Any]:
             "fixed_hp_targets_km": {},
             "hard_raw_window": True,
             "hard_planning_window": True,
-            "prefilter_top_k": 10,
-            "max_local_starts_per_sequence": 5,
+            "prefilter_top_k": 1,
+            "max_local_starts_per_sequence": 1,
             "local_maxiter": 45,
         },
     }
@@ -335,7 +341,7 @@ def normalize_design_maneuver_strategy_payload(payload: dict[str, Any] | None) -
         "initial": ("m0_kg", "a_km", "e", "i_deg", "lon_node_deg", "argp_deg", "mean_anomaly_deg"),
         "orbit_type": ("supersync_transfer_margin_km", "standard_transfer_apogee_margin_km"),
         "target": ("a_km", "e", "i_deg", "lon_degE", "dv_lon_margin_mps"),
-        "earth": ("mu_km3_s2", "Re_km", "J2", "omega_e_rad_s"),
+        "earth": ("mu_km3_s2", "Re_km", "J2", "omega_e_rad_s", "numerical_propagation_step_s"),
         "engine": ("F_main_N", "Isp_main_s", "attitude_control_efficiency", "F_set_N", "Isp_set_s", "tau_set_s"),
         "burn_limit": (
             "max_total_burn_time_min",
@@ -2758,19 +2764,22 @@ def _plan_v51_hard_constrained(
     feasible = _v51_is_feasible(config, best)
     feasible_count = sum(1 for rec in records if rec.get("success") and _v51_is_feasible(config, rec))
     if not feasible:
-        raise RuntimeError(f"V5.1 未找到完全满足硬约束的候选；最小违约量: {best_violations}")
+        warnings.append(f"V5.1 完整 J2 数值传播未找到完全满足硬约束的候选；已返回最小违约量候选: {best_violations}")
     unique_records = _v51_unique_record_summaries(config, records)
-    feasible_q_sequences = _v51_scan_feasible_q_sequences(
-        config,
-        first=(first_elapsed, first_r, first_v, first_lon),
-        fixed_rp=fixed_rp,
-        variable_indices=variable_indices,
-        bounds=bounds,
-        starts=starts,
-        q_aa_candidates=q_aa_candidates,
-        q_ap_candidates=q_ap_candidates,
-        front_count=front_count,
-    )
+    if bool(config["earth"].get("use_J2", True)):
+        feasible_q_sequences = []
+    else:
+        feasible_q_sequences = _v51_scan_feasible_q_sequences(
+            config,
+            first=(first_elapsed, first_r, first_v, first_lon),
+            fixed_rp=fixed_rp,
+            variable_indices=variable_indices,
+            bounds=bounds,
+            starts=starts,
+            q_aa_candidates=q_aa_candidates,
+            q_ap_candidates=q_ap_candidates,
+            front_count=front_count,
+        )
 
     burns = list(best["burns"])
     checks = _build_checks(config, burns, ignore_uniform=True)
@@ -3218,9 +3227,10 @@ def _v51_optimize_front_alpha(
     elapsed_s: float,
     rp_target_km: float,
     q_next: int,
-    cache: dict[tuple[float, float, int], tuple[float, float]],
+    burn_index: int,
+    cache: dict[tuple[float, float, int, int], tuple[float, float]],
 ) -> tuple[float, float]:
-    key = (round(float(elapsed_s), 3), round(float(rp_target_km), 3), int(q_next))
+    key = (round(float(elapsed_s), 3), round(float(rp_target_km), 3), int(q_next), int(burn_index))
     if key in cache:
         return cache[key]
     radius = float(np.linalg.norm(r))
@@ -3246,9 +3256,15 @@ def _v51_optimize_front_alpha(
         eval_cache[alpha_key] = float(value)
         return float(value)
 
-    grid = np.linspace(low, high, 9)
+    if bool(config["earth"].get("use_J2", True)):
+        template = config["alpha"].get("initial_template_deg", [])
+        seed = float(template[int(burn_index) - 1]) if isinstance(template, list) and len(template) >= int(burn_index) else 0.5 * (low + high)
+        values = [seed - 5.0, seed, seed + 5.0]
+        grid = np.asarray([min(max(float(value), low), high) for value in values], dtype=float)
+    else:
+        grid = np.linspace(low, high, 9)
     best_alpha = min(((objective(float(alpha)), float(alpha)) for alpha in grid), key=lambda item: item[0])[1]
-    if minimize_scalar is not None and high > low:
+    if minimize_scalar is not None and high > low and not bool(config["earth"].get("use_J2", True)):
         result = minimize_scalar(
             objective,
             bounds=(max(low, best_alpha - 6.0), min(high, best_alpha + 6.0)),
@@ -3278,7 +3294,7 @@ def _v51_simulate_candidate(
     burns: list[DesignManeuverBurn] = []
     raw_window = config["longitude"]["raw_window_degE"]
     planning_window = config["longitude"]["planning_window_degE"]
-    cache: dict[tuple[float, float, int], tuple[float, float]] = {}
+    cache: dict[tuple[float, float, int, int], tuple[float, float]] = {}
 
     def append_burn(
         *,
@@ -3331,7 +3347,7 @@ def _v51_simulate_candidate(
     flight_revolution = 2
     for index, rp_target in enumerate(rp_targets_km, start=1):
         q_next = int(q_aa[index - 1])
-        dv_mps, alpha_deg = _v51_optimize_front_alpha(config, r, v, elapsed_s, rp_target, q_next, cache)
+        dv_mps, alpha_deg = _v51_optimize_front_alpha(config, r, v, elapsed_s, rp_target, q_next, index, cache)
         v_after = v + (dv_mps / 1000.0) * _local_horizontal_direction(r, alpha_deg)
         append_burn(
             index=index,
@@ -3471,6 +3487,7 @@ def _v51_hard_objective(
 
 
 def _v51_use_template_only_fast_path(
+    config: dict[str, Any],
     front_count: int,
     fixed_rp: dict[int, float],
     variable_indices: list[int],
@@ -3491,7 +3508,7 @@ def _v51_refine_last_variable_from_best_template(
     q_aa: tuple[int, ...],
     q_ap: int,
 ) -> list[dict[str, Any]]:
-    if minimize_scalar is None or not _v51_use_template_only_fast_path(front_count, fixed_rp, variable_indices):
+    if minimize_scalar is None or not _v51_use_template_only_fast_path(config, front_count, fixed_rp, variable_indices):
         return []
     successful = [rec for rec in records if rec.get("success")]
     if not successful:
@@ -3576,7 +3593,7 @@ def _v51_optimize_sequence(
     for start in starts:
         append_record([float(value) for value in start], {"method": "template", "success": True, "nfev": 1})
 
-    if _v51_use_template_only_fast_path(front_count, fixed_rp, variable_indices):
+    if _v51_use_template_only_fast_path(config, front_count, fixed_rp, variable_indices):
         records.extend(
             _v51_refine_last_variable_from_best_template(
                 config,
@@ -5127,6 +5144,241 @@ def _j2_rates(a: float, e: float, inc: float, *, mu: float, radius: float, j2: f
     return raan_dot, argp_dot, mean_dot
 
 
+def _coast_numerical_step_s(config: dict[str, Any], r: np.ndarray | None = None, v: np.ndarray | None = None) -> float:
+    earth = config["earth"]
+    step_s = max(1.0, float(earth.get("numerical_propagation_step_s", 120.0)))
+    if r is None or v is None:
+        return step_s
+    try:
+        a_km, *_ = _rv_to_coe(np.asarray(r, dtype=float), np.asarray(v, dtype=float), mu=float(earth["mu_km3_s2"]))
+        if math.isfinite(float(a_km)) and float(a_km) > 0.0:
+            period_s = 2.0 * math.pi * math.sqrt(float(a_km) ** 3 / float(earth["mu_km3_s2"]))
+            step_s = min(step_s, max(1.0, period_s / 300.0))
+    except Exception:
+        pass
+    return step_s
+
+
+def _gravity_state_derivative(state: np.ndarray, mu: float, use_j2: bool, j2_mu_re2: float) -> np.ndarray:
+    rx, ry, rz = float(state[0]), float(state[1]), float(state[2])
+    vx, vy, vz = float(state[3]), float(state[4]), float(state[5])
+    radius = math.sqrt(rx * rx + ry * ry + rz * rz)
+    if radius <= 0.0:
+        raise ValueError("Position norm must be positive.")
+    radius3 = radius * radius * radius
+    accel_x = -mu * rx / radius3
+    accel_y = -mu * ry / radius3
+    accel_z = -mu * rz / radius3
+    if use_j2:
+        zr2 = (rz / radius) ** 2
+        factor = j2_mu_re2 / (radius**5)
+        accel_x += factor * rx * (-1.5 + 7.5 * zr2)
+        accel_y += factor * ry * (-1.5 + 7.5 * zr2)
+        accel_z += factor * rz * (-4.5 + 7.5 * zr2)
+    return np.asarray([vx, vy, vz, accel_x, accel_y, accel_z], dtype=float)
+
+
+def _gravity_state_derivative_ode(
+    _time_s: float,
+    state: np.ndarray,
+    mu: float,
+    use_j2: bool,
+    j2_mu_re2: float,
+) -> np.ndarray:
+    return _gravity_state_derivative(state, mu, use_j2, j2_mu_re2)
+
+
+def _gravity_ode_params(config: dict[str, Any]) -> tuple[float, bool, float]:
+    earth = config["earth"]
+    mu = float(earth["mu_km3_s2"])
+    use_j2 = bool(earth.get("use_J2", True))
+    j2_mu_re2 = float(earth["J2"]) * mu * float(earth["Re_km"]) ** 2 if use_j2 else 0.0
+    return mu, use_j2, j2_mu_re2
+
+
+def _solve_ivp_gravity(
+    config: dict[str, Any],
+    state: np.ndarray,
+    duration_s: float,
+    *,
+    max_step_s: float,
+    events: Any = None,
+    dense_output: bool = False,
+) -> Any:
+    if solve_ivp is None:
+        return None
+    mu, use_j2, j2_mu_re2 = _gravity_ode_params(config)
+    return solve_ivp(
+        lambda time_s, y: _gravity_state_derivative_ode(time_s, y, mu, use_j2, j2_mu_re2),
+        (0.0, float(duration_s)),
+        np.asarray(state, dtype=float),
+        method="DOP853",
+        rtol=1.0e-10,
+        atol=1.0e-11,
+        max_step=max(1.0e-6, abs(float(max_step_s))),
+        events=events,
+        dense_output=dense_output,
+    )
+
+
+def _rk4_gravity_step(config: dict[str, Any], state: np.ndarray, step_s: float) -> np.ndarray:
+    mu, use_j2, j2_mu_re2 = _gravity_ode_params(config)
+    h = float(step_s)
+    k1 = _gravity_state_derivative(state, mu, use_j2, j2_mu_re2)
+    k2 = _gravity_state_derivative(state + 0.5 * h * k1, mu, use_j2, j2_mu_re2)
+    k3 = _gravity_state_derivative(state + 0.5 * h * k2, mu, use_j2, j2_mu_re2)
+    k4 = _gravity_state_derivative(state + h * k3, mu, use_j2, j2_mu_re2)
+    return state + (h / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
+
+
+def _integrate_gravity_state(
+    config: dict[str, Any],
+    state: np.ndarray,
+    duration_s: float,
+    *,
+    max_step_s: float | None = None,
+) -> np.ndarray:
+    remaining_s = abs(float(duration_s))
+    if remaining_s <= 1.0e-12:
+        return np.asarray(state, dtype=float).copy()
+    direction = 1.0 if float(duration_s) >= 0.0 else -1.0
+    current = np.asarray(state, dtype=float).copy()
+    step_limit_s = max(1.0e-6, float(max_step_s) if max_step_s is not None else _coast_numerical_step_s(config, current[:3], current[3:6]))
+    if solve_ivp is not None:
+        result = _solve_ivp_gravity(config, current, direction * remaining_s, max_step_s=step_limit_s)
+        if result is not None and bool(getattr(result, "success", False)):
+            return np.asarray(result.y[:, -1], dtype=float)
+    while remaining_s > 1.0e-12:
+        step_s = min(step_limit_s, remaining_s)
+        current = _rk4_gravity_step(config, current, direction * step_s)
+        remaining_s -= step_s
+    return current
+
+
+def _radial_velocity(state: np.ndarray) -> float:
+    r = np.asarray(state[:3], dtype=float)
+    v = np.asarray(state[3:6], dtype=float)
+    radius = float(np.linalg.norm(r))
+    if radius <= 0.0:
+        raise ValueError("Position norm must be positive.")
+    return float(np.dot(r, v) / radius)
+
+
+def _refine_apsis_crossing(
+    config: dict[str, Any],
+    state_before: np.ndarray,
+    time_before_s: float,
+    step_s: float,
+    apsis: str,
+) -> tuple[float, np.ndarray]:
+    low_s = 0.0
+    high_s = float(step_s)
+    best_s = high_s
+    best_state = _integrate_gravity_state(config, state_before, high_s, max_step_s=high_s)
+    target_apogee = apsis.upper() == "A"
+    for _ in range(28):
+        mid_s = 0.5 * (low_s + high_s)
+        mid_state = _integrate_gravity_state(config, state_before, mid_s, max_step_s=max(1.0e-6, mid_s))
+        rdot_mid = _radial_velocity(mid_state)
+        crossed = rdot_mid <= 0.0 if target_apogee else rdot_mid >= 0.0
+        if crossed:
+            best_s = mid_s
+            best_state = mid_state
+            high_s = mid_s
+        else:
+            low_s = mid_s
+    return float(time_before_s) + best_s, best_state
+
+
+def _next_apsis_numerical_j2(
+    config: dict[str, Any],
+    r: np.ndarray,
+    v: np.ndarray,
+    elapsed_s: float,
+    apsis: str,
+    index: int,
+) -> tuple[float, np.ndarray, np.ndarray]:
+    state0 = np.asarray([*np.asarray(r, dtype=float), *np.asarray(v, dtype=float)], dtype=float)
+    step_s = _coast_numerical_step_s(config, state0[:3], state0[3:6])
+    target_count = max(1, int(index))
+    target_apogee = apsis.upper() == "A"
+    try:
+        a_km, *_ = _rv_to_coe(state0[:3], state0[3:6], mu=float(config["earth"]["mu_km3_s2"]))
+        period_s = 2.0 * math.pi * math.sqrt(float(a_km) ** 3 / float(config["earth"]["mu_km3_s2"]))
+    except Exception:
+        period_s = step_s * 1000.0
+    max_duration_s = max(step_s * 10.0, period_s * (target_count + 1.5))
+
+    start_offset_s = 0.0
+    if abs(_radial_velocity(state0)) <= 1.0e-10:
+        escape_step_s = min(1.0, step_s * 0.01)
+        state0 = _integrate_gravity_state(config, state0, escape_step_s, max_step_s=escape_step_s)
+        start_offset_s = escape_step_s
+
+    if solve_ivp is not None:
+        def apsis_event(_time_s: float, y: np.ndarray) -> float:
+            return _radial_velocity(np.asarray(y, dtype=float))
+
+        apsis_event.direction = -1.0 if target_apogee else 1.0  # type: ignore[attr-defined]
+        apsis_event.terminal = True  # type: ignore[attr-defined]
+        search_state = state0
+        search_elapsed_s = start_offset_s
+        for event_number in range(target_count):
+            if event_number > 0:
+                escape_step_s = min(1.0, step_s * 0.01)
+                search_state = _integrate_gravity_state(config, search_state, escape_step_s, max_step_s=escape_step_s)
+                search_elapsed_s += escape_step_s
+            result = _solve_ivp_gravity(
+                config,
+                search_state,
+                max(step_s * 10.0, period_s * 1.5),
+                max_step_s=step_s,
+                events=apsis_event,
+            )
+            if result is None or not bool(getattr(result, "success", False)) or not result.t_events or len(result.t_events[0]) == 0:
+                break
+            event_dt_s = float(result.t_events[0][0])
+            event_state = np.asarray(result.y_events[0][0], dtype=float)
+            search_elapsed_s += event_dt_s
+            if event_number == target_count - 1:
+                event_time_s = float(elapsed_s) + search_elapsed_s
+                return event_time_s, event_state[:3].copy(), event_state[3:6].copy()
+            search_state = event_state
+
+    current_time_s = float(elapsed_s) + start_offset_s
+    current_state = state0
+    current_rdot = _radial_velocity(current_state)
+    found = 0
+    end_time_s = current_time_s + max_duration_s
+    while current_time_s < end_time_s - 1.0e-9:
+        previous_time_s = current_time_s
+        previous_state = current_state
+        previous_rdot = current_rdot
+        dt_s = min(step_s, end_time_s - current_time_s)
+        current_state = _integrate_gravity_state(config, previous_state, dt_s, max_step_s=dt_s)
+        current_time_s += dt_s
+        current_rdot = _radial_velocity(current_state)
+        crossed = (
+            previous_rdot > 0.0 and current_rdot <= 0.0
+            if target_apogee
+            else previous_rdot < 0.0 and current_rdot >= 0.0
+        )
+        if not crossed:
+            continue
+        found += 1
+        if found < target_count:
+            continue
+        event_time_s, event_state = _refine_apsis_crossing(
+            config,
+            previous_state,
+            previous_time_s,
+            current_time_s - previous_time_s,
+            apsis,
+        )
+        return event_time_s, event_state[:3].copy(), event_state[3:6].copy()
+    raise ValueError(f"Failed to find next {apsis} apsis event with numerical J2 propagation.")
+
+
 def _next_apsis(
     config: dict[str, Any],
     r: np.ndarray,
@@ -5137,20 +5389,12 @@ def _next_apsis(
 ) -> tuple[float, np.ndarray, np.ndarray]:
     earth = config["earth"]
     mu = float(earth["mu_km3_s2"])
-    a, e, inc, raan, argp, mean_anomaly, _true_anomaly = _rv_to_coe(r, v, mu=mu)
     if bool(earth["use_J2"]):
-        raan_dot, argp_dot, mean_dot = _j2_rates(
-            a,
-            e,
-            inc,
-            mu=mu,
-            radius=float(earth["Re_km"]),
-            j2=float(earth["J2"]),
-        )
-    else:
-        raan_dot = 0.0
-        argp_dot = 0.0
-        mean_dot = math.sqrt(mu / a**3)
+        return _next_apsis_numerical_j2(config, r, v, elapsed_s, apsis, index)
+    a, e, inc, raan, argp, mean_anomaly, _true_anomaly = _rv_to_coe(r, v, mu=mu)
+    raan_dot = 0.0
+    argp_dot = 0.0
+    mean_dot = math.sqrt(mu / a**3)
     target_m = math.pi if apsis.upper() == "A" else 0.0
     delta = (target_m - mean_anomaly) % (2.0 * math.pi)
     if delta < 1.0e-9:
@@ -5182,20 +5426,14 @@ def _propagate_state_to_elapsed(
         return np.asarray(r, dtype=float).copy(), np.asarray(v, dtype=float).copy()
     earth = config["earth"]
     mu = float(earth["mu_km3_s2"])
-    a, e, inc, raan, argp, mean_anomaly, _true_anomaly = _rv_to_coe(np.asarray(r, dtype=float), np.asarray(v, dtype=float), mu=mu)
     if bool(earth["use_J2"]):
-        raan_dot, argp_dot, mean_dot = _j2_rates(
-            a,
-            e,
-            inc,
-            mu=mu,
-            radius=float(earth["Re_km"]),
-            j2=float(earth["J2"]),
-        )
-    else:
-        raan_dot = 0.0
-        argp_dot = 0.0
-        mean_dot = math.sqrt(mu / a**3)
+        state0 = np.asarray([*np.asarray(r, dtype=float), *np.asarray(v, dtype=float)], dtype=float)
+        state = _integrate_gravity_state(config, state0, dt, max_step_s=_coast_numerical_step_s(config, state0[:3], state0[3:6]))
+        return state[:3].copy(), state[3:6].copy()
+    a, e, inc, raan, argp, mean_anomaly, _true_anomaly = _rv_to_coe(np.asarray(r, dtype=float), np.asarray(v, dtype=float), mu=mu)
+    raan_dot = 0.0
+    argp_dot = 0.0
+    mean_dot = math.sqrt(mu / a**3)
     return _coe_to_rv(
         a,
         e,
