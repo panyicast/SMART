@@ -1940,53 +1940,77 @@ def _rk4_low_thrust_step(
     thrust_n: float,
     isp_s: float,
 ) -> np.ndarray:
-    def dynamics(t_local: float, state_local: np.ndarray) -> np.ndarray:
-        return _low_thrust_state_derivative(config, t_local, state_local, yaw_angle_deg, thrust_n, isp_s)
+    yaw_rad = math.radians(float(yaw_angle_deg))
+    yaw_cos = math.cos(yaw_rad)
+    yaw_sin = math.sin(yaw_rad)
+    earth = config["earth"]
+    mu = float(earth["mu_km3_s2"])
+    use_j2 = bool(earth.get("use_J2", True))
+    j2_mu_re2 = float(earth["J2"]) * mu * float(earth["Re_km"]) ** 2 if use_j2 else 0.0
 
     h = float(step_s)
-    k1 = dynamics(time_s, state)
-    k2 = dynamics(time_s + 0.5 * h, state + 0.5 * h * k1)
-    k3 = dynamics(time_s + 0.5 * h, state + 0.5 * h * k2)
-    k4 = dynamics(time_s + h, state + h * k3)
+    k1 = _low_thrust_state_derivative(state, yaw_cos, yaw_sin, thrust_n, isp_s, mu, use_j2, j2_mu_re2)
+    k2 = _low_thrust_state_derivative(
+        state + 0.5 * h * k1,
+        yaw_cos,
+        yaw_sin,
+        thrust_n,
+        isp_s,
+        mu,
+        use_j2,
+        j2_mu_re2,
+    )
+    k3 = _low_thrust_state_derivative(
+        state + 0.5 * h * k2,
+        yaw_cos,
+        yaw_sin,
+        thrust_n,
+        isp_s,
+        mu,
+        use_j2,
+        j2_mu_re2,
+    )
+    k4 = _low_thrust_state_derivative(state + h * k3, yaw_cos, yaw_sin, thrust_n, isp_s, mu, use_j2, j2_mu_re2)
     next_state = state + (h / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
     next_state[6] = max(1.0, float(next_state[6]))
     return next_state
 
 
 def _low_thrust_state_derivative(
-    config: dict[str, Any],
-    _time_s: float,
     state: np.ndarray,
-    yaw_angle_deg: float,
+    yaw_cos: float,
+    yaw_sin: float,
     thrust_n: float,
     isp_s: float,
+    mu: float,
+    use_j2: bool,
+    j2_mu_re2: float,
 ) -> np.ndarray:
-    r = np.asarray(state[:3], dtype=float)
-    v = np.asarray(state[3:6], dtype=float)
+    rx, ry, rz = float(state[0]), float(state[1]), float(state[2])
+    vx, vy, vz = float(state[3]), float(state[4]), float(state[5])
     mass_kg = max(1.0, float(state[6]))
-    radius = float(np.linalg.norm(r))
+    radius = math.sqrt(rx * rx + ry * ry + rz * rz)
     if radius <= 0.0:
         raise ValueError("Position norm must be positive.")
-    earth = config["earth"]
-    mu = float(earth["mu_km3_s2"])
-    accel = -mu * r / (radius**3)
-    if bool(earth.get("use_J2", True)):
-        z = float(r[2])
-        zr2 = (z / radius) ** 2
-        factor = float(earth["J2"]) * mu * float(earth["Re_km"]) ** 2 / (radius**5)
-        accel += factor * np.asarray(
-            [
-                float(r[0]) * (-1.5 + 7.5 * zr2),
-                float(r[1]) * (-1.5 + 7.5 * zr2),
-                z * (-4.5 + 7.5 * zr2),
-            ],
-            dtype=float,
-        )
+    radius3 = radius * radius * radius
+    accel_x = -mu * rx / radius3
+    accel_y = -mu * ry / radius3
+    accel_z = -mu * rz / radius3
+    if use_j2:
+        zr2 = (rz / radius) ** 2
+        factor = j2_mu_re2 / (radius**5)
+        accel_x += factor * rx * (-1.5 + 7.5 * zr2)
+        accel_y += factor * ry * (-1.5 + 7.5 * zr2)
+        accel_z += factor * rz * (-4.5 + 7.5 * zr2)
     mdot = 0.0
     if thrust_n > 0.0:
-        accel += (float(thrust_n) / mass_kg / 1000.0) * _local_horizontal_direction_fast(r, yaw_angle_deg)
+        thrust_accel = float(thrust_n) / mass_kg / 1000.0
+        thrust_x, thrust_y, thrust_z = _local_horizontal_direction_components(rx, ry, rz, yaw_cos, yaw_sin)
+        accel_x += thrust_accel * thrust_x
+        accel_y += thrust_accel * thrust_y
+        accel_z += thrust_accel * thrust_z
         mdot = -float(thrust_n) / (max(1.0, float(isp_s)) * G0_M_S2)
-    return np.asarray([v[0], v[1], v[2], accel[0], accel[1], accel[2], mdot], dtype=float)
+    return np.asarray([vx, vy, vz, accel_x, accel_y, accel_z, mdot], dtype=float)
 
 
 def _semi_major_axis_from_rv(r: np.ndarray, v: np.ndarray, mu: float) -> float:
@@ -1999,7 +2023,44 @@ def _semi_major_axis_from_rv(r: np.ndarray, v: np.ndarray, mu: float) -> float:
 
 
 def _local_horizontal_direction_fast(r: np.ndarray, alpha_deg: float) -> np.ndarray:
-    return local_horizontal_yaw_direction(r, alpha_deg)
+    x, y, z = float(r[0]), float(r[1]), float(r[2])
+    yaw_rad = math.radians(float(alpha_deg))
+    direction = _local_horizontal_direction_components(x, y, z, math.cos(yaw_rad), math.sin(yaw_rad))
+    return np.asarray(direction, dtype=float)
+
+
+def _local_horizontal_direction_components(
+    x: float,
+    y: float,
+    z: float,
+    yaw_cos: float,
+    yaw_sin: float,
+) -> tuple[float, float, float]:
+    xy_norm = math.hypot(x, y)
+    if xy_norm <= 1.0e-12:
+        east_x, east_y, east_z = 0.0, 1.0, 0.0
+    else:
+        east_x, east_y, east_z = -y / xy_norm, x / xy_norm, 0.0
+
+    r_norm = math.sqrt(x * x + y * y + z * z)
+    inv_r2 = 1.0 / max(1.0e-24, r_norm * r_norm)
+    north_x = -z * x * inv_r2
+    north_y = -z * y * inv_r2
+    north_z = 1.0 - z * z * inv_r2
+    north_norm = math.sqrt(north_x * north_x + north_y * north_y + north_z * north_z)
+    if north_norm <= 1.0e-12:
+        north_x, north_y, north_z = -east_y, east_x, 0.0
+        north_norm = math.sqrt(north_x * north_x + north_y * north_y + north_z * north_z)
+    inv_north_norm = 1.0 / north_norm
+    north_x *= inv_north_norm
+    north_y *= inv_north_norm
+    north_z *= inv_north_norm
+
+    return (
+        yaw_cos * east_x - yaw_sin * north_x,
+        yaw_cos * east_y - yaw_sin * north_y,
+        yaw_cos * east_z - yaw_sin * north_z,
+    )
 
 
 def _refine_low_thrust_metric_crossing(

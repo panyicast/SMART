@@ -514,6 +514,10 @@
 - 提交：`692f6ea`
 - 影响文件：`src/smart/services/design_continuous_thrust_optimizer.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
 
-## 2026-05-21T11:41:10+08:00 | Freeze continuous thrust optimization rules
-- 提交：`本次提交`
+## 2026-05-21T11:41:15+08:00 | Freeze continuous thrust optimization rules
+- 提交：`e355e34`
 - 影响文件：`src/smart/services/design_continuous_thrust_optimizer.py`、`tests/test_design_maneuver_strategy.py`、`doc/design_continuous_thrust_parameter_optimization_algorithm.md`、`HANDOFF.md`。
+
+## 2026-05-21T11:53:41+08:00 | Optimize continuous thrust RK4 hot path
+- 提交：`本次提交`
+- 影响文件：`src/smart/services/design_maneuver_strategy.py`、`HANDOFF.md`。
