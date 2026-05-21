@@ -33,7 +33,8 @@
     "Re_km": 6378.137,
     "J2": 0.00108262668,
     "omega_e_rad_s": 7.2921158553e-05,
-    "use_J2": true
+    "use_J2": true,
+    "numerical_propagation_step_s": 120.0
   },
   "engine": {
     "F_main_N": 490.0,
