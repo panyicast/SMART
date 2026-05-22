@@ -578,6 +578,10 @@
 - 提交：`c129e6b`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
 
-## 2026-05-22T00:22:17+08:00 | Use finer pulse yaw step
-- 提交：`本次提交`
+## 2026-05-22T00:22:22+08:00 | Use finer pulse yaw step
+- 提交：`ace1324`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-22T23:01:23+08:00 | Fix continuous thrust tail final-step polish
+- 提交：`本次提交`
+- 影响文件：`src/smart/services/design_continuous_thrust_optimizer.py`、`HANDOFF.md`。

@@ -258,7 +258,7 @@ def _optimize_tail_for_longitude_and_eccentricity(
     *,
     integration_step_s: float,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None, float]:
-    cache: dict[tuple[float, float], tuple[dict[str, Any], dict[str, Any], float] | None] = {}
+    cache: dict[tuple[float, float, float], tuple[dict[str, Any], dict[str, Any], float] | None] = {}
     target_a_km = float(config["target"]["a_km"])
     search_integration_step_s = max(float(integration_step_s), 120.0)
 
@@ -269,7 +269,7 @@ def _optimize_tail_for_longitude_and_eccentricity(
         step_s: float = search_integration_step_s,
         use_cache: bool = True,
     ) -> tuple[dict[str, Any], dict[str, Any], float] | None:
-        key = (round(float(offset_min), 4), round(float(yaw_delta_deg), 4))
+        key = (round(float(offset_min), 4), round(float(yaw_delta_deg), 4), round(float(step_s), 4))
         if use_cache and key in cache:
             return cache[key]
         mv4_start_s = max(float(elapsed_s), float(mv4_center_start_s) + float(offset_min) * 60.0)
@@ -313,8 +313,13 @@ def _optimize_tail_for_longitude_and_eccentricity(
             cache[key] = result
         return result
 
-    def score(offset_min: float, yaw_delta_deg: float) -> float:
-        item = evaluate(offset_min, yaw_delta_deg)
+    def score(
+        offset_min: float,
+        yaw_delta_deg: float,
+        *,
+        step_s: float = search_integration_step_s,
+    ) -> float:
+        item = evaluate(offset_min, yaw_delta_deg, step_s=step_s)
         if item is None:
             return 1.0e12
         mv4_candidate, final_candidate, _final_center_start_s = item
@@ -352,10 +357,41 @@ def _optimize_tail_for_longitude_and_eccentricity(
         for yaw_delta_deg in fine_yaws:
             if score(offset_min, yaw_delta_deg) < score(best_x[0], best_x[1]):
                 best_x = (offset_min, yaw_delta_deg)
+    best_x = _polish_tail_candidate_with_final_step(
+        lambda offset_min, yaw_delta_deg: score(offset_min, yaw_delta_deg, step_s=integration_step_s),
+        best_x,
+    )
     best = evaluate(best_x[0], best_x[1], step_s=integration_step_s, use_cache=False)
     if best is None:
         return None, None, 0.0
     return best
+
+
+def _polish_tail_candidate_with_final_step(
+    score: Any,
+    best_x: tuple[float, float],
+) -> tuple[float, float]:
+    best_offset, best_yaw_delta = float(best_x[0]), float(best_x[1])
+    best_score = float(score(best_offset, best_yaw_delta))
+    for offset_step, yaw_step, max_iter in ((0.1, 0.05, 6), (0.05, 0.025, 4)):
+        for _ in range(max_iter):
+            improved = False
+            candidates = (
+                (best_offset - offset_step, best_yaw_delta),
+                (best_offset + offset_step, best_yaw_delta),
+                (best_offset, best_yaw_delta - yaw_step),
+                (best_offset, best_yaw_delta + yaw_step),
+            )
+            for offset_min, yaw_delta_deg in candidates:
+                candidate_score = float(score(offset_min, yaw_delta_deg))
+                if candidate_score < best_score:
+                    best_offset = float(offset_min)
+                    best_yaw_delta = float(yaw_delta_deg)
+                    best_score = candidate_score
+                    improved = True
+            if not improved:
+                break
+    return best_offset, best_yaw_delta
 
 
 def _optimize_final_perigee_burn_for_eccentricity(
