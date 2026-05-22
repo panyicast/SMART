@@ -324,10 +324,11 @@ def _optimize_tail_for_longitude_and_eccentricity(
             return 1.0e12
         mv4_candidate, final_candidate, _final_center_start_s = item
         tolerance = config["terminal_tolerance"]
+        lon_tolerance_deg = _continuous_terminal_lon_tolerance_deg(config)
         lon_error = abs(_wrap180(float(final_candidate["cutoff_longitude_deg_e"]) - float(target_lon_deg)))
         mv4_i_error = abs(float(mv4_candidate["post_i_deg"]) - float(target_i_deg))
         final_i_error = abs(float(final_candidate["post_i_deg"]) - float(target_i_deg))
-        lon_excess = max(0.0, lon_error - float(tolerance["lon_deg"]))
+        lon_excess = max(0.0, lon_error - lon_tolerance_deg)
         mv4_i_excess = max(0.0, mv4_i_error - float(tolerance["i_deg"]))
         return (
             1.0e8 * lon_excess * lon_excess
@@ -588,8 +589,18 @@ def _failed_constraints(config: dict[str, Any], parameters: list[ContinuousThrus
         failed.append("MV4倾角")
     if abs(mv5.post_a_km - sync_a_km) > float(tolerance["a_km"]):
         failed.append("MV5半长轴")
-    if abs(_wrap180(mv5.cutoff_longitude_deg_e - float(config["target"]["lon_degE"]))) > float(tolerance["lon_deg"]):
+    lon_tolerance_deg = _continuous_terminal_lon_tolerance_deg(config)
+    if abs(_wrap180(mv5.cutoff_longitude_deg_e - float(config["target"]["lon_degE"]))) > lon_tolerance_deg:
         failed.append("MV5熄火经度")
     if not all(item.duration_ok for item in parameters):
         failed.append("总点火时长")
     return failed
+
+
+def _continuous_terminal_lon_tolerance_deg(config: dict[str, Any]) -> float:
+    continuous_cfg = config.get("continuous_thrust_optimizer", {})
+    if isinstance(continuous_cfg, dict):
+        value = continuous_cfg.get("terminal_lon_tolerance_deg")
+        if value is not None:
+            return max(0.0, float(value))
+    return 0.01

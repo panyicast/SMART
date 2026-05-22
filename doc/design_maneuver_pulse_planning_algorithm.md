@@ -65,7 +65,7 @@ RAAN_inertial = lon_node_deg + GreenwichAngle(t0)
 | 半长轴误差 | `terminal_tolerance.a_km` | `1.0 km` |
 | 偏心率误差 | `terminal_tolerance.e` | `1.0e-4` |
 | 倾角误差 | `terminal_tolerance.i_deg` | `0.01 deg` |
-| 经度误差 | `terminal_tolerance.lon_deg` | `0.01 deg` |
+| 经度误差 | `terminal_tolerance.lon_deg` | `0.02 deg` |
 
 ### 1.3 发动机与点火时长
 
@@ -100,7 +100,7 @@ burn_limit.max_total_burn_time_min = 90.0 min
 | `hard_constraint_planner.hard_raw_window` | `true` | 原始测控窗口作为硬约束 |
 | `hard_constraint_planner.hard_planning_window` | `true` | 收缩规划窗口作为硬约束 |
 
-默认 F4 参考任务中，V5.1 会搜索剩余控后近地点高度，并在满足 `terminal_tolerance.lon_deg = 0.01 deg` 的候选中选择推进剂最小者。
+默认 F4 参考任务中，V5.1 会搜索剩余控后近地点高度，并在满足 `terminal_tolerance.lon_deg = 0.02 deg` 的候选中选择推进剂最小者。连续推力展开仍单独使用 `continuous_thrust_optimizer.terminal_lon_tolerance_deg = 0.01 deg` 检查 MV5 熄火经度。
 
 高级设置中可填写这些字段：
 

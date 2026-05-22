@@ -75,7 +75,7 @@ def test_supersynchronous_design_planner_outputs_fixed_tail() -> None:
     result = plan_design_maneuver_strategy(default_design_maneuver_strategy_payload())
 
     assert result.summary["orbit_type"] == "supersynchronous_transfer"
-    assert result.config["terminal_tolerance"]["lon_deg"] == pytest.approx(0.01)
+    assert result.config["terminal_tolerance"]["lon_deg"] == pytest.approx(0.02)
     assert result.summary["actual_count"] == result.summary["recommended_count"]
     assert result.summary["actual_count"] == 5
     assert result.summary["estimated_total_delta_v_mps"] == pytest.approx(1539.0)
@@ -121,6 +121,7 @@ def test_continuous_thrust_parameter_optimizer_uses_pulse_targets(tmp_path: Path
     pulse_result = plan_design_maneuver_strategy(payload)
     continuous_result = optimize_continuous_thrust_model_parameters(pulse_result)
 
+    assert pulse_result.config["continuous_thrust_optimizer"]["terminal_lon_tolerance_deg"] == pytest.approx(0.01)
     assert all(check["passed"] for check in pulse_result.checks)
     assert continuous_result.time_step_s == pytest.approx(10.0)
     assert continuous_result.yaw_step_deg == pytest.approx(0.05)

@@ -213,7 +213,7 @@ subject to:
 当前回归要求：
 
 ```text
-abs(lon5_cutoff - target.lon_degE) <= terminal_tolerance.lon_deg
+abs(lon5_cutoff - target.lon_degE) <= continuous_thrust_optimizer.terminal_lon_tolerance_deg
 abs(T_start_5 - T_nominal_5) <= 3 min
 e5 <= 1.0e-3
 ```
@@ -273,7 +273,7 @@ target.i_deg    in {6, 8}
 脉冲规划 checks 全通过
 连续推力 hard_constraint_passed = true
 abs(MV4.post_i_deg - target.i_deg) <= terminal_tolerance.i_deg
-abs(MV5.cutoff_longitude_deg_e - target.lon_degE) <= terminal_tolerance.lon_deg
+abs(MV5.cutoff_longitude_deg_e - target.lon_degE) <= continuous_thrust_optimizer.terminal_lon_tolerance_deg
 abs(MV5.burn_start_min - MV5.initial_burn_start_min) <= 3 min
 MV5.post_e <= 1.0e-3
 ```

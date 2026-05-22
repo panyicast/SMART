@@ -269,7 +269,7 @@ def default_design_maneuver_strategy_payload() -> dict[str, Any]:
             "a_km": 1.0,
             "e": 1.0e-4,
             "i_deg": 0.01,
-            "lon_deg": 0.01,
+            "lon_deg": 0.02,
         },
         "optimizer": {
             "enabled": True,
@@ -304,6 +304,7 @@ def default_design_maneuver_strategy_payload() -> dict[str, Any]:
             "search_integration_step_s": 300.0,
             "final_integration_step_s": 10.0,
             "history_sample_interval_s": 60.0,
+            "terminal_lon_tolerance_deg": 0.01,
         },
         "hard_constraint_planner": {
             "enabled": True,
@@ -388,6 +389,7 @@ def normalize_design_maneuver_strategy_payload(payload: dict[str, Any] | None) -
             "search_integration_step_s",
             "final_integration_step_s",
             "history_sample_interval_s",
+            "terminal_lon_tolerance_deg",
         ),
     }.items():
         for key in keys:
