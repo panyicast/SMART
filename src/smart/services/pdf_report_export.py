@@ -42,7 +42,7 @@ from reportlab.platypus import (
     TableStyle,
 )
 
-from smart.services.report_export import _MarkdownBlock, _parse_markdown
+from smart.services.report_export import _MarkdownBlock, _normalize_export_symbols, _parse_markdown
 
 
 _FONT_DIR = Path(__file__).resolve().parents[1] / "assets" / "fonts" / "Noto_Sans_SC"
@@ -65,6 +65,7 @@ _CODE_BG = HexColor("#F4F4F4")
 _PAGE_MARGIN = 22 * mm
 _COVER_MARGIN_X = 20 * mm
 _COVER_MARGIN_Y = 24 * mm
+_BODY_FRAME_WIDTH = A4[0] - 2 * _PAGE_MARGIN
 
 _FONTS_REGISTERED = False
 
@@ -262,14 +263,14 @@ def _build_styles(accent: colors.Color) -> dict[str, ParagraphStyle]:
         "table_cell": ParagraphStyle(
             name="TableCell",
             parent=body,
-            fontSize=9.5,
-            leading=13,
+            fontSize=8.6,
+            leading=11.5,
         ),
         "table_header": ParagraphStyle(
             name="TableHeader",
             parent=body,
-            fontSize=9.5,
-            leading=13,
+            fontSize=8.6,
+            leading=11.5,
             fontName=bold_font,
             textColor=colors.white,
         ),
@@ -363,20 +364,22 @@ def _table_flowables(
     if not rows:
         return
     column_count = max(len(row) for row in rows)
-    normalized = [[*row, *([""] * (column_count - len(row)))] for row in rows]
+    normalized = [[_normalize_pdf_table_cell(cell) for cell in [*row, *([""] * (column_count - len(row)))]] for row in rows]
     cell_data: list[list[Paragraph]] = []
     for row_index, row in enumerate(normalized):
         style_key = "table_header" if row_index == 0 else "table_cell"
         cell_data.append([Paragraph(_escape(cell), styles[style_key]) for cell in row])
 
-    table = Table(cell_data, repeatRows=1, hAlign="LEFT")
+    table = Table(cell_data, colWidths=_table_col_widths(normalized, _BODY_FRAME_WIDTH), repeatRows=1, hAlign="LEFT")
     base_style = TableStyle(
         [
             ("BACKGROUND", (0, 0), (-1, 0), accent),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 6),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("ALIGN", (0, 0), (min(2, column_count - 1), -1), "LEFT"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 4),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
             ("TOPPADDING", (0, 0), (-1, -1), 4),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
             ("LINEABOVE", (0, 1), (-1, 1), 0.5, _BODY_RULE),
@@ -392,6 +395,37 @@ def _table_flowables(
     yield Spacer(1, 4)
     yield table
     yield Spacer(1, 6)
+
+
+def _normalize_pdf_table_cell(text: str) -> str:
+    return _normalize_export_symbols(text)
+
+
+def _table_col_widths(rows: list[list[str]], available_width: float) -> list[float] | None:
+    if not rows:
+        return None
+    column_count = max(len(row) for row in rows)
+    if column_count <= 0:
+        return None
+    if column_count >= 6:
+        weights: list[float] = []
+        for column in range(column_count):
+            if column == 0:
+                weights.append(1.28)
+            elif column == 1:
+                weights.append(1.2)
+            elif column == 2:
+                weights.append(1.7)
+            else:
+                weights.append(0.92)
+        total = sum(weights)
+        return [available_width * weight / total for weight in weights]
+    weights = [
+        max(1.0, min(2.6, max(len(row[column]) for row in rows if column < len(row)) / 8.0))
+        for column in range(column_count)
+    ]
+    total = sum(weights)
+    return [available_width * weight / total for weight in weights]
 
 
 def _draw_cover_background(canvas, doc, meta: PdfReportMeta, accent: colors.Color) -> None:

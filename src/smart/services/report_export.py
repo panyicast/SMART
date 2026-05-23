@@ -195,7 +195,21 @@ def _clean_inline(text: str) -> str:
     cleaned = re.sub(r"!\[([^\]]*)\]\([^)]+\)", r"\1", cleaned)
     cleaned = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\1 (\2)", cleaned)
     cleaned = cleaned.replace("**", "").replace("__", "").replace("`", "")
-    return cleaned
+    return _normalize_export_symbols(cleaned)
+
+
+def _normalize_export_symbols(text: str) -> str:
+    return (
+        str(text)
+        .replace("✅", "√")
+        .replace("☑", "√")
+        .replace("✔", "√")
+        .replace("✓", "√")
+        .replace("❌", "×")
+        .replace("✖", "×")
+        .replace("✗", "×")
+        .replace("✘", "×")
+    )
 
 
 def _document_xml(blocks: list[_MarkdownBlock]) -> str:

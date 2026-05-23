@@ -29,6 +29,7 @@ from smart.services.design_maneuver_strategy import (
 )
 from smart.services.project_ai_context import build_project_analysis_context, build_project_analysis_prompt
 from smart.services.report_export import export_docx_report, export_markdown_report
+from smart.services.pdf_report_export import export_pdf_report, _normalize_pdf_table_cell, _table_col_widths
 from smart.services.project_workspace import ProjectWorkspace
 from smart.ui.main_window import _NAV_KEYS
 from smart.ui.i18n import I18nManager
@@ -415,3 +416,42 @@ def test_report_export_converts_compact_markdown_table_to_docx_table(tmp_path) -
     assert "全部地影区间" in document_xml
     assert "入影 UTC" in document_xml
     assert "2026-05-25 21:49:56" in document_xml
+
+
+def test_pdf_report_table_symbols_and_widths_are_export_safe() -> None:
+    rows = [
+        ["发射时刻 UTC", "T0 UTC", "失败约束", "转移轨道", "一远点测控", "三次测控", "四次测控", "一次太阳角"],
+        ["07:42", "08:17", "✅ 窗口打开", "✅", "✅", "✅", "✅", "✅"],
+        ["09:08", "09:43", "第一次点火太阳角", "—", "—", "—", "—", "❌"],
+    ]
+
+    normalized = [[_normalize_pdf_table_cell(cell) for cell in row] for row in rows]
+    widths = _table_col_widths(normalized, 480.0)
+
+    assert normalized[1][2] == "√ 窗口打开"
+    assert normalized[2][7] == "×"
+    assert widths is not None
+    assert round(sum(widths), 6) == 480.0
+    assert widths[2] > widths[3]
+
+
+def test_docx_and_pdf_exports_normalize_emoji_status_symbols(tmp_path) -> None:
+    markdown = (
+        "| 发射时刻 UTC | T0 UTC | 失败约束 | 转移轨道 | 一远点测控 | 一次太阳角 |\n"
+        "| --- | --- | --- | --- | --- | --- |\n"
+        "| 07:42 | 08:17 | ✅ 窗口打开 | ✅ | ✅ | ✅ |\n"
+        "| 09:08 | 09:43 | 第一次点火太阳角 | — | — | ❌ |\n"
+    )
+
+    docx_path = export_docx_report(markdown, tmp_path / "symbols.docx")
+    pdf_path = export_pdf_report(markdown, tmp_path / "symbols.pdf")
+
+    with zipfile.ZipFile(docx_path) as package:
+        document_xml = package.read("word/document.xml").decode("utf-8")
+
+    assert "✅" not in document_xml
+    assert "❌" not in document_xml
+    assert "√ 窗口打开" in document_xml
+    assert "×" in document_xml
+    assert pdf_path.exists()
+    assert pdf_path.stat().st_size > 0
