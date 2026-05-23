@@ -36,6 +36,109 @@ from smart.ui.widgets.spinboxes import NoWheelComboBox
 REPORT_FILENAME = "ai_project_analysis.md"
 DOCX_REPORT_FILENAME = "ai_project_analysis.docx"
 PDF_REPORT_FILENAME = "ai_project_analysis.pdf"
+PROMPT_TEMPLATE_PLACEHOLDER = "选择提示词模板..."
+AI_ANALYSIS_PROMPT_TEMPLATES: tuple[tuple[str, str], ...] = (
+    (
+        "项目综合体检",
+        """项目综合分析
+请作为 SMART 航天器任务分析专家，对当前项目做一次端到端体检。
+
+分析范围：
+1. 汇总项目配置、关键数据文件、已有图表和缓存结果是否完整。
+2. 检查变轨策略、发射窗口、跟踪弧段、地影约束、飞行程序之间是否存在明显不一致。
+3. 如需补充事实，请优先调用 SMART 本地工具；不要凭经验估算已有工具可计算的结果。
+4. 工具调用默认只读，除非我明确要求保存结果，不要使用 save_result=true。
+
+输出要求：
+- 先给出结论摘要。
+- 列出高风险问题、证据路径、影响范围。
+- 给出建议的下一步验证顺序。
+- 标明哪些结论来自工具结果，哪些只是工程判断。""",
+    ),
+    (
+        "设计变轨策略（脉冲）复核",
+        """设计变轨策略（脉冲）复核
+请重点分析当前项目的设计变轨策略脉冲规划。
+
+请执行：
+1. 读取当前项目摘要和设计变轨配置。
+2. 调用 plan_design_maneuver_strategy，默认 save_result=false。
+3. 复核每次点火的飞行时间、飞行圈次、拱点位置、星下点经度、delta-v、燃烧时长、推进剂、控后半长轴/偏心率/倾角。
+4. 检查硬约束：燃烧时长、终端半长轴、偏心率、倾角、终端经度、经度窗口。
+
+输出要求：
+- 给出脉冲规划总览表。
+- 列出未通过或裕度较小的约束。
+- 说明哪些参数最值得调整。
+- 不要改写项目配置；如果建议保存结果，请明确说明保存会写入哪些文件。""",
+    ),
+    (
+        "连续推力优化复核",
+        """连续推力优化复核
+请重点分析当前项目的连续推力优化结果和脉冲规划之间的一致性。
+
+请执行：
+1. 如已有 data/design_maneuver_results.json，调用 optimize_design_continuous_thrust 并复用已归档脉冲结果。
+2. 默认 save_result=false；除非我明确要求保存，不要写入连续推力结果文件。
+3. 对比连续推力各段点火/关机时间、点火/关机经度、偏航角、delta-v、推进剂、控后轨道根数。
+4. 检查 hard_constraint_passed 和 failed_constraints。
+
+输出要求：
+- 给出连续推力参数表。
+- 对比脉冲规划与连续推力的关键差异。
+- 解释失败约束的可能原因和最小调整建议。
+- 给出是否适合导入变轨策略页继续计算的判断。""",
+    ),
+    (
+        "发射窗口约束重采样",
+        """发射窗口约束重采样
+请重点分析当前项目的发射窗口约束和可用窗口。
+
+请执行：
+1. 检查 data/full_orbit_history.csv、config/maneuver_strategy.json、config/launch_window.json 是否存在。
+2. 调用 compute_launch_window_samples，默认 save_result=false。
+3. 复核采样范围、采样步长、火箭飞行时间、最短窗口长度、地影、测控、太阳角、倾角等约束。
+4. 如果需要变更参数，请只给建议，不要直接写配置。
+
+输出要求：
+- 给出窗口数量、通过样本数、主要失败约束。
+- 列出最长/最短窗口和窗口前沿/后沿限制条件。
+- 说明哪些约束最限制窗口宽度。
+- 给出重新生成 CSV 和甘特图的建议。""",
+    ),
+    (
+        "跟踪弧段与地影风险",
+        """跟踪弧段与地影风险分析
+请重点分析测控资源、跟踪弧段和地影风险。
+
+请执行：
+1. 汇总当前项目中的地面站、中继星、跟踪弧段配置和发射窗口结果。
+2. 对关键发射时刻或窗口前沿，调用 compute_shadow_intervals_for_launch 计算地影区间。
+3. 结合发射窗口样本中的 max_tracking_gap_min、first_orbit_shadow_min、longest_shadow_min 判断风险。
+4. 若需要 STK 命令或 API 依据，调用 query_stk_help 查询 STK 11.6 帮助。
+
+输出要求：
+- 给出地影区间表、最长地影、总地影时长。
+- 给出测控空窗和中继/地面站覆盖风险。
+- 指出需要在 STK 或页面中复核的具体对象和时间段。""",
+    ),
+    (
+        "飞行程序与结果一致性",
+        """飞行程序与结果一致性检查
+请重点检查飞行程序设计、变轨策略、发射窗口和 STK 同步结果之间是否一致。
+
+分析重点：
+1. 飞行程序中的关键事件时间是否与发射窗口 T0、变轨点火时刻、跟踪弧段一致。
+2. 姿态模式、测控事件、点火事件是否覆盖关键风险时段。
+3. 项目中已生成的 CSV、JSON、报告和图表是否来自同一轮参数。
+4. 如果需要 STK 11.6 命令依据，调用 query_stk_help；不要使用 STK 12.2 专属行为。
+
+输出要求：
+- 按“时间基准/变轨/测控/地影/STK 同步”分组列出问题。
+- 给出每项问题的证据文件和建议复核页面。
+- 给出下一步最小修复任务。""",
+    ),
+)
 
 
 class _ProjectAnalysisWorker(QtCore.QObject):
@@ -183,11 +286,19 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
         prompt_label.setProperty("role", "cardCaption")
         task_layout.addWidget(prompt_label)
 
+        self._prompt_template_combo = NoWheelComboBox()
+        self._prompt_template_combo.setEditable(False)
+        self._prompt_template_combo.addItem(PROMPT_TEMPLATE_PLACEHOLDER, "")
+        for label, template in AI_ANALYSIS_PROMPT_TEMPLATES:
+            self._prompt_template_combo.addItem(label, template)
+        self._prompt_template_combo.currentIndexChanged.connect(self._apply_prompt_template)
+        task_layout.addWidget(self._prompt_template_combo)
+
         self._question_edit = QtWidgets.QPlainTextEdit()
         self._question_edit.setPlaceholderText(
-            "直接写分析范围、关注内容和输出要求。例如：重点分析发射窗口结果，检查约束是否合理，列出风险和下一步验证。"
+            "选择上方模板后可直接修改；也可以直接写分析范围、关注内容和输出要求。"
         )
-        self._question_edit.setFixedHeight(132)
+        self._question_edit.setFixedHeight(184)
         task_layout.addWidget(self._question_edit)
 
         button_row = QtWidgets.QHBoxLayout()
@@ -379,7 +490,11 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
         self._append_trace(
             "[待执行] request_chat_completion(...) 将以 DeepSeek V4 + thinking + tool calls 调用。"
         )
-        self._append_trace("[工具] 已注册 build_project_context/find_launch_windows/compute_shadow_intervals_for_launch/query_stk_help")
+        self._append_trace(
+            "[工具] 已注册 build_project_context/find_launch_windows/compute_shadow_intervals_for_launch/"
+            "plan_design_maneuver_strategy/optimize_design_continuous_thrust/"
+            "compute_launch_window_samples/query_stk_help"
+        )
         self._append_stk_help_status()
         self._set_preflight_summary(context=context, prompt=prompt)
         self._set_status("执行预检完成。项目摘要、工具状态和安全边界已更新。")
@@ -510,6 +625,20 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
                 return
         self._model_combo.setCurrentIndex(0)
 
+    @QtCore.Slot(int)
+    def _apply_prompt_template(self, index: int) -> None:
+        if index <= 0:
+            return
+        template = str(self._prompt_template_combo.itemData(index) or "").strip()
+        if not template:
+            return
+        self._question_edit.setPlainText(template)
+        cursor = self._question_edit.textCursor()
+        cursor.movePosition(QtGui.QTextCursor.MoveOperation.End)
+        self._question_edit.setTextCursor(cursor)
+        self._question_edit.setFocus(QtCore.Qt.FocusReason.OtherFocusReason)
+        self._set_status("已套用提示词模板，可在文本框中继续修改。")
+
     def _set_busy(self, busy: bool) -> None:
         for widget in (
             self._base_url_edit,
@@ -517,6 +646,7 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
             self._model_combo,
             self._reasoning_effort_combo,
             self._thinking_checkbox,
+            self._prompt_template_combo,
             self._question_edit,
             self._preview_button,
             self._analyze_button,

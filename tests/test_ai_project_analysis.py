@@ -30,7 +30,7 @@ from smart.services.report_export import export_docx_report, export_markdown_rep
 from smart.services.project_workspace import ProjectWorkspace
 from smart.ui.main_window import _NAV_KEYS
 from smart.ui.i18n import I18nManager
-from smart.ui.widgets.ai_project_analysis_page import AIProjectAnalysisPage
+from smart.ui.widgets.ai_project_analysis_page import AIProjectAnalysisPage, AI_ANALYSIS_PROMPT_TEMPLATES
 from smart.ui.widgets.spinboxes import NoWheelComboBox
 
 
@@ -100,12 +100,18 @@ def test_ai_project_analysis_page_prioritizes_task_and_report(tmp_path) -> None:
     page = AIProjectAnalysisPage(I18nManager("zh"), workspace, settings)
     try:
         assert not hasattr(page, "_scope_combo")
+        assert isinstance(page._prompt_template_combo, NoWheelComboBox)
         assert isinstance(page._model_combo, NoWheelComboBox)
         assert isinstance(page._reasoning_effort_combo, NoWheelComboBox)
         assert page._api_group.maximumHeight() <= 44
         assert page._agent_group.maximumHeight() <= 44
         assert page._trace_card.isHidden()
         assert page._run_state_label.text() == "待生成"
+
+        template_index = page._prompt_template_combo.findText(AI_ANALYSIS_PROMPT_TEMPLATES[0][0])
+        assert template_index > 0
+        page._prompt_template_combo.setCurrentIndex(template_index)
+        assert AI_ANALYSIS_PROMPT_TEMPLATES[0][1] in page._question_edit.toPlainText()
 
         page._question_edit.setPlainText("重点分析发射窗口结果\n检查约束是否合理。")
         page.preview_context()

@@ -47,7 +47,7 @@ API key 可通过页面输入，也可通过环境变量提供：
 - `data/launch_window_results.csv`
 - 项目 `config/`、`data/`、`charts/` 文件清单
 
-页面通过“分析提示词”输入框接收分析范围、关注内容和输出要求，不再使用固定范围下拉框。点击“生成执行预检”可以在调用模型前查看项目摘要规模、工具状态、安全边界、SMART 本地服务调用和待执行的 LLM API 调用。页面明确提示不会发送完整大 CSV、二进制文件、SPICE kernels、临时文件或 API key。运行时页面会显示 DeepSeek API 返回的 `reasoning_content`、tool call 轨迹和工具结果摘要；日志不输出 API key 或完整 prompt。
+页面通过“分析提示词”输入框接收分析范围、关注内容和输出要求，不再使用固定范围下拉框。提示词模板下拉框提供项目综合体检、设计变轨策略（脉冲）复核、连续推力优化复核、发射窗口约束重采样、跟踪弧段与地影风险、飞行程序与结果一致性等模板；选择模板后会填入可编辑文本框，用户可以在模板基础上继续修改。点击“生成执行预检”可以在调用模型前查看项目摘要规模、工具状态、安全边界、SMART 本地服务调用和待执行的 LLM API 调用。页面明确提示不会发送完整大 CSV、二进制文件、SPICE kernels、临时文件或 API key。运行时页面会显示 DeepSeek API 返回的 `reasoning_content`、tool call 轨迹和工具结果摘要；日志不输出 API key 或完整 prompt。
 
 ## 4. 内置 agent 与 skill
 
