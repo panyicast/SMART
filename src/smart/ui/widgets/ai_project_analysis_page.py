@@ -303,12 +303,10 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
 
         button_row = QtWidgets.QHBoxLayout()
         button_row.setSpacing(10)
-        self._preview_button = QtWidgets.QPushButton("生成执行预检")
-        self._preview_button.clicked.connect(self.preview_context)
         self._analyze_button = QtWidgets.QPushButton("AI 分析当前项目")
         self._analyze_button.setProperty("variant", "primaryAction")
         self._analyze_button.clicked.connect(self.run_analysis)
-        button_row.addWidget(self._preview_button)
+        button_row.addStretch(1)
         button_row.addWidget(self._analyze_button)
         task_layout.addLayout(button_row)
 
@@ -325,7 +323,7 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
         self._preflight_view.setReadOnly(True)
         self._preflight_view.setMaximumBlockCount(200)
         self._preflight_view.setFixedHeight(150)
-        self._preflight_view.setPlainText("打开项目后点击“生成执行预检”，确认摘要范围、工具状态和安全边界。")
+        self._preflight_view.setPlainText("打开项目后点击“AI 分析当前项目”，页面会显示摘要范围、工具状态和安全边界。")
         preflight_layout.addWidget(self._preflight_view)
         layout.addWidget(preflight_card)
 
@@ -648,7 +646,6 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
             self._thinking_checkbox,
             self._prompt_template_combo,
             self._question_edit,
-            self._preview_button,
             self._analyze_button,
             self._save_settings_button,
         ):

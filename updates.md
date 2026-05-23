@@ -618,6 +618,10 @@
 - 提交：`6089f7a`
 - 影响文件：`src/smart/agents/skills/mission_analysis_calculation.md`、`src/smart/services/mission_agent_tools.py`、`tests/test_ai_project_analysis.py`、`HANDOFF.md`。
 
-## 2026-05-23T20:41:37+08:00 | Add AI analysis prompt templates
+## 2026-05-23T20:41:42+08:00 | Add AI analysis prompt templates
+- 提交：`27f8644`
+- 影响文件：`src/smart/ui/widgets/ai_project_analysis_page.py`、`tests/test_ai_project_analysis.py`、`doc/ai_project_analysis.md`、`HANDOFF.md`。
+
+## 2026-05-23T20:44:03+08:00 | Remove AI preflight button
 - 提交：`本次提交`
 - 影响文件：`src/smart/ui/widgets/ai_project_analysis_page.py`、`tests/test_ai_project_analysis.py`、`doc/ai_project_analysis.md`、`HANDOFF.md`。

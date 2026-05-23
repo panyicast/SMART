@@ -100,6 +100,7 @@ def test_ai_project_analysis_page_prioritizes_task_and_report(tmp_path) -> None:
     page = AIProjectAnalysisPage(I18nManager("zh"), workspace, settings)
     try:
         assert not hasattr(page, "_scope_combo")
+        assert not hasattr(page, "_preview_button")
         assert isinstance(page._prompt_template_combo, NoWheelComboBox)
         assert isinstance(page._model_combo, NoWheelComboBox)
         assert isinstance(page._reasoning_effort_combo, NoWheelComboBox)
