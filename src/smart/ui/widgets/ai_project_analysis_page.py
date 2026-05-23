@@ -30,6 +30,7 @@ from smart.services.project_workspace import ProjectWorkspace
 from smart.services.pdf_report_export import export_pdf_report
 from smart.services.report_export import export_docx_report, export_markdown_report
 from smart.ui.i18n import I18nManager
+from smart.ui.widgets.spinboxes import NoWheelComboBox
 
 
 REPORT_FILENAME = "ai_project_analysis.md"
@@ -156,13 +157,79 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
         self.retranslate()
 
     def _build_control_panel(self) -> QtWidgets.QWidget:
+        scroll = QtWidgets.QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setMinimumWidth(390)
+        scroll.setMaximumWidth(520)
+
         panel = QtWidgets.QWidget()
-        panel.setMinimumWidth(420)
+        scroll.setWidget(panel)
         layout = QtWidgets.QVBoxLayout(panel)
         layout.setContentsMargins(0, 0, 14, 0)
         layout.setSpacing(14)
 
-        api_card = self._card()
+        task_card = self._card()
+        task_layout = QtWidgets.QVBoxLayout(task_card)
+        task_layout.setContentsMargins(18, 18, 18, 18)
+        task_layout.setSpacing(12)
+
+        task_title = QtWidgets.QLabel("分析任务")
+        task_title.setProperty("role", "cardTitle")
+        task_layout.addWidget(task_title)
+
+        self._scope_combo = NoWheelComboBox()
+        self._scope_combo.addItems(
+            [
+                "项目综合分析",
+                "发射窗口结果分析",
+                "变轨策略与轨道数据分析",
+                "配置一致性检查",
+                "异常与风险诊断",
+                "任务分析计算专家复核",
+                "STK 11.6 操作方案与命令复核",
+            ]
+        )
+        task_layout.addWidget(self._scope_combo)
+
+        self._question_edit = QtWidgets.QPlainTextEdit()
+        self._question_edit.setPlaceholderText("可选：补充你希望模型重点回答的问题。")
+        self._question_edit.setFixedHeight(108)
+        task_layout.addWidget(self._question_edit)
+
+        button_row = QtWidgets.QHBoxLayout()
+        button_row.setSpacing(10)
+        self._preview_button = QtWidgets.QPushButton("生成执行预检")
+        self._preview_button.clicked.connect(self.preview_context)
+        self._analyze_button = QtWidgets.QPushButton("AI 分析当前项目")
+        self._analyze_button.setProperty("variant", "primaryAction")
+        self._analyze_button.clicked.connect(self.run_analysis)
+        button_row.addWidget(self._preview_button)
+        button_row.addWidget(self._analyze_button)
+        task_layout.addLayout(button_row)
+
+        layout.addWidget(task_card)
+
+        preflight_card = self._card()
+        preflight_layout = QtWidgets.QVBoxLayout(preflight_card)
+        preflight_layout.setContentsMargins(18, 18, 18, 18)
+        preflight_layout.setSpacing(10)
+        preflight_title = QtWidgets.QLabel("项目预检")
+        preflight_title.setProperty("role", "cardTitle")
+        preflight_layout.addWidget(preflight_title)
+        self._preflight_view = QtWidgets.QPlainTextEdit()
+        self._preflight_view.setReadOnly(True)
+        self._preflight_view.setMaximumBlockCount(200)
+        self._preflight_view.setFixedHeight(150)
+        self._preflight_view.setPlainText("打开项目后点击“生成执行预检”，确认摘要范围、工具状态和安全边界。")
+        preflight_layout.addWidget(self._preflight_view)
+        layout.addWidget(preflight_card)
+
+        api_card = QtWidgets.QGroupBox("模型配置")
+        api_card.setCheckable(True)
+        api_card.setChecked(False)
+        self._api_group = api_card
         api_layout = QtWidgets.QFormLayout(api_card)
         api_layout.setContentsMargins(18, 18, 18, 18)
         api_layout.setSpacing(12)
@@ -176,7 +243,7 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
         self._api_key_edit.setClearButtonEnabled(True)
         api_layout.addRow("api_key", self._api_key_edit)
 
-        self._model_combo = QtWidgets.QComboBox()
+        self._model_combo = NoWheelComboBox()
         self._model_combo.setEditable(False)
         for label, model in (
             ("deepseek-v4-pro", DEEPSEEK_MODEL_V4_PRO),
@@ -185,7 +252,7 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
             self._model_combo.addItem(label, model)
         api_layout.addRow("model*", self._model_combo)
 
-        self._reasoning_effort_combo = QtWidgets.QComboBox()
+        self._reasoning_effort_combo = NoWheelComboBox()
         self._reasoning_effort_combo.addItem("high", DEEPSEEK_REASONING_EFFORT_HIGH)
         self._reasoning_effort_combo.addItem("max", DEEPSEEK_REASONING_EFFORT_MAX)
         api_layout.addRow("reasoning_effort", self._reasoning_effort_combo)
@@ -193,16 +260,19 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
         self._thinking_checkbox = QtWidgets.QCheckBox("启用 DeepSeek thinking / reasoning_content")
         api_layout.addRow("thinking", self._thinking_checkbox)
 
+        self._save_settings_button = QtWidgets.QPushButton("保存 API 配置")
+        self._save_settings_button.clicked.connect(self._save_settings)
+        api_layout.addRow("", self._save_settings_button)
+
         layout.addWidget(api_card)
 
-        agent_card = self._card()
+        agent_card = QtWidgets.QGroupBox("本地工具与专家")
+        agent_card.setCheckable(True)
+        agent_card.setChecked(False)
+        self._agent_group = agent_card
         agent_layout = QtWidgets.QVBoxLayout(agent_card)
         agent_layout.setContentsMargins(18, 18, 18, 18)
         agent_layout.setSpacing(10)
-
-        agent_title = QtWidgets.QLabel("内置专家 Agent")
-        agent_title.setProperty("role", "cardTitle")
-        agent_layout.addWidget(agent_title)
 
         self._agent_summary_label = QtWidgets.QLabel(render_mission_agent_summary())
         self._agent_summary_label.setProperty("role", "pageBody")
@@ -215,55 +285,17 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
         agent_layout.addWidget(self._agent_skills_view)
 
         layout.addWidget(agent_card)
-
-        scope_card = self._card()
-        scope_layout = QtWidgets.QVBoxLayout(scope_card)
-        scope_layout.setContentsMargins(18, 18, 18, 18)
-        scope_layout.setSpacing(12)
-
-        scope_title = QtWidgets.QLabel("分析范围")
-        scope_title.setProperty("role", "cardTitle")
-        scope_layout.addWidget(scope_title)
-
-        self._scope_combo = QtWidgets.QComboBox()
-        self._scope_combo.addItems(
-            [
-                "项目综合分析",
-                "发射窗口结果分析",
-                "变轨策略与轨道数据分析",
-                "配置一致性检查",
-                "异常与风险诊断",
-                "任务分析计算专家复核",
-                "STK 11.6 操作方案与命令复核",
-            ]
-        )
-        scope_layout.addWidget(self._scope_combo)
-
-        self._question_edit = QtWidgets.QPlainTextEdit()
-        self._question_edit.setPlaceholderText("可选：补充你希望模型重点回答的问题。")
-        self._question_edit.setFixedHeight(110)
-        scope_layout.addWidget(self._question_edit)
-
-        layout.addWidget(scope_card)
-
-        button_row = QtWidgets.QHBoxLayout()
-        self._preview_button = QtWidgets.QPushButton("生成执行预检")
-        self._preview_button.clicked.connect(self.preview_context)
-        self._analyze_button = QtWidgets.QPushButton("AI 分析当前项目")
-        self._analyze_button.clicked.connect(self.run_analysis)
-        self._save_settings_button = QtWidgets.QPushButton("保存 API 配置")
-        self._save_settings_button.clicked.connect(self._save_settings)
-        button_row.addWidget(self._preview_button)
-        button_row.addWidget(self._analyze_button)
-        button_row.addWidget(self._save_settings_button)
-        layout.addLayout(button_row)
+        api_card.toggled.connect(lambda checked: self._set_group_body_visible(api_card, checked))
+        agent_card.toggled.connect(lambda checked: self._set_group_body_visible(agent_card, checked))
+        self._set_group_body_visible(api_card, False)
+        self._set_group_body_visible(agent_card, False)
 
         self._status_label = QtWidgets.QLabel()
         self._status_label.setProperty("role", "pageBody")
         self._status_label.setWordWrap(True)
         layout.addWidget(self._status_label)
         layout.addStretch(1)
-        return panel
+        return scroll
 
     def _build_output_panel(self) -> QtWidgets.QWidget:
         panel = QtWidgets.QWidget()
@@ -271,26 +303,8 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(14)
 
-        preview_card = self._card()
-        preview_card.setMaximumHeight(240)
-        preview_layout = QtWidgets.QVBoxLayout(preview_card)
-        preview_layout.setContentsMargins(18, 18, 18, 18)
-        preview_layout.setSpacing(10)
-        preview_title = QtWidgets.QLabel("执行过程与工具调用")
-        preview_title.setProperty("role", "cardTitle")
-        preview_layout.addWidget(preview_title)
-        self._trace_view = QtWidgets.QPlainTextEdit()
-        self._trace_view.setReadOnly(True)
-        self._trace_view.setPlaceholderText(
-            "这里显示 DeepSeek reasoning_content、SMART 本地工具调用、LLM API 调用和报告保存情况。"
-        )
-        self._trace_view.setMinimumHeight(100)
-        self._trace_view.setMaximumHeight(150)
-        preview_layout.addWidget(self._trace_view)
-        layout.addWidget(preview_card, 0)
-
         report_card = self._card()
-        report_card.setMinimumHeight(420)
+        report_card.setMinimumHeight(520)
         report_layout = QtWidgets.QVBoxLayout(report_card)
         report_layout.setContentsMargins(18, 18, 18, 18)
         report_layout.setSpacing(10)
@@ -299,6 +313,9 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
         report_title.setProperty("role", "cardTitle")
         report_header.addWidget(report_title)
         report_header.addStretch(1)
+        self._run_state_label = QtWidgets.QLabel("待生成")
+        self._run_state_label.setProperty("role", "cardCaption")
+        report_header.addWidget(self._run_state_label)
         self._export_md_button = QtWidgets.QPushButton("导出 MD")
         self._export_md_button.clicked.connect(self._export_markdown_report)
         self._export_docx_button = QtWidgets.QPushButton("导出 DOCX")
@@ -315,6 +332,33 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
         self._report_view.setPlaceholderText(f"分析完成后，报告会显示在这里并保存到 data/{REPORT_FILENAME}。")
         report_layout.addWidget(self._report_view)
         layout.addWidget(report_card, 1)
+
+        self._trace_toggle = QtWidgets.QToolButton()
+        self._trace_toggle.setText("查看执行日志")
+        self._trace_toggle.setCheckable(True)
+        self._trace_toggle.setChecked(False)
+        self._trace_toggle.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self._trace_toggle.toggled.connect(self._set_trace_visible)
+        layout.addWidget(self._trace_toggle, 0)
+
+        self._trace_card = self._card()
+        self._trace_card.setMaximumHeight(240)
+        preview_layout = QtWidgets.QVBoxLayout(self._trace_card)
+        preview_layout.setContentsMargins(18, 18, 18, 18)
+        preview_layout.setSpacing(10)
+        preview_title = QtWidgets.QLabel("执行过程与工具调用")
+        preview_title.setProperty("role", "cardTitle")
+        preview_layout.addWidget(preview_title)
+        self._trace_view = QtWidgets.QPlainTextEdit()
+        self._trace_view.setReadOnly(True)
+        self._trace_view.setPlaceholderText(
+            "这里显示 DeepSeek reasoning_content、SMART 本地工具调用、LLM API 调用和报告保存情况。"
+        )
+        self._trace_view.setMinimumHeight(100)
+        self._trace_view.setMaximumHeight(150)
+        preview_layout.addWidget(self._trace_view)
+        layout.addWidget(self._trace_card, 0)
+        self._set_trace_visible(False)
         self._update_export_buttons()
         return panel
 
@@ -344,7 +388,8 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
         )
         self._append_trace("[工具] 已注册 build_project_context/find_launch_windows/compute_shadow_intervals_for_launch/query_stk_help")
         self._append_stk_help_status()
-        self._set_status("执行预检完成。工具调用轨迹已更新。")
+        self._set_preflight_summary(context=context, prompt=prompt)
+        self._set_status("执行预检完成。项目摘要、工具状态和安全边界已更新。")
 
     def run_analysis(self) -> None:
         if self._thread is not None:
@@ -367,6 +412,7 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
         self._append_trace("[说明] 这里显示 DeepSeek API 返回的 reasoning_content，以及 SMART 本地工具调用轨迹。")
         self._append_trace("[开始] AI 分析当前项目")
         self._append_stk_help_status()
+        self._set_preflight_summary()
 
         self._thread = QtCore.QThread(self)
         self._worker = _ProjectAnalysisWorker(
@@ -418,6 +464,7 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
         self._set_report_markdown(report)
         self._append_trace(f"[完成] AI 分析完成，报告已保存：{path}")
         self._set_status(f"AI 分析完成，报告已保存：{path}")
+        self._set_run_state("完成")
         self._set_busy(False)
 
     def _on_analysis_failed(self, error: str) -> None:
@@ -427,6 +474,7 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
             self._set_status(f"AI 分析失败：{error}")
         else:
             self._set_status(f"项目分析失败：{error}")
+        self._set_run_state("失败")
         self._set_busy(False)
 
     def _clear_thread(self) -> None:
@@ -483,6 +531,7 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
             self._save_settings_button,
         ):
             widget.setEnabled(not busy)
+        self._set_run_state("生成中" if busy else ("报告就绪" if self._current_report_markdown.strip() else "待生成"))
         self._update_export_buttons(busy=busy)
 
     def _set_report_markdown(self, report: str) -> None:
@@ -505,7 +554,7 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
         message = (
             f"## {title}\n\n"
             f"{detail}\n\n"
-            "- 当前页面会持续更新上方“执行过程与工具调用”。\n"
+            "- 当前页面会持续更新“执行日志”。\n"
             "- DeepSeek 输出完成后，这里会自动替换为格式化后的 Markdown 报告。"
         )
         try:
@@ -628,6 +677,58 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
 
     def _set_status(self, text: str) -> None:
         self._status_label.setText(text)
+
+    def _set_run_state(self, text: str) -> None:
+        if hasattr(self, "_run_state_label"):
+            self._run_state_label.setText(text)
+
+    def _set_group_body_visible(self, group: QtWidgets.QGroupBox, visible: bool) -> None:
+        for child in group.findChildren(
+            QtWidgets.QWidget,
+            options=QtCore.Qt.FindChildOption.FindDirectChildrenOnly,
+        ):
+            child.setVisible(visible)
+        group.setMaximumHeight(16_777_215 if visible else 44)
+        group.updateGeometry()
+
+    def _set_trace_visible(self, visible: bool) -> None:
+        if hasattr(self, "_trace_card"):
+            self._trace_card.setVisible(visible)
+        if hasattr(self, "_trace_toggle"):
+            self._trace_toggle.setText("隐藏执行日志" if visible else "查看执行日志")
+
+    def _set_preflight_summary(self, *, context: str | None = None, prompt: str | None = None) -> None:
+        if not hasattr(self, "_preflight_view"):
+            return
+        if self._workspace.current_project is None or self._workspace.root_dir is None:
+            self._preflight_view.setPlainText("未打开项目。")
+            return
+        project_root = self._workspace.root_dir
+        config_count = len(list((project_root / "config").glob("*.json"))) if (project_root / "config").exists() else 0
+        data_files = list((project_root / "data").glob("*")) if (project_root / "data").exists() else []
+        chart_count = len(list((project_root / "charts").glob("*"))) if (project_root / "charts").exists() else 0
+        status = resolve_stk_help_tool()
+        lines = [
+            f"项目：{project_root.name}",
+            f"配置摘要：config/*.json 共 {config_count} 个",
+            f"数据文件：data/* 共 {len(data_files)} 个",
+            f"图表文件：charts/* 共 {chart_count} 个",
+            f"STK Help：{'可用' if status.available else '不可用'}",
+        ]
+        if context is not None:
+            lines.append(f"项目摘要字符数：{len(context):,}")
+        if prompt is not None:
+            lines.append(f"待发送 prompt 字符数：{len(prompt):,}")
+        lines.extend(
+            [
+                "",
+                "安全边界：",
+                "- 只发送项目摘要、统计和少量样本",
+                "- 不发送完整大 CSV、二进制、SPICE kernels、tmp 文件",
+                "- 不写入项目配置，不上传 API key",
+            ]
+        )
+        self._preflight_view.setPlainText("\n".join(lines))
 
     def _append_stk_help_status(self) -> None:
         status = resolve_stk_help_tool()

@@ -282,6 +282,9 @@ Latest README refresh verification: referenced README chart/doc paths exist; no 
 Current Windows geometry warning fix is complete. `MainWindow` now declares a practical `1144x720` minimum size and lets the page stack ignore hidden pages' size hints, so hidden high-minimum pages no longer raise Windows `QWindowsWindow::setGeometry` warnings when maximizing on 1440p-class displays with taskbar margins.
 Latest Windows geometry warning verification: `py_compile` passed; `tests/test_sidebar_navigation.py` passed (7 tests); a Qt size probe reported `minimumSize=1144x720` and `minimumSizeHint=280x298`.
 
+Current AI project analysis UI optimization is complete. The page now centers the left side on analysis task selection and a preflight summary, folds model configuration and agent/tool details by default, promotes the report area to the primary right-side surface, and keeps the execution trace behind a toggle. Scope/model/reasoning combos now use no-wheel combo boxes, and preflight output states the data-safety boundary explicitly.
+Latest AI project analysis UI verification: `py_compile` passed; `tests/test_ai_project_analysis.py` passed (17 tests).
+
 Next minimum task: run the new design-to-import button path on the real F4 project and compare the import-page calculated `full_orbit_history.csv` against the yaw-refined design-page continuous-thrust history for acceptable mission deltas.
 
 ## Working Rule

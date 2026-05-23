@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import zipfile
 
+from PySide6 import QtCore, QtWidgets
+
 from smart.services.llm_client import (
     DEFAULT_DEEPSEEK_MODEL,
     LLMRequestConfig,
@@ -19,7 +21,11 @@ from smart.services.mission_agent import (
 from smart.services.mission_agent_tools import MissionAgentToolExecutor
 from smart.services.project_ai_context import build_project_analysis_context, build_project_analysis_prompt
 from smart.services.report_export import export_docx_report, export_markdown_report
+from smart.services.project_workspace import ProjectWorkspace
 from smart.ui.main_window import _NAV_KEYS
+from smart.ui.i18n import I18nManager
+from smart.ui.widgets.ai_project_analysis_page import AIProjectAnalysisPage
+from smart.ui.widgets.spinboxes import NoWheelComboBox
 
 
 def test_project_analysis_context_summarizes_json_and_csv(tmp_path) -> None:
@@ -77,6 +83,33 @@ def test_mission_agent_profile_configures_calculation_and_stk_skills() -> None:
 
 def test_ai_project_analysis_nav_key_is_last() -> None:
     assert _NAV_KEYS[-1] == "nav.ai_project_analysis"
+
+
+def test_ai_project_analysis_page_prioritizes_task_and_report(tmp_path) -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    workspace = ProjectWorkspace()
+    workspace.create_project("ai-page-layout", tmp_path)
+    settings = QtCore.QSettings(str(tmp_path / "settings.ini"), QtCore.QSettings.Format.IniFormat)
+
+    page = AIProjectAnalysisPage(I18nManager("zh"), workspace, settings)
+    try:
+        assert isinstance(page._scope_combo, NoWheelComboBox)
+        assert isinstance(page._model_combo, NoWheelComboBox)
+        assert isinstance(page._reasoning_effort_combo, NoWheelComboBox)
+        assert page._api_group.maximumHeight() <= 44
+        assert page._agent_group.maximumHeight() <= 44
+        assert page._trace_card.isHidden()
+        assert page._run_state_label.text() == "待生成"
+
+        page.preview_context()
+
+        preflight_text = page._preflight_view.toPlainText()
+        assert "安全边界" in preflight_text
+        assert "不发送完整大 CSV" in preflight_text
+        assert "项目摘要字符数" in preflight_text
+        assert "待发送 prompt 字符数" in preflight_text
+    finally:
+        page.deleteLater()
 
 
 def test_llm_endpoint_join_handles_versioned_and_unversioned_base_url() -> None:
