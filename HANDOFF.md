@@ -270,7 +270,10 @@ Latest design-to-import handoff verification: `tests\test_design_maneuver_strate
 Current doc image cleanup task is complete. Documentation images under `doc/` are ignored and removed from Git tracking so the remote repo drops them while local copies stay available.
 Latest doc image cleanup verification: Git ignore checks matched top-level and nested `doc/` image paths; no code tests required.
 
-Next minimum task: run the new design-to-import button path on the real F4 project and compare the import-page calculated `full_orbit_history.csv` against the design-page continuous-thrust history for acceptable mission deltas.
+Current F4 yaw-refined output checkpoint is complete. The F4 continuous-thrust design output was regenerated at `2026-05-22T15:13:00Z`; `design_maneuver_results.json` now records yaw refinement diagnostics, refined alpha values, lower propellant `2596.415493 kg`, max burn `72.309 min`, and terminal longitude error `-0.006976 deg`. The import-ready `design_import_maneuver_strategy.json`, project timestamp, and continuous-thrust event rows were refreshed to match.
+Latest F4 yaw-refined output checkpoint: no regression tests run; generated data/config checkpoint only.
+
+Next minimum task: run the new design-to-import button path on the real F4 project and compare the import-page calculated `full_orbit_history.csv` against the yaw-refined design-page continuous-thrust history for acceptable mission deltas.
 
 ## Working Rule
 

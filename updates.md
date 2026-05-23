@@ -586,6 +586,10 @@
 - 提交：`a1ecc03`
 - 影响文件：`src/smart/services/design_continuous_thrust_optimizer.py`、`HANDOFF.md`。
 
-## 2026-05-23T00:54:33+08:00 | Split pulse and continuous longitude tolerances
-- 提交：`本次提交`
+## 2026-05-23T00:54:38+08:00 | Split pulse and continuous longitude tolerances
+- 提交：`110dfae`
 - 影响文件：`src/smart/services/design_continuous_thrust_optimizer.py`、`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`doc/design_continuous_thrust_parameter_optimization_algorithm.md`、`doc/design_maneuver_pulse_planning_algorithm.md`、`HANDOFF.md`、`projects/F4/config/design_maneuver_strategy.json`。
+
+## 2026-05-23T19:48:28+08:00 | Update F4 yaw-refined maneuver outputs
+- 提交：`本次提交`
+- 影响文件：`HANDOFF.md`、`projects/F4/config/design_import_maneuver_strategy.json`、`projects/F4/data/design_maneuver_results.json`、`projects/F4/smart_project.json`、`projects/F4/data/design_continuous_thrust_orbit_history.csv`。
