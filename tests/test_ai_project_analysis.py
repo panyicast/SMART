@@ -93,7 +93,7 @@ def test_ai_project_analysis_page_prioritizes_task_and_report(tmp_path) -> None:
 
     page = AIProjectAnalysisPage(I18nManager("zh"), workspace, settings)
     try:
-        assert isinstance(page._scope_combo, NoWheelComboBox)
+        assert not hasattr(page, "_scope_combo")
         assert isinstance(page._model_combo, NoWheelComboBox)
         assert isinstance(page._reasoning_effort_combo, NoWheelComboBox)
         assert page._api_group.maximumHeight() <= 44
@@ -101,6 +101,7 @@ def test_ai_project_analysis_page_prioritizes_task_and_report(tmp_path) -> None:
         assert page._trace_card.isHidden()
         assert page._run_state_label.text() == "待生成"
 
+        page._question_edit.setPlainText("重点分析发射窗口结果\n检查约束是否合理。")
         page.preview_context()
 
         preflight_text = page._preflight_view.toPlainText()
@@ -108,6 +109,7 @@ def test_ai_project_analysis_page_prioritizes_task_and_report(tmp_path) -> None:
         assert "不发送完整大 CSV" in preflight_text
         assert "项目摘要字符数" in preflight_text
         assert "待发送 prompt 字符数" in preflight_text
+        assert "重点分析发射窗口结果" in page._trace_view.toPlainText()
     finally:
         page.deleteLater()
 

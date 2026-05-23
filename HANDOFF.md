@@ -285,6 +285,9 @@ Latest Windows geometry warning verification: `py_compile` passed; `tests/test_s
 Current AI project analysis UI optimization is complete. The page now centers the left side on analysis task selection and a preflight summary, folds model configuration and agent/tool details by default, promotes the report area to the primary right-side surface, and keeps the execution trace behind a toggle. Scope/model/reasoning combos now use no-wheel combo boxes, and preflight output states the data-safety boundary explicitly.
 Latest AI project analysis UI verification: `py_compile` passed; `tests/test_ai_project_analysis.py` passed (17 tests).
 
+Current AI analysis prompt-scope simplification is complete. The fixed analysis-scope dropdown was removed; users now provide analysis scope, focus, and output requirements directly in the analysis prompt box. The first prompt line becomes the report scope metadata while the full prompt remains the user question content.
+Latest AI analysis prompt-scope verification: `py_compile` passed; `tests/test_ai_project_analysis.py` passed (17 tests).
+
 Next minimum task: run the new design-to-import button path on the real F4 project and compare the import-page calculated `full_orbit_history.csv` against the yaw-refined design-page continuous-thrust history for acceptable mission deltas.
 
 ## Working Rule

@@ -179,23 +179,15 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
         task_title.setProperty("role", "cardTitle")
         task_layout.addWidget(task_title)
 
-        self._scope_combo = NoWheelComboBox()
-        self._scope_combo.addItems(
-            [
-                "项目综合分析",
-                "发射窗口结果分析",
-                "变轨策略与轨道数据分析",
-                "配置一致性检查",
-                "异常与风险诊断",
-                "任务分析计算专家复核",
-                "STK 11.6 操作方案与命令复核",
-            ]
-        )
-        task_layout.addWidget(self._scope_combo)
+        prompt_label = QtWidgets.QLabel("分析提示词")
+        prompt_label.setProperty("role", "cardCaption")
+        task_layout.addWidget(prompt_label)
 
         self._question_edit = QtWidgets.QPlainTextEdit()
-        self._question_edit.setPlaceholderText("可选：补充你希望模型重点回答的问题。")
-        self._question_edit.setFixedHeight(108)
+        self._question_edit.setPlaceholderText(
+            "直接写分析范围、关注内容和输出要求。例如：重点分析发射窗口结果，检查约束是否合理，列出风险和下一步验证。"
+        )
+        self._question_edit.setFixedHeight(132)
         task_layout.addWidget(self._question_edit)
 
         button_row = QtWidgets.QHBoxLayout()
@@ -376,10 +368,11 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
             self._set_status(f"构建项目摘要失败：{exc}")
             return
         self._append_trace(f"[结果] 项目摘要构建完成，字符数 {len(context):,}")
-        self._append_trace(f"[工具] build_project_analysis_prompt(scope={self._scope_combo.currentText()!r})")
+        scope = self._analysis_scope()
+        self._append_trace(f"[工具] build_project_analysis_prompt(scope={scope!r})")
         prompt = build_project_analysis_prompt(
             context,
-            scope=self._scope_combo.currentText(),
+            scope=scope,
             question=self._question_edit.toPlainText(),
         )
         self._append_trace(f"[结果] 待发送 LLM prompt 已组装，字符数 {len(prompt):,}")
@@ -419,7 +412,7 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
             project_root=self._workspace.root_dir,
             data_dir=self._workspace.data_dir(),
             config=config,
-            scope=self._scope_combo.currentText(),
+            scope=self._analysis_scope(),
             question=self._question_edit.toPlainText(),
         )
         self._worker.moveToThread(self._thread)
@@ -524,7 +517,6 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
             self._model_combo,
             self._reasoning_effort_combo,
             self._thinking_checkbox,
-            self._scope_combo,
             self._question_edit,
             self._preview_button,
             self._analyze_button,
@@ -677,6 +669,13 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
 
     def _set_status(self, text: str) -> None:
         self._status_label.setText(text)
+
+    def _analysis_scope(self) -> str:
+        text = self._question_edit.toPlainText().strip()
+        if not text:
+            return "项目综合分析"
+        first_line = text.splitlines()[0].strip()
+        return first_line[:80] or "用户提示词分析"
 
     def _set_run_state(self, text: str) -> None:
         if hasattr(self, "_run_state_label"):

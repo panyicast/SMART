@@ -606,6 +606,10 @@
 - 提交：`a793aac`
 - 影响文件：`src/smart/ui/main_window.py`、`tests/test_sidebar_navigation.py`、`HANDOFF.md`。
 
-## 2026-05-23T20:23:22+08:00 | Refine AI project analysis workflow
+## 2026-05-23T20:23:27+08:00 | Refine AI project analysis workflow
+- 提交：`43e5e43`
+- 影响文件：`src/smart/ui/widgets/ai_project_analysis_page.py`、`tests/test_ai_project_analysis.py`、`doc/ai_project_analysis.md`、`HANDOFF.md`。
+
+## 2026-05-23T20:29:40+08:00 | Use prompt text for AI analysis scope
 - 提交：`本次提交`
 - 影响文件：`src/smart/ui/widgets/ai_project_analysis_page.py`、`tests/test_ai_project_analysis.py`、`doc/ai_project_analysis.md`、`HANDOFF.md`。
