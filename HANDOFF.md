@@ -276,6 +276,9 @@ Latest F4 yaw-refined output checkpoint: no regression tests run; generated data
 Current archived continuous-thrust display task is complete. The design maneuver page now saves continuous-thrust optimization parameters to `data/design_continuous_thrust_results.json` and, when a project opens with both archived pulse and continuous-thrust results, automatically restores the continuous-thrust table without rerunning optimization. The existing orbit-history CSV and import-ready maneuver strategy outputs are unchanged.
 Latest archived continuous-thrust display verification: py_compile passed; new focused tests passed; a page-level smoke with user q `3,3,2,0` saved the continuous result archive and a fresh page instance reloaded 5 continuous-thrust rows. Full `tests/test_design_maneuver_strategy.py` timed out after 304 s; the legacy page test still fails because its current default/fixed-Hp setup cannot generate an MV4/MV5 continuous-thrust target solution.
 
+Current README refresh task is complete. Issue #4 was validated as real documentation drift. `README.md` now describes current modules, the design-to-continuous-thrust-to-import workflow, updated project artifacts, new algorithm docs, and uses a tracked workflow SVG plus current F4 result charts.
+Latest README refresh verification: referenced README chart/doc paths exist; no code tests required.
+
 Next minimum task: run the new design-to-import button path on the real F4 project and compare the import-page calculated `full_orbit_history.csv` against the yaw-refined design-page continuous-thrust history for acceptable mission deltas.
 
 ## Working Rule
