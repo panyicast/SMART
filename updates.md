@@ -622,6 +622,10 @@
 - 提交：`27f8644`
 - 影响文件：`src/smart/ui/widgets/ai_project_analysis_page.py`、`tests/test_ai_project_analysis.py`、`doc/ai_project_analysis.md`、`HANDOFF.md`。
 
-## 2026-05-23T20:44:03+08:00 | Remove AI preflight button
-- 提交：`本次提交`
+## 2026-05-23T20:44:08+08:00 | Remove AI preflight button
+- 提交：`f637497`
 - 影响文件：`src/smart/ui/widgets/ai_project_analysis_page.py`、`tests/test_ai_project_analysis.py`、`doc/ai_project_analysis.md`、`HANDOFF.md`。
+
+## 2026-05-23T20:50:03+08:00 | Add AI tools help dialog
+- 提交：`本次提交`
+- 影响文件：`src/smart/services/llm_client.py`、`src/smart/ui/widgets/ai_project_analysis_page.py`、`tests/test_ai_project_analysis.py`、`doc/ai_project_analysis.md`、`HANDOFF.md`。

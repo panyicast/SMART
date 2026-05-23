@@ -125,7 +125,7 @@ def request_chat_completion(
             "content": turn.content,
             "tool_calls": turn.tool_calls,
         }
-        if expose_reasoning and turn.reasoning_content:
+        if config.thinking_enabled and turn.reasoning_content:
             assistant_message["reasoning_content"] = turn.reasoning_content
         messages.append(assistant_message)
 
@@ -219,7 +219,7 @@ def _stream_deepseek_turn(
 
     return _AssistantTurn(
         content="".join(content_parts),
-        reasoning_content="".join(reasoning_parts) if expose_reasoning else "",
+        reasoning_content="".join(reasoning_parts),
         tool_calls=[_tool_call_to_payload(item) for _, item in sorted(tool_calls.items()) if item.name],
         usage=usage,
     )

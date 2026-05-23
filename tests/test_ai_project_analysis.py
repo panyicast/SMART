@@ -10,7 +10,9 @@ from smart.services.llm_client import (
     LLMRequestConfig,
     _join_endpoint,
     _parse_sse_line,
+    request_chat_completion,
 )
+import smart.services.llm_client as llm_client
 from smart.services.mission_agent import (
     agent_document_paths,
     render_mission_agent_manifest,
@@ -104,6 +106,9 @@ def test_ai_project_analysis_page_prioritizes_task_and_report(tmp_path) -> None:
         assert isinstance(page._prompt_template_combo, NoWheelComboBox)
         assert isinstance(page._model_combo, NoWheelComboBox)
         assert isinstance(page._reasoning_effort_combo, NoWheelComboBox)
+        assert page._tools_help_button.text() == "查看 Skill / Tools"
+        assert "plan_design_maneuver_strategy" in page._render_tools_help_text()
+        assert "smart.skill.mission_analysis_calculation" in page._render_skill_help_markdown()
         assert page._api_group.maximumHeight() <= 44
         assert page._agent_group.maximumHeight() <= 44
         assert page._trace_card.isHidden()
@@ -148,6 +153,45 @@ def test_deepseek_sse_line_parser_ignores_keep_alive_and_done() -> None:
     assert _parse_sse_line(": keep-alive") is None
     assert _parse_sse_line("data: [DONE]") is None
     assert _parse_sse_line('data: {"choices": []}') == {"choices": []}
+
+
+def test_deepseek_tool_round_preserves_reasoning_content(monkeypatch) -> None:
+    captured_messages: list[list[dict[str, object]]] = []
+
+    def fake_stream(config, messages, *, tools, progress_callback, expose_reasoning):
+        captured_messages.append([dict(item) for item in messages])
+        if len(captured_messages) == 1:
+            return llm_client._AssistantTurn(
+                content="",
+                reasoning_content="tool reasoning",
+                tool_calls=[
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "build_project_context", "arguments": "{}"},
+                    }
+                ],
+                usage=None,
+            )
+        return llm_client._AssistantTurn(
+            content="done",
+            reasoning_content="final reasoning",
+            tool_calls=[],
+            usage=None,
+        )
+
+    monkeypatch.setattr(llm_client, "_stream_deepseek_turn", fake_stream)
+
+    response = request_chat_completion(
+        LLMRequestConfig(api_key="key", expose_reasoning=False),
+        "prompt",
+        tools=[{"type": "function", "function": {"name": "build_project_context"}}],
+        tool_executor=lambda _name, _arguments: {"ok": True},
+    )
+
+    assert response.content == "done"
+    assert "reasoning_content" in captured_messages[1][2]
+    assert captured_messages[1][2]["reasoning_content"] == "tool reasoning"
 
 
 def test_mission_agent_tool_specs_expose_local_tools(tmp_path) -> None:

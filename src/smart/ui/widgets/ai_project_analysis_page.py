@@ -19,6 +19,7 @@ from smart.services.llm_client import (
     request_chat_completion,
 )
 from smart.services.mission_agent import (
+    agent_document_paths,
     render_mission_agent_manifest,
     render_mission_agent_summary,
     render_mission_agent_system_prompt,
@@ -306,8 +307,11 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
         self._analyze_button = QtWidgets.QPushButton("AI 分析当前项目")
         self._analyze_button.setProperty("variant", "primaryAction")
         self._analyze_button.clicked.connect(self.run_analysis)
-        button_row.addStretch(1)
+        self._tools_help_button = QtWidgets.QPushButton("查看 Skill / Tools")
+        self._tools_help_button.clicked.connect(self._show_agent_capabilities_dialog)
         button_row.addWidget(self._analyze_button)
+        button_row.addWidget(self._tools_help_button)
+        button_row.addStretch(1)
         task_layout.addLayout(button_row)
 
         layout.addWidget(task_card)
@@ -384,6 +388,9 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
         self._agent_skills_view.setReadOnly(True)
         self._agent_skills_view.setFixedHeight(150)
         agent_layout.addWidget(self._agent_skills_view)
+        self._agent_tools_help_button = QtWidgets.QPushButton("查看完整 Skill / Tools 说明")
+        self._agent_tools_help_button.clicked.connect(self._show_agent_capabilities_dialog)
+        agent_layout.addWidget(self._agent_tools_help_button)
 
         layout.addWidget(agent_card)
         api_card.toggled.connect(lambda checked: self._set_group_body_visible(api_card, checked))
@@ -637,6 +644,87 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
         self._question_edit.setFocus(QtCore.Qt.FocusReason.OtherFocusReason)
         self._set_status("已套用提示词模板，可在文本框中继续修改。")
 
+    @QtCore.Slot()
+    def _show_agent_capabilities_dialog(self) -> None:
+        dialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle("当前可用 Skill / Tools")
+        dialog.setModal(True)
+        dialog.resize(920, 680)
+
+        layout = QtWidgets.QVBoxLayout(dialog)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(12)
+
+        tabs = QtWidgets.QTabWidget()
+        skill_view = QtWidgets.QTextBrowser()
+        skill_view.setOpenExternalLinks(False)
+        skill_view.setMarkdown(self._render_skill_help_markdown())
+        tabs.addTab(skill_view, "Skill 文档")
+
+        tools_view = QtWidgets.QPlainTextEdit()
+        tools_view.setReadOnly(True)
+        tools_view.setPlainText(self._render_tools_help_text())
+        tabs.addTab(tools_view, "Tools 调用说明")
+        layout.addWidget(tabs, 1)
+
+        close_row = QtWidgets.QHBoxLayout()
+        close_row.addStretch(1)
+        close_button = QtWidgets.QPushButton("关闭")
+        close_button.clicked.connect(dialog.accept)
+        close_row.addWidget(close_button)
+        layout.addLayout(close_row)
+        dialog.exec()
+
+    def _render_skill_help_markdown(self) -> str:
+        paths = "\n".join(f"- `{path}`" for path in agent_document_paths())
+        return (
+            "# SMART AI 分析 Agent\n\n"
+            f"{render_mission_agent_summary()}\n\n"
+            "## 文档来源\n\n"
+            f"{paths}\n\n"
+            "## 详细说明\n\n"
+            f"{render_mission_agent_manifest()}"
+        )
+
+    def _render_tools_help_text(self) -> str:
+        project_root = self._workspace.root_dir if self._workspace.root_dir is not None else Path.cwd()
+        executor = MissionAgentToolExecutor(project_root)
+        lines = [
+            "SMART 本地工具调用说明",
+            "",
+            "原则：",
+            "- 工具用于读取项目摘要、查找缓存结果、执行受控本地计算或查询 STK 11.6 帮助。",
+            "- 默认只读；只有工具参数明确提供 save_result=true 时才写入项目文件。",
+            "- API key、完整大 CSV、二进制文件、SPICE kernels 不会作为工具结果上传。",
+            "",
+            "可用工具：",
+        ]
+        for tool in executor.tool_specs():
+            function = tool.get("function") if isinstance(tool, dict) else None
+            if not isinstance(function, dict):
+                continue
+            name = str(function.get("name", "")).strip()
+            description = str(function.get("description", "")).strip()
+            lines.extend(["", f"## {name}", description or "无说明。"])
+            parameters = function.get("parameters")
+            if isinstance(parameters, dict):
+                properties = parameters.get("properties")
+                required = set(parameters.get("required", [])) if isinstance(parameters.get("required"), list) else set()
+                if isinstance(properties, dict) and properties:
+                    lines.append("参数：")
+                    for key, schema in properties.items():
+                        if not isinstance(schema, dict):
+                            lines.append(f"- {key}")
+                            continue
+                        type_name = schema.get("type", "any")
+                        default = f"，默认 {schema['default']!r}" if "default" in schema else ""
+                        must = "，必填" if key in required else ""
+                        param_desc = str(schema.get("description", "")).strip()
+                        lines.append(f"- {key} ({type_name}{must}{default})：{param_desc}")
+                else:
+                    lines.append("参数：无")
+        return "\n".join(lines)
+
     def _set_busy(self, busy: bool) -> None:
         for widget in (
             self._base_url_edit,
@@ -647,6 +735,8 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
             self._prompt_template_combo,
             self._question_edit,
             self._analyze_button,
+            self._tools_help_button,
+            self._agent_tools_help_button,
             self._save_settings_button,
         ):
             widget.setEnabled(not busy)
