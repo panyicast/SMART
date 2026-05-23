@@ -54,6 +54,7 @@ _NAV_KEYS = [
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self) -> None:
         super().__init__()
+        self.setMinimumSize(1144, 720)
         self.resize(1560, 920)
         self._workspace_root = Path.cwd()
         self._i18n = I18nManager(language="zh")
@@ -72,6 +73,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._sidebar_collapsed_width = 72
         self._sidebar_collapsed = bool(self._settings.value("sidebar/collapsed", False, type=bool))
         self._stack = QtWidgets.QStackedWidget()
+        self._stack.setSizePolicy(QtWidgets.QSizePolicy.Policy.Ignored, QtWidgets.QSizePolicy.Policy.Ignored)
 
         shell = QtWidgets.QWidget()
         self.setCentralWidget(shell)

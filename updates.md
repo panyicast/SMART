@@ -598,6 +598,10 @@
 - 提交：`4d68f37`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`src/smart/services/project_workspace.py`、`src/smart/ui/i18n.py`、`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`tests/test_project_workspace.py`、`HANDOFF.md`。
 
-## 2026-05-23T20:07:36+08:00 | Refresh README for current SMART workflow
-- 提交：`本次提交`
+## 2026-05-23T20:07:41+08:00 | Refresh README for current SMART workflow
+- 提交：`7f03f7c`
 - 影响文件：`README.md`、`HANDOFF.md`、`projects/F4/charts/smart_workflow.svg`。
+
+## 2026-05-23T20:15:27+08:00 | Cap main window minimum geometry
+- 提交：`本次提交`
+- 影响文件：`src/smart/ui/main_window.py`、`tests/test_sidebar_navigation.py`、`HANDOFF.md`。

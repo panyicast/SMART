@@ -46,7 +46,8 @@ def test_main_window_minimum_height_fits_common_desktop() -> None:
 
     window = MainWindow()
     try:
-        assert window.minimumSizeHint().height() <= 1000
+        assert window.minimumSize().height() <= 720
+        assert window.minimumSizeHint().height() <= 760
     finally:
         window.deleteLater()
 
