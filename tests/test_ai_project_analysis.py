@@ -71,6 +71,7 @@ def test_project_analysis_prompt_includes_scope_and_question() -> None:
     assert "为什么窗口变短？" in prompt
     assert "SMART 航天器任务分析专家" in prompt
     assert "smart.skill.mission_analysis_calculation" in prompt
+    assert "smart.skill.project_consistency_audit" in prompt
     assert "smart.skill.stk_11_6_operations" in prompt
     assert "context-body" in prompt
 
@@ -83,7 +84,9 @@ def test_mission_agent_profile_configures_calculation_and_stk_skills() -> None:
     assert profile.agent_id == "smart.spacecraft_mission_analysis_expert"
     assert all(path.exists() for path in agent_document_paths(profile))
     assert "smart.skill.mission_analysis_calculation" in manifest
+    assert "smart.skill.project_consistency_audit" in manifest
     assert "smart.skill.stk_11_6_operations" in manifest
+    assert "项目一致性审计" in system_prompt
     assert "STK 11.6" in system_prompt
     assert "SMART_STK_HELP_CONFIG" in manifest
     assert "SMART_STK_HELP_KB" in manifest
@@ -110,6 +113,7 @@ def test_ai_project_analysis_page_prioritizes_task_and_report(tmp_path) -> None:
         assert page._tools_help_button.text() == "查看 Skill / Tools"
         assert "plan_design_maneuver_strategy" in page._render_tools_help_text()
         assert "smart.skill.mission_analysis_calculation" in page._render_skill_help_markdown()
+        assert "smart.skill.project_consistency_audit" in page._render_skill_help_markdown()
         assert page._api_group.maximumHeight() <= 44
         assert page._agent_group.maximumHeight() <= 44
         assert page._trace_card.isHidden()

@@ -630,6 +630,10 @@
 - 提交：`1fa2c21`
 - 影响文件：`src/smart/services/llm_client.py`、`src/smart/ui/widgets/ai_project_analysis_page.py`、`tests/test_ai_project_analysis.py`、`doc/ai_project_analysis.md`、`HANDOFF.md`。
 
-## 2026-05-23T21:01:34+08:00 | Normalize report export status symbols
-- 提交：`本次提交`
+## 2026-05-23T21:01:39+08:00 | Normalize report export status symbols
+- 提交：`787e23e`
 - 影响文件：`src/smart/services/pdf_report_export.py`、`src/smart/services/report_export.py`、`tests/test_ai_project_analysis.py`、`HANDOFF.md`。
+
+## 2026-05-23T21:59:33+08:00 | Add project consistency audit skill
+- 提交：`本次提交`
+- 影响文件：`src/smart/agents/skills/project_consistency_audit.md`、`src/smart/services/mission_agent.py`、`tests/test_ai_project_analysis.py`、`doc/ai_project_analysis.md`、`HANDOFF.md`。

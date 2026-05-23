@@ -59,9 +59,10 @@ API key 可通过页面输入，也可通过环境变量提供：
 
 运行时代码 `src/smart/services/mission_agent.py` 只负责加载这些 Markdown 文档并拼装 system prompt / agent manifest。
 
-当前启用两个 skill：
+当前启用三个 skill：
 
 - 任务分析计算 skill：覆盖变轨策略、发射窗口、跟踪弧段、地影计算、轨道根数/状态矢量/SPICE 转换，以及曲线、CSV、甘特图等工程输出的解释和复核建议。
+- 项目一致性审计 skill：检查项目配置、缓存数据、计算结果、图表和报告之间是否存在配置漂移、过期缓存、时间基准混用、输入输出不匹配，并输出按严重度排序的最小修复或重算建议。
 - STK 11.6 操作 skill：默认面向 STK 11.6，记录本机 STK 11.6 运行目录、完整帮助文档入口、Connect 帮助入口、全局 `stk11_help.sqlite3` KB 和 `stkhelp "<query>"` 检索命令。
 
 STK 帮助文档不复制进项目目录；SMART 通过本机 STK 11.6 安装目录和全局 KB 路径引用完整文档，以避免把厂商帮助文件写入项目配置或仓库。

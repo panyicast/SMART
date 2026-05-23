@@ -32,6 +32,7 @@ _AGENT_DOC_DIR = Path(__file__).resolve().parents[1] / "agents"
 _AGENT_DOC_PATH = _AGENT_DOC_DIR / "mission_agent.md"
 _SKILL_DOC_PATHS = (
     _AGENT_DOC_DIR / "skills" / "mission_analysis_calculation.md",
+    _AGENT_DOC_DIR / "skills" / "project_consistency_audit.md",
     _AGENT_DOC_DIR / "skills" / "stk_11_6_operations.md",
 )
 
