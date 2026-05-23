@@ -17,8 +17,11 @@ from smart.domain.models import (
 )
 from smart.services.earth_orientation import format_utc, parse_utc, utc_now_iso_z
 from smart.services.design_maneuver_strategy import (
+    ContinuousThrustOptimizationResult,
     DesignManeuverResult,
+    continuous_thrust_result_from_payload,
     continuous_thrust_result_to_maneuver_strategy_payload,
+    continuous_thrust_result_to_payload,
     design_maneuver_result_from_payload,
     design_maneuver_result_to_payload,
     default_design_maneuver_strategy_payload,
@@ -42,6 +45,7 @@ MANEUVER_STRATEGY_FILE = "maneuver_strategy.json"
 DESIGN_MANEUVER_STRATEGY_FILE = "design_maneuver_strategy.json"
 DESIGN_IMPORT_MANEUVER_STRATEGY_FILE = "design_import_maneuver_strategy.json"
 DESIGN_MANEUVER_RESULTS_FILE = "design_maneuver_results.json"
+DESIGN_CONTINUOUS_THRUST_RESULTS_FILE = "design_continuous_thrust_results.json"
 LAUNCH_WINDOW_FILE = "launch_window.json"
 TRACKING_ARC_FILE = "tracking_arc.json"
 TRACKING_ARC_RESULTS_FILE = "tracking_arc_results.json"
@@ -190,6 +194,9 @@ class ProjectWorkspace:
     def design_maneuver_results_path(self) -> Path:
         return self.data_dir() / DESIGN_MANEUVER_RESULTS_FILE
 
+    def design_continuous_thrust_results_path(self) -> Path:
+        return self.data_dir() / DESIGN_CONTINUOUS_THRUST_RESULTS_FILE
+
     def launch_window_path(self) -> Path:
         return self.config_dir() / LAUNCH_WINDOW_FILE
 
@@ -325,6 +332,18 @@ class ProjectWorkspace:
         if not file_path.exists():
             return None
         return design_maneuver_result_from_payload(_read_json(file_path))
+
+    def save_design_continuous_thrust_results(self, result: ContinuousThrustOptimizationResult) -> Path:
+        file_path = self.design_continuous_thrust_results_path()
+        _write_json(file_path, continuous_thrust_result_to_payload(result))
+        self._touch_updated_time()
+        return file_path
+
+    def load_design_continuous_thrust_results(self) -> ContinuousThrustOptimizationResult | None:
+        file_path = self.design_continuous_thrust_results_path()
+        if not file_path.exists():
+            return None
+        return continuous_thrust_result_from_payload(_read_json(file_path))
 
     def save_launch_window_config(self, config: dict[str, Any]) -> Path:
         payload = normalize_launch_window_config(config)

@@ -590,6 +590,10 @@
 - 提交：`110dfae`
 - 影响文件：`src/smart/services/design_continuous_thrust_optimizer.py`、`src/smart/services/design_maneuver_strategy.py`、`tests/test_design_maneuver_strategy.py`、`doc/design_continuous_thrust_parameter_optimization_algorithm.md`、`doc/design_maneuver_pulse_planning_algorithm.md`、`HANDOFF.md`、`projects/F4/config/design_maneuver_strategy.json`。
 
-## 2026-05-23T19:48:28+08:00 | Update F4 yaw-refined maneuver outputs
-- 提交：`本次提交`
+## 2026-05-23T19:48:33+08:00 | Update F4 yaw-refined maneuver outputs
+- 提交：`f1a0658`
 - 影响文件：`HANDOFF.md`、`projects/F4/config/design_import_maneuver_strategy.json`、`projects/F4/data/design_maneuver_results.json`、`projects/F4/smart_project.json`、`projects/F4/data/design_continuous_thrust_orbit_history.csv`。
+
+## 2026-05-23T20:02:52+08:00 | Load archived continuous thrust results
+- 提交：`本次提交`
+- 影响文件：`src/smart/services/design_maneuver_strategy.py`、`src/smart/services/project_workspace.py`、`src/smart/ui/i18n.py`、`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`tests/test_project_workspace.py`、`HANDOFF.md`。

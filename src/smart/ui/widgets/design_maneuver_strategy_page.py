@@ -747,7 +747,9 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             self._set_continuous_thrust_rows(continuous_result)
             history_path = None
             import_strategy_path = None
+            result_path = None
             if self._workspace.current_project is not None:
+                result_path = self._workspace.save_design_continuous_thrust_results(continuous_result)
                 history_path = export_continuous_thrust_orbit_history_csv(
                     continuous_result,
                     self._workspace.data_dir() / "design_continuous_thrust_orbit_history.csv",
@@ -760,6 +762,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
                 self._set_status(
                     "statusReady",
                     f"连续推力参数优化完成，硬约束全部通过，ΔG={continuous_result.objective_delta_g_kg:.3f} kg"
+                    + (f"，结果存档：{result_path}" if result_path is not None else "")
                     + (f"，轨道数据：{history_path}" if history_path is not None else "")
                     + (f"，导入配置：{import_strategy_path}" if import_strategy_path is not None else ""),
                 )
@@ -820,6 +823,25 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         if result is None:
             return False
         self._set_result(result)
+        self._load_archived_continuous_thrust_result()
+        return True
+
+    def _load_archived_continuous_thrust_result(self) -> bool | None:
+        if self._workspace.current_project is None:
+            return False
+        try:
+            result = self._workspace.load_design_continuous_thrust_results()
+        except Exception as exc:
+            self._set_status(
+                "statusDisconnected",
+                self._i18n.t("design_maneuver.status.continuous_result_load_failed", error=str(exc)),
+            )
+            return None
+        if result is None:
+            return False
+        self._continuous_thrust_result = result
+        self._set_continuous_thrust_rows(result)
+        self._set_status("statusReady", self._i18n.t("design_maneuver.status.loaded_with_continuous_result"))
         return True
 
     def _apply_config_to_fields(self, config: dict[str, Any]) -> None:

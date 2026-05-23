@@ -147,6 +147,44 @@ def design_maneuver_result_from_payload(payload: dict[str, Any] | None) -> Desig
     )
 
 
+def continuous_thrust_result_to_payload(result: ContinuousThrustOptimizationResult) -> dict[str, Any]:
+    return {
+        "version": 1,
+        "parameters": [asdict(parameter) for parameter in result.parameters],
+        "total_propellant_kg": float(result.total_propellant_kg),
+        "objective_delta_g_kg": float(result.objective_delta_g_kg),
+        "time_step_s": float(result.time_step_s),
+        "yaw_step_deg": float(result.yaw_step_deg),
+        "hard_constraint_passed": bool(result.hard_constraint_passed),
+        "failed_constraints": list(result.failed_constraints),
+    }
+
+
+def continuous_thrust_result_from_payload(payload: dict[str, Any] | None) -> ContinuousThrustOptimizationResult:
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid continuous thrust result payload.")
+    parameters_payload = payload.get("parameters", [])
+    failed_constraints_payload = payload.get("failed_constraints", [])
+    if not isinstance(parameters_payload, list):
+        raise ValueError("Invalid continuous thrust result payload: 'parameters' must be a list.")
+    if not isinstance(failed_constraints_payload, list):
+        raise ValueError("Invalid continuous thrust result payload: 'failed_constraints' must be a list.")
+    return ContinuousThrustOptimizationResult(
+        parameters=[
+            ContinuousThrustManeuverParameter(**dict(item))
+            for item in parameters_payload
+            if isinstance(item, dict)
+        ],
+        total_propellant_kg=float(payload.get("total_propellant_kg", 0.0)),
+        objective_delta_g_kg=float(payload.get("objective_delta_g_kg", 0.0)),
+        time_step_s=float(payload.get("time_step_s", 0.0)),
+        yaw_step_deg=float(payload.get("yaw_step_deg", 0.0)),
+        hard_constraint_passed=bool(payload.get("hard_constraint_passed", False)),
+        failed_constraints=[str(item) for item in failed_constraints_payload],
+        orbit_history_rows=[],
+    )
+
+
 def default_design_maneuver_strategy_payload() -> dict[str, Any]:
     return {
         "planner": {

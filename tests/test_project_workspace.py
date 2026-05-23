@@ -14,6 +14,8 @@ from smart.domain.models import (
 )
 from smart.services.project_workspace import ProjectWorkspace
 from smart.services.design_maneuver_strategy import (
+    ContinuousThrustManeuverParameter,
+    ContinuousThrustOptimizationResult,
     default_design_maneuver_strategy_payload,
     plan_design_maneuver_strategy,
 )
@@ -324,6 +326,64 @@ def test_save_and_load_design_maneuver_results(tmp_path: Path) -> None:
     assert loaded.summary["actual_count"] == result.summary["actual_count"]
     assert len(loaded.burns) == len(result.burns)
     assert loaded.burns[0].delta_v_mps == pytest.approx(result.burns[0].delta_v_mps)
+
+
+def test_save_and_load_design_continuous_thrust_results(tmp_path: Path) -> None:
+    workspace = ProjectWorkspace()
+    workspace.create_project("continuous-thrust-results", tmp_path)
+    result = ContinuousThrustOptimizationResult(
+        parameters=[
+            ContinuousThrustManeuverParameter(
+                maneuver_index=1,
+                flight_revolution=3,
+                position_label="远地点",
+                initial_burn_start_min=100.0,
+                initial_yaw_angle_deg=10.0,
+                burn_start_min=101.0,
+                settle_end_min=105.0,
+                cutoff_min=150.0,
+                yaw_angle_deg=12.0,
+                ignition_longitude_deg_e=80.0,
+                cutoff_longitude_deg_e=120.0,
+                delta_v_mps=300.0,
+                target_post_a_km=32100.0,
+                total_burn_time_min=49.0,
+                settle_duration_min=4.0,
+                orbit_control_duration_min=45.0,
+                propellant_kg=600.0,
+                future_apogee_raise_propellant_kg=10.0,
+                future_perigee_lower_propellant_kg=20.0,
+                trim_propellant_kg=1.0,
+                objective_delta_g_kg=631.0,
+                objective_formula="m",
+                post_a_km=32100.0,
+                post_e=0.5,
+                post_i_deg=10.0,
+                post_mass_kg=5915.0,
+                duration_ok=True,
+                longitude_ok=True,
+                search_evaluations=12,
+                optimization_mode="固定链路优化",
+            )
+        ],
+        total_propellant_kg=600.0,
+        objective_delta_g_kg=631.0,
+        time_step_s=10.0,
+        yaw_step_deg=0.05,
+        hard_constraint_passed=True,
+        failed_constraints=[],
+        orbit_history_rows=[{"elapsed_time_min": 101.0}],
+    )
+
+    file_path = workspace.save_design_continuous_thrust_results(result)
+    loaded = workspace.load_design_continuous_thrust_results()
+
+    assert file_path == workspace.root_dir / "data" / "design_continuous_thrust_results.json"
+    assert loaded is not None
+    assert loaded.hard_constraint_passed is True
+    assert loaded.parameters[0].burn_start_min == pytest.approx(101.0)
+    assert loaded.parameters[0].optimization_mode == "固定链路优化"
+    assert loaded.orbit_history_rows == []
 
 
 def test_open_project_requires_metadata_file(tmp_path: Path) -> None:

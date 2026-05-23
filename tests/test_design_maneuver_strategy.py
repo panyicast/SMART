@@ -17,6 +17,8 @@ from smart.services.design_continuous_thrust_optimizer import (
     MV5_NEAR_PERIGEE_START_WINDOW_MIN,
 )
 from smart.services.design_maneuver_strategy import (
+    ContinuousThrustManeuverParameter,
+    ContinuousThrustOptimizationResult,
     continuous_thrust_result_to_maneuver_strategy_payload,
     default_design_maneuver_strategy_payload,
     export_continuous_thrust_orbit_history_csv,
@@ -598,6 +600,68 @@ def _read_xlsx_sheet_values(path: Path) -> tuple[dict[str, str], set[str]]:
         QtCore.QDateTime(QtCore.QDate(2024, 1, 1), QtCore.QTime(8, 0, 0), beijing_tz)
     )
     assert parameter_dialog.config()["initial"]["t0_epoch"] == "2024-01-01T00:00:00Z"
+
+
+def test_design_maneuver_page_loads_archived_continuous_thrust_result(tmp_path: Path) -> None:
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    workspace = ProjectWorkspace()
+    workspace.create_project("archived-continuous-result", tmp_path)
+    pulse_result = plan_design_maneuver_strategy(default_design_maneuver_strategy_payload())
+    workspace.save_design_maneuver_results(pulse_result)
+    burn = pulse_result.burns[0]
+    continuous_result = ContinuousThrustOptimizationResult(
+        parameters=[
+            ContinuousThrustManeuverParameter(
+                maneuver_index=burn.index,
+                flight_revolution=burn.flight_revolution,
+                position_label=burn.position_label,
+                initial_burn_start_min=burn.elapsed_min - 1.0,
+                initial_yaw_angle_deg=burn.alpha_deg,
+                burn_start_min=burn.elapsed_min - 0.5,
+                settle_end_min=burn.elapsed_min + 3.5,
+                cutoff_min=burn.elapsed_min + 12.0,
+                yaw_angle_deg=burn.alpha_deg + 0.25,
+                ignition_longitude_deg_e=burn.longitude_deg_e,
+                cutoff_longitude_deg_e=burn.longitude_deg_e + 1.0,
+                delta_v_mps=burn.delta_v_mps,
+                target_post_a_km=burn.target_post_a_km or burn.post_a_km,
+                total_burn_time_min=12.5,
+                settle_duration_min=4.0,
+                orbit_control_duration_min=8.5,
+                propellant_kg=burn.propellant_kg,
+                future_apogee_raise_propellant_kg=0.0,
+                future_perigee_lower_propellant_kg=0.0,
+                trim_propellant_kg=0.0,
+                objective_delta_g_kg=burn.propellant_kg,
+                objective_formula="m",
+                post_a_km=burn.post_a_km,
+                post_e=burn.post_e,
+                post_i_deg=burn.post_i_deg,
+                post_mass_kg=burn.post_mass_kg,
+                duration_ok=True,
+                longitude_ok=True,
+                search_evaluations=7,
+                optimization_mode="存档恢复",
+            )
+        ],
+        total_propellant_kg=burn.propellant_kg,
+        objective_delta_g_kg=burn.propellant_kg,
+        time_step_s=10.0,
+        yaw_step_deg=0.05,
+        hard_constraint_passed=True,
+        failed_constraints=[],
+        orbit_history_rows=[],
+    )
+    workspace.save_design_continuous_thrust_results(continuous_result)
+
+    page = DesignManeuverStrategyPage(I18nManager("zh"), workspace)
+
+    assert page._burn_table.rowCount() == len(pulse_result.burns) + 1
+    assert page._continuous_thrust_result is not None
+    assert page._continuous_thrust_table.rowCount() == 1
+    assert "存档恢复" in page._continuous_thrust_table.item(0, 0).text()
+    assert page._continuous_thrust_table.item(0, 2).text() == f"{burn.elapsed_min - 0.5:.2f}"
+    assert page._status_label.text() == "已加载设计变轨策略配置和存档连续推力结果。"
 
 
 def test_design_maneuver_config_normalizes_booleans_and_windows() -> None:
