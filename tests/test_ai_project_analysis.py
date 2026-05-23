@@ -19,6 +19,12 @@ from smart.services.mission_agent import (
     smart_mission_agent_profile,
 )
 from smart.services.mission_agent_tools import MissionAgentToolExecutor
+import smart.services.mission_agent_tools as mission_agent_tools
+from smart.services.design_maneuver_strategy import (
+    DesignManeuverBurn,
+    DesignManeuverResult,
+    default_design_maneuver_strategy_payload,
+)
 from smart.services.project_ai_context import build_project_analysis_context, build_project_analysis_prompt
 from smart.services.report_export import export_docx_report, export_markdown_report
 from smart.services.project_workspace import ProjectWorkspace
@@ -143,7 +149,61 @@ def test_mission_agent_tool_specs_expose_local_tools(tmp_path) -> None:
 
     assert "find_launch_windows" in tool_names
     assert "compute_shadow_intervals_for_launch" in tool_names
+    assert "plan_design_maneuver_strategy" in tool_names
+    assert "optimize_design_continuous_thrust" in tool_names
+    assert "compute_launch_window_samples" in tool_names
     assert "query_stk_help" in tool_names
+
+
+def test_design_maneuver_agent_tool_uses_override_and_saves(monkeypatch, tmp_path) -> None:
+    project = tmp_path / "Demo"
+    (project / "config").mkdir(parents=True)
+    (project / "data").mkdir()
+    (project / "config" / "design_maneuver_strategy.json").write_text(
+        json.dumps(default_design_maneuver_strategy_payload(), ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    def fake_plan(payload):
+        assert payload["initial"]["m0_kg"] == 6400.0
+        return DesignManeuverResult(
+            config=payload,
+            summary={"total_delta_v_mps": 12.5},
+            burns=[
+                DesignManeuverBurn(
+                    index=1,
+                    burn_type="raise_apogee",
+                    apsis="perigee",
+                    elapsed_min=10.0,
+                    beijing_time="2026-04-24 22:04:27",
+                    longitude_deg_e=101.0,
+                    delta_v_mps=12.5,
+                    alpha_deg=0.0,
+                    target_post_a_km=42164.0,
+                    total_burn_time_min=2.0,
+                    propellant_kg=4.0,
+                    post_a_km=30000.0,
+                    post_e=0.7,
+                    post_i_deg=16.5,
+                    duration_ok=True,
+                    longitude_ok=True,
+                )
+            ],
+            checks=[{"name": "duration", "passed": True}],
+            warnings=[],
+        )
+
+    monkeypatch.setattr(mission_agent_tools, "plan_design_maneuver_strategy", fake_plan)
+    executor = MissionAgentToolExecutor(project)
+
+    result = executor.execute(
+        "plan_design_maneuver_strategy",
+        {"config_override": {"initial": {"m0_kg": 6400.0}}, "save_result": True},
+    )
+
+    assert result["burn_count"] == 1
+    assert result["burns"][0]["delta_v_mps"] == 12.5
+    assert (project / "data" / "design_maneuver_results.json").exists()
 
 
 def test_stk_help_tool_reports_missing_configuration(monkeypatch, tmp_path) -> None:

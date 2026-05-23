@@ -10,9 +10,23 @@ import sys
 from typing import Any
 
 from smart.services.earth_orientation import format_utc, parse_utc
+from smart.services.design_maneuver_strategy import (
+    continuous_thrust_result_to_maneuver_strategy_payload,
+    continuous_thrust_result_to_payload,
+    default_design_maneuver_strategy_payload,
+    design_maneuver_result_from_payload,
+    design_maneuver_result_to_payload,
+    export_continuous_thrust_orbit_history_csv,
+    optimize_continuous_thrust_model_parameters,
+    plan_design_maneuver_strategy,
+)
 from smart.services.launch_window import (
+    LaunchWindowResult,
     compute_shadow_intervals_for_launch,
+    compute_launch_windows,
     config_from_payload,
+    default_launch_window_config,
+    tracking_assets_from_config,
 )
 from smart.services.mission_agent import resolve_stk_help_tool
 from smart.services.project_ai_context import build_project_analysis_context
@@ -100,6 +114,92 @@ class MissionAgentToolExecutor:
             {
                 "type": "function",
                 "function": {
+                    "name": "plan_design_maneuver_strategy",
+                    "description": (
+                        "调用设计变轨策略页面同源脉冲变轨算法，生成 delta-v、点火时刻、经度和约束检查。"
+                        "默认只返回结果；save_result=true 时写入 data/design_maneuver_results.json。"
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "config_override": {
+                                "type": "object",
+                                "description": "可选配置覆盖，按 config/design_maneuver_strategy.json 的结构递归合并。",
+                                "additionalProperties": True,
+                            },
+                            "save_result": {
+                                "type": "boolean",
+                                "description": "是否保存结果到项目 data 目录。默认 false。",
+                                "default": False,
+                            },
+                        },
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "optimize_design_continuous_thrust",
+                    "description": (
+                        "调用连续推力设计优化算法。优先复用已归档脉冲变轨结果；"
+                        "save_result=true 时写入连续推力结果、轨道历史 CSV 和可导入变轨策略配置。"
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "use_archived_pulse_result": {
+                                "type": "boolean",
+                                "description": "存在 data/design_maneuver_results.json 时是否直接加载。默认 true。",
+                                "default": True,
+                            },
+                            "save_result": {
+                                "type": "boolean",
+                                "description": "是否保存连续推力优化产物。默认 false。",
+                                "default": False,
+                            },
+                        },
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "compute_launch_window_samples",
+                    "description": (
+                        "调用发射窗口页面同源算法，基于 data/full_orbit_history.csv、"
+                        "config/maneuver_strategy.json 和发射窗口配置重新采样并合并窗口。"
+                        "默认只返回摘要；save_result=true 时写入 samples/results CSV。"
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "config_override": {
+                                "type": "object",
+                                "description": "可选发射窗口配置覆盖，按 config/launch_window.json 的结构递归合并。",
+                                "additionalProperties": True,
+                            },
+                            "sample_preview_limit": {
+                                "type": "integer",
+                                "description": "返回样本预览行数上限。默认 5。",
+                                "minimum": 0,
+                                "maximum": 20,
+                                "default": 5,
+                            },
+                            "save_result": {
+                                "type": "boolean",
+                                "description": "是否保存 launch_window_samples.csv 和 launch_window_results.csv。默认 false。",
+                                "default": False,
+                            },
+                        },
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
                     "name": "inspect_project_files",
                     "description": "检查当前项目 config/data/charts 下的文件是否存在，并返回文件大小。",
                     "parameters": {
@@ -136,6 +236,12 @@ class MissionAgentToolExecutor:
             return self._find_launch_windows(arguments)
         if name == "compute_shadow_intervals_for_launch":
             return self._compute_shadow_intervals_for_launch(arguments)
+        if name == "plan_design_maneuver_strategy":
+            return self._plan_design_maneuver_strategy(arguments)
+        if name == "optimize_design_continuous_thrust":
+            return self._optimize_design_continuous_thrust(arguments)
+        if name == "compute_launch_window_samples":
+            return self._compute_launch_window_samples(arguments)
         if name == "inspect_project_files":
             return self._inspect_project_files()
         if name == "query_stk_help":
@@ -235,6 +341,120 @@ class MissionAgentToolExecutor:
             "raw_intervals": [asdict(item) for item in intervals],
         }
 
+    def _plan_design_maneuver_strategy(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        payload = _design_maneuver_config_payload(self.project_root, arguments)
+        result = plan_design_maneuver_strategy(payload)
+
+        saved_path = ""
+        if bool(arguments.get("save_result", False)):
+            result_path = self.project_root / "data" / "design_maneuver_results.json"
+            _write_project_json(result_path, design_maneuver_result_to_payload(result))
+            saved_path = str(result_path)
+
+        return {
+            "project_root": str(self.project_root),
+            "config_path": str(self.project_root / "config" / "design_maneuver_strategy.json"),
+            "saved_path": saved_path,
+            "summary": dict(result.summary),
+            "burn_count": len(result.burns),
+            "burns": [_summarize_design_burn(burn) for burn in result.burns],
+            "checks": [dict(item) for item in result.checks],
+            "warnings": list(result.warnings),
+        }
+
+    def _optimize_design_continuous_thrust(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        pulse_result_path = self.project_root / "data" / "design_maneuver_results.json"
+        use_archived = bool(arguments.get("use_archived_pulse_result", True))
+        if use_archived and pulse_result_path.exists():
+            pulse_result = design_maneuver_result_from_payload(_read_project_json(pulse_result_path))
+            pulse_source = str(pulse_result_path)
+        else:
+            pulse_payload = _design_maneuver_config_payload(self.project_root, {})
+            pulse_result = plan_design_maneuver_strategy(pulse_payload)
+            pulse_source = "computed_from_config"
+
+        result = optimize_continuous_thrust_model_parameters(pulse_result)
+        saved_paths: dict[str, str] = {}
+        if bool(arguments.get("save_result", False)):
+            result_path = self.project_root / "data" / "design_continuous_thrust_results.json"
+            history_path = self.project_root / "data" / "design_continuous_thrust_orbit_history.csv"
+            strategy_path = self.project_root / "config" / "design_import_maneuver_strategy.json"
+            _write_project_json(result_path, continuous_thrust_result_to_payload(result))
+            export_continuous_thrust_orbit_history_csv(result, history_path)
+            _write_project_json(
+                strategy_path,
+                continuous_thrust_result_to_maneuver_strategy_payload(result, pulse_result.config),
+            )
+            saved_paths = {
+                "result_json": str(result_path),
+                "orbit_history_csv": str(history_path),
+                "maneuver_strategy_json": str(strategy_path),
+            }
+
+        return {
+            "project_root": str(self.project_root),
+            "pulse_result_source": pulse_source,
+            "saved_paths": saved_paths,
+            "hard_constraint_passed": bool(result.hard_constraint_passed),
+            "failed_constraints": list(result.failed_constraints),
+            "parameter_count": len(result.parameters),
+            "total_propellant_kg": float(result.total_propellant_kg),
+            "objective_delta_g_kg": float(result.objective_delta_g_kg),
+            "time_step_s": float(result.time_step_s),
+            "yaw_step_deg": float(result.yaw_step_deg),
+            "orbit_history_row_count": len(result.orbit_history_rows),
+            "parameters": [_summarize_continuous_parameter(item) for item in result.parameters],
+        }
+
+    def _compute_launch_window_samples(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        orbit_history_csv = self.project_root / "data" / "full_orbit_history.csv"
+        strategy_path = self.project_root / "config" / "maneuver_strategy.json"
+        if not orbit_history_csv.exists():
+            raise MissionAgentToolError(f"Missing orbit history CSV: {orbit_history_csv}")
+        if not strategy_path.exists():
+            raise MissionAgentToolError(f"Missing maneuver strategy config: {strategy_path}")
+
+        config_payload = _launch_window_config_payload(self.project_root, arguments)
+        config = config_from_payload(config_payload)
+        maneuver_strategy = _read_project_json(strategy_path)
+        windows, samples = compute_launch_windows(
+            orbit_history_csv=orbit_history_csv,
+            maneuver_strategy=maneuver_strategy,
+            config=config,
+            assets=tracking_assets_from_config(config),
+        )
+
+        saved_paths: dict[str, str] = {}
+        if bool(arguments.get("save_result", False)):
+            samples_path = self.project_root / "data" / "launch_window_samples.csv"
+            results_path = self.project_root / "data" / "launch_window_results.csv"
+            _write_launch_window_samples_csv(samples_path, samples, config.rocket_flight_time_s)
+            _write_launch_window_results_csv(results_path, windows, config.rocket_flight_time_s)
+            saved_paths = {
+                "samples_csv": str(samples_path),
+                "results_csv": str(results_path),
+            }
+
+        preview_limit = max(0, min(20, int(arguments.get("sample_preview_limit", 5) or 5)))
+        return {
+            "project_root": str(self.project_root),
+            "orbit_history_csv": str(orbit_history_csv),
+            "maneuver_strategy_path": str(strategy_path),
+            "saved_paths": saved_paths,
+            "sample_count": len(samples),
+            "pass_sample_count": sum(1 for item in samples if bool(item.get("ok"))),
+            "window_count": len(windows),
+            "windows": [_summarize_launch_window(window) for window in windows],
+            "sample_preview": samples[:preview_limit],
+            "config_summary": {
+                "start_utc": config.start_utc,
+                "end_utc": config.end_utc,
+                "sample_step_min": config.sample_step_min,
+                "rocket_flight_time_s": config.rocket_flight_time_s,
+                "min_window_duration_min": config.min_window_duration_min,
+            },
+        }
+
     def _inspect_project_files(self) -> dict[str, Any]:
         inventory: dict[str, list[dict[str, Any]]] = {}
         for folder_name in ("config", "data", "charts"):
@@ -290,6 +510,195 @@ class MissionAgentToolExecutor:
             "command": status.display_command(query),
             "output": (completed.stdout or completed.stderr).strip(),
         }
+
+
+def _read_project_json(path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8-sig"))
+    except FileNotFoundError:
+        raise
+    except Exception as exc:
+        raise MissionAgentToolError(f"Failed to read JSON: {path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise MissionAgentToolError(f"JSON root must be an object: {path}")
+    return payload
+
+
+def _write_project_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _object_argument(arguments: dict[str, Any], key: str) -> dict[str, Any]:
+    value = arguments.get(key)
+    if value in (None, ""):
+        return {}
+    if not isinstance(value, dict):
+        raise MissionAgentToolError(f"{key} must be an object.")
+    return value
+
+
+def _deep_merge_dict(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(base)
+    for key, value in override.items():
+        current = merged.get(key)
+        if isinstance(current, dict) and isinstance(value, dict):
+            merged[key] = _deep_merge_dict(current, value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _design_maneuver_config_payload(project_root: Path, arguments: dict[str, Any]) -> dict[str, Any]:
+    config_path = project_root / "config" / "design_maneuver_strategy.json"
+    payload = _read_project_json(config_path) if config_path.exists() else default_design_maneuver_strategy_payload()
+    return _deep_merge_dict(payload, _object_argument(arguments, "config_override"))
+
+
+def _launch_window_config_payload(project_root: Path, arguments: dict[str, Any]) -> dict[str, Any]:
+    config_path = project_root / "config" / "launch_window.json"
+    payload = _read_project_json(config_path) if config_path.exists() else default_launch_window_config()
+    return _deep_merge_dict(payload, _object_argument(arguments, "config_override"))
+
+
+def _summarize_design_burn(burn: Any) -> dict[str, Any]:
+    return {
+        "index": int(burn.index),
+        "burn_type": str(burn.burn_type),
+        "apsis": str(burn.apsis),
+        "elapsed_min": float(burn.elapsed_min),
+        "beijing_time": str(burn.beijing_time),
+        "longitude_deg_e": float(burn.longitude_deg_e),
+        "delta_v_mps": float(burn.delta_v_mps),
+        "alpha_deg": float(burn.alpha_deg),
+        "total_burn_time_min": float(burn.total_burn_time_min),
+        "propellant_kg": float(burn.propellant_kg),
+        "post_a_km": float(burn.post_a_km),
+        "post_e": float(burn.post_e),
+        "post_i_deg": float(burn.post_i_deg),
+        "duration_ok": bool(burn.duration_ok),
+        "longitude_ok": bool(burn.longitude_ok),
+    }
+
+
+def _summarize_continuous_parameter(parameter: Any) -> dict[str, Any]:
+    return {
+        "maneuver_index": int(parameter.maneuver_index),
+        "flight_revolution": int(parameter.flight_revolution),
+        "position_label": str(parameter.position_label),
+        "burn_start_min": float(parameter.burn_start_min),
+        "settle_end_min": float(parameter.settle_end_min),
+        "cutoff_min": float(parameter.cutoff_min),
+        "yaw_angle_deg": float(parameter.yaw_angle_deg),
+        "ignition_longitude_deg_e": float(parameter.ignition_longitude_deg_e),
+        "cutoff_longitude_deg_e": float(parameter.cutoff_longitude_deg_e),
+        "delta_v_mps": float(parameter.delta_v_mps),
+        "total_burn_time_min": float(parameter.total_burn_time_min),
+        "propellant_kg": float(parameter.propellant_kg),
+        "objective_delta_g_kg": float(parameter.objective_delta_g_kg),
+        "post_a_km": float(parameter.post_a_km),
+        "post_e": float(parameter.post_e),
+        "post_i_deg": float(parameter.post_i_deg),
+        "duration_ok": bool(parameter.duration_ok),
+        "longitude_ok": bool(parameter.longitude_ok),
+        "optimization_mode": str(parameter.optimization_mode),
+    }
+
+
+def _summarize_launch_window(window: LaunchWindowResult) -> dict[str, Any]:
+    start = parse_utc(window.window_start_utc)
+    end = parse_utc(window.window_end_utc)
+    return {
+        "window_start_utc": format_utc(start),
+        "window_end_utc": format_utc(end),
+        "window_start_bjt": _format_bjt(start),
+        "window_end_bjt": _format_bjt(end),
+        "duration_min": float(window.duration_min),
+        "first_failure": str(window.first_failure),
+        "first_orbit_shadow_min": float(window.first_orbit_shadow_min),
+        "no_shadow_period_shadow_min": float(window.no_shadow_period_shadow_min),
+        "separation_shadow_min": float(window.separation_shadow_min),
+        "min_burn_sun_margin_deg": float(window.min_burn_sun_margin_deg),
+        "max_tracking_gap_min": float(window.max_tracking_gap_min),
+        "inclination_deg": float(window.inclination_deg),
+        "window_start_longest_shadow_min": float(window.window_start_longest_shadow_min),
+        "window_end_longest_shadow_min": float(window.window_end_longest_shadow_min),
+        "window_start_constraint": str(window.window_start_constraint or ""),
+        "window_end_constraint": str(window.window_end_constraint or ""),
+    }
+
+
+def _write_launch_window_samples_csv(path: Path, samples: list[dict[str, Any]], rocket_flight_time_s: float) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    columns = [
+        "launch_utc",
+        "t0_utc",
+        "rocket_flight_time_s",
+        "ok",
+        "failure",
+        "first_orbit_shadow_min",
+        "no_shadow_period_shadow_min",
+        "separation_shadow_min",
+        "longest_shadow_min",
+        "min_burn_sun_margin_deg",
+        "max_tracking_gap_min",
+        "inclination_deg",
+        "constraint_results",
+    ]
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=columns)
+        writer.writeheader()
+        for sample in samples:
+            row = {key: sample.get(key, "") for key in columns}
+            row["rocket_flight_time_s"] = float(rocket_flight_time_s)
+            row["constraint_results"] = json.dumps(
+                sample.get("constraint_results", []),
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            writer.writerow(row)
+
+
+def _write_launch_window_results_csv(
+    path: Path,
+    windows: list[LaunchWindowResult],
+    rocket_flight_time_s: float,
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    headers = [
+        "窗口前沿 (北京时间)",
+        "窗口后沿 (北京时间)",
+        "长度/min",
+        "入轨 T0 前沿 (北京时间)",
+        "第一圈地影/min",
+        "窗口前沿轨道最长地影/min",
+        "窗口后沿轨道最长地影/min",
+        "窗口前沿限制条件",
+        "窗口后沿限制条件",
+    ]
+    with path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(headers)
+        for window in windows:
+            start = parse_utc(window.window_start_utc)
+            end = parse_utc(window.window_end_utc)
+            t0 = start + timedelta(seconds=float(rocket_flight_time_s))
+            writer.writerow(
+                [
+                    _format_bjt(start),
+                    _format_bjt(end),
+                    f"{window.duration_min:.1f}",
+                    _format_bjt(t0),
+                    f"{window.first_orbit_shadow_min:.1f}",
+                    f"{window.window_start_longest_shadow_min:.1f}",
+                    f"{window.window_end_longest_shadow_min:.1f}",
+                    str(window.window_start_constraint or "--"),
+                    str(window.window_end_constraint or "--"),
+                ]
+            )
 
 
 def _launch_utc_from_arguments(arguments: dict[str, Any]) -> str:

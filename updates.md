@@ -610,6 +610,10 @@
 - 提交：`43e5e43`
 - 影响文件：`src/smart/ui/widgets/ai_project_analysis_page.py`、`tests/test_ai_project_analysis.py`、`doc/ai_project_analysis.md`、`HANDOFF.md`。
 
-## 2026-05-23T20:29:40+08:00 | Use prompt text for AI analysis scope
-- 提交：`本次提交`
+## 2026-05-23T20:29:44+08:00 | Use prompt text for AI analysis scope
+- 提交：`4189ff7`
 - 影响文件：`src/smart/ui/widgets/ai_project_analysis_page.py`、`tests/test_ai_project_analysis.py`、`doc/ai_project_analysis.md`、`HANDOFF.md`。
+
+## 2026-05-23T20:37:48+08:00 | Expose mission algorithms to AI agent
+- 提交：`本次提交`
+- 影响文件：`src/smart/agents/skills/mission_analysis_calculation.md`、`src/smart/services/mission_agent_tools.py`、`tests/test_ai_project_analysis.py`、`HANDOFF.md`。
