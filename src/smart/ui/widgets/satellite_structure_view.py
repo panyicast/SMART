@@ -108,8 +108,8 @@ class SatelliteStructureView(QtWidgets.QWidget):
             smooth=False,
             shader="shaded",
             drawEdges=True,
-            edgeColor=(0.3, 0.36, 0.4, 0.65),
-            color=(0.76, 0.79, 0.82, 1.0),
+            edgeColor=(0.48, 0.28, 0.10, 0.72),
+            color=(0.92, 0.56, 0.14, 1.0),
         )
         self._view.addItem(self._body)
         self._dynamic_items: list[object] = []
@@ -162,6 +162,7 @@ class SatelliteStructureView(QtWidgets.QWidget):
             side_sign=1.0,
             count=max(structure.east_antenna_count, 0),
             body_x=body_x,
+            body_y=body_y,
             body_z=body_z,
             antenna_major=antenna_major,
             antenna_minor=antenna_minor,
@@ -171,6 +172,7 @@ class SatelliteStructureView(QtWidgets.QWidget):
             side_sign=-1.0,
             count=max(structure.west_antenna_count, 0),
             body_x=body_x,
+            body_y=body_y,
             body_z=body_z,
             antenna_major=antenna_major,
             antenna_minor=antenna_minor,
@@ -201,11 +203,11 @@ class SatelliteStructureView(QtWidgets.QWidget):
             panel_thickness=panel_thickness,
         )
 
-        span_x = max(body_x, panel_count * panel_span + max(panel_count - 1, 0) * panel_gap)
-        span_y = max(body_y + 2.0 * antenna_depth, body_y + 2.0 * panel_thickness)
+        span_x = body_x + 2.0 * (panel_count * panel_span + max(panel_count - 1, 0) * panel_gap)
+        span_y = max(body_y + 2.0 * antenna_major, body_y + 2.0 * panel_thickness)
         span_z = max(body_z, panel_width * max(structure.north_wing_count, structure.south_wing_count, 1))
         distance = max(span_x, span_y, span_z) * 4.4
-        self._view.setCameraPosition(distance=max(distance, 10.0), elevation=18.0, azimuth=38.0)
+        self._view.setCameraPosition(distance=max(distance * 0.6, 8.0), elevation=22.0, azimuth=52.0)
 
     def _render_external_model(
         self,
@@ -330,6 +332,7 @@ class SatelliteStructureView(QtWidgets.QWidget):
         side_sign: float,
         count: int,
         body_x: float,
+        body_y: float,
         body_z: float,
         antenna_major: float,
         antenna_minor: float,
@@ -339,20 +342,21 @@ class SatelliteStructureView(QtWidgets.QWidget):
         if count <= 0:
             return
 
-        z_positions = _sequence_positions(count, max(antenna_minor * 1.15, 0.35))
+        z_positions = _sequence_positions(count, max(antenna_minor * 1.35, 0.35), center=-body_z * 0.12)
         z_limit = max(body_z * 0.36, 0.0)
-        for z_center in z_positions:
+        for index, z_center in enumerate(z_positions):
             antenna = gl.GLMeshItem(
                 meshdata=self._antenna_mesh,
                 smooth=True,
                 shader="shaded",
                 drawEdges=False,
-                color=(0.78, 0.66, 0.31, 0.96),
+                color=(0.82, 0.84, 0.84, 0.98),
             )
-            antenna.scale(antenna_depth, antenna_major, antenna_minor)
+            antenna.scale(antenna_minor, antenna_depth, antenna_major)
+            x_offset = (index - max(count - 1, 0) * 0.5) * min(antenna_minor * 0.55, body_x * 0.22)
             antenna.translate(
-                side_sign * (body_x * 0.5 + antenna_depth * 0.55),
-                0.0,
+                x_offset,
+                side_sign * (body_y * 0.5 + antenna_depth * 0.55),
                 float(np.clip(z_center, -z_limit, z_limit)),
             )
             self._view.addItem(antenna)
@@ -376,22 +380,22 @@ class SatelliteStructureView(QtWidgets.QWidget):
         if wing_count <= 0:
             return
 
-        x_positions = _sequence_positions(panel_count, panel_span + panel_gap)
         z_positions = _sequence_positions(wing_count, panel_width * 1.18)
         z_limit = max(body_z * 0.38, 0.0)
         for z_center in z_positions:
             clipped_z = float(np.clip(z_center, -z_limit, z_limit))
-            for x_center in x_positions:
+            for index in range(panel_count):
                 panel = gl.GLMeshItem(
                     meshdata=self._cube_mesh,
                     smooth=False,
                     shader="shaded",
                     drawEdges=True,
                     edgeColor=(0.16, 0.22, 0.38, 0.55),
-                    color=(0.15, 0.31, 0.53, 0.96),
+                    color=(0.12, 0.24, 0.48, 0.96),
                 )
                 panel.scale(panel_span, panel_thickness, panel_width)
-                panel.translate(x_center, side_sign * (body_y * 0.5 + panel_thickness * 0.55), clipped_z)
+                x_center = side_sign * (body_x * 0.5 + panel_span * (index + 0.5) + panel_gap * index)
+                panel.translate(x_center, 0.0, clipped_z)
                 self._view.addItem(panel)
                 self._dynamic_items.append(panel)
 

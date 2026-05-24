@@ -186,21 +186,21 @@ class RelaySatelliteConfig:
 
 @dataclass(slots=True)
 class SatelliteStructureConfig:
-    body_size_x_m: float = 2.36
-    body_size_y_m: float = 2.10
-    body_size_z_m: float = 3.60
+    body_size_x_m: float = 2.40
+    body_size_y_m: float = 2.05
+    body_size_z_m: float = 1.65
     model_path: str = ""
-    antenna_major_axis_m: float = 1.10
-    antenna_minor_axis_m: float = 0.72
+    antenna_major_axis_m: float = 1.20
+    antenna_minor_axis_m: float = 0.78
     antenna_depth_m: float = 0.18
-    east_antenna_count: int = 1
+    east_antenna_count: int = 2
     west_antenna_count: int = 1
     north_wing_count: int = 1
     south_wing_count: int = 1
-    solar_panels_per_wing: int = 3
-    solar_panel_span_m: float = 1.45
-    solar_panel_width_m: float = 1.10
-    solar_panel_gap_m: float = 0.08
+    solar_panels_per_wing: int = 5
+    solar_panel_span_m: float = 1.35
+    solar_panel_width_m: float = 1.05
+    solar_panel_gap_m: float = 0.06
 
 
 @dataclass(slots=True)

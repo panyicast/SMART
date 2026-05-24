@@ -39,10 +39,11 @@ def test_create_project_creates_expected_structure(tmp_path: Path) -> None:
     assert (info.root_dir / "config" / "tracking_arc.json").exists()
 
     payload = json.loads((info.root_dir / "config" / "satellite_3d_model.json").read_text(encoding="utf-8"))
-    assert payload["body_size_x_m"] == pytest.approx(2.36)
-    assert payload["body_size_y_m"] == pytest.approx(2.10)
-    assert payload["body_size_z_m"] == pytest.approx(3.60)
-    assert payload["solar_panels_per_wing"] == 3
+    assert payload["body_size_x_m"] == pytest.approx(2.40)
+    assert payload["body_size_y_m"] == pytest.approx(2.05)
+    assert payload["body_size_z_m"] == pytest.approx(1.65)
+    assert payload["east_antenna_count"] == 2
+    assert payload["solar_panels_per_wing"] == 5
     assert payload["model_path"] == ""
 
     strategy_payload = json.loads((info.root_dir / "config" / "maneuver_strategy.json").read_text(encoding="utf-8"))

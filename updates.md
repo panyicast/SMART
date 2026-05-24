@@ -642,6 +642,10 @@
 - 提交：`805a14f`
 - 影响文件：`src/smart/services/mission_agent.py`、`src/smart/services/project_ai_context.py`、`src/smart/ui/widgets/ai_project_analysis_page.py`、`tests/test_ai_project_analysis.py`、`doc/ai_project_analysis.md`、`HANDOFF.md`。
 
-## 2026-05-24T14:05:57+08:00 | Replace satellite status page with 3D model config
-- 提交：`本次提交`
+## 2026-05-24T14:06:03+08:00 | Replace satellite status page with 3D model config
+- 提交：`53daacf`
 - 影响文件：`src/smart/services/project_workspace.py`、`src/smart/services/stk_link.py`、`src/smart/ui/i18n.py`、`src/smart/ui/main_window.py`、`src/smart/ui/widgets/satellite_status_page.py`、`tests/test_project_workspace.py`、`tests/test_stk_link.py`、`README.md` 等 9 个文件。
+
+## 2026-05-24T14:28:53+08:00 | Update default satellite 3D reference shape
+- 提交：`本次提交`
+- 影响文件：`src/smart/domain/models.py`、`src/smart/ui/i18n.py`、`src/smart/ui/widgets/satellite_structure_view.py`、`tests/test_project_workspace.py`、`HANDOFF.md`。
