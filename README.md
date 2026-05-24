@@ -2,7 +2,7 @@
 
 SMART 全称为 `Spacecraft Mission Analysis, Research & Toolkit`，是一个面向航天任务设计与工程分析的桌面软件。项目围绕 `STK 11.6 + SPICE + PySide6` 构建统一工作流，用来解决传统任务分析中多工具切换、时间与坐标系转换易错、结果留痕分散的问题。
 
-当前仓库提供的是一版可运行的桌面工程原型，已经覆盖项目管理、卫星状态设置、轨道初始化、设计变轨策略、连续推力参数优化、导入变轨策略、发射窗口计算、跟踪弧段分析、飞行程序设计、STK 联动、SPICE 内核管理、项目化数据落盘和 AI 辅助项目解读等核心链路。
+当前仓库提供的是一版可运行的桌面工程原型，已经覆盖项目管理、卫星3D模型配置、轨道初始化、设计变轨策略、连续推力参数优化、导入变轨策略、发射窗口计算、跟踪弧段分析、飞行程序设计、STK 联动、SPICE 内核管理、项目化数据落盘和 AI 辅助项目解读等核心链路。
 
 <p align="center">
   <img src="projects/F4/charts/smart_workflow.svg" alt="SMART mission workflow" width="92%" />
@@ -32,7 +32,7 @@ SMART 的目标不是单独替代 STK 或 SPICE，而是把任务建模、约束
 ## 当前能力
 
 - 项目管理：新建/打开项目，按 `config / data / charts` 保存配置、CSV、图表和中间结果
-- 卫星状态设置：质量、推进系统、三维结构、天线、地面站/测控船、中继星等任务参数配置
+- 卫星3D模型配置：设计当前项目卫星 3D 模型，供 SMART 三维场景和 STK 场景导入使用
 - 轨道初始化：支持经典轨道根数、TLE 和 STK `.e` 星历导入；地固系星历优先通过 SPICE 转到 J2000
 - 设计变轨策略：基于 V5.1 硬约束脉冲规划搜索 q 序列、控后近地点目标、终端经度/倾角约束和方向角优化
 - 连续推力优化：从脉冲规划生成 5 次连续推力点火参数，输出偏航角、点火/熄火时刻、推进剂消耗和控后轨道状态
@@ -56,7 +56,7 @@ SMART 的目标不是单独替代 STK 或 SPICE，而是把任务建模、约束
 ## 模块规划
 
 - 任务首页与项目管理（Dashboard / Project）
-- 卫星状态设置（Satellite Status）
+- 卫星3D模型配置（Satellite 3D Model）
 - 轨道初始化（Orbit Initialization）
 - 设计变轨策略（Design Maneuver Strategy）
 - 导入变轨策略（Import Maneuver Strategy）
@@ -131,7 +131,7 @@ python .\scripts\update_updates_md.py
 
 项目激活后，程序会自动保存：
 
-- 卫星状态配置文件：`config/satellite_status.json`
+- 卫星3D模型配置文件：`config/satellite_3d_model.json`
 - 轨道初始化配置：`config/orbit_initialization.json`
 - 设计变轨策略配置：`config/design_maneuver_strategy.json`
 - 设计页生成的导入配置：`config/design_import_maneuver_strategy.json`
@@ -150,11 +150,11 @@ python .\scripts\update_updates_md.py
 - 飞行程序参考结果：`data/flight_program_reference_results.json`
 - 图表文件：`charts/altitude_trend.png`、`charts/velocity_trend.png`
 
-其中 `config/satellite_status.json`、`config/design_maneuver_strategy.json`、`config/maneuver_strategy.json` 等会在项目创建时自动生成。设计变轨策略页面会存档脉冲规划和连续推力结果；重新打开项目时，如果存档存在，页面会直接加载并显示结果，不需要先重新计算。
+其中 `config/satellite_3d_model.json`、`config/design_maneuver_strategy.json`、`config/maneuver_strategy.json` 等会在项目创建时自动生成。设计变轨策略页面会存档脉冲规划和连续推力结果；重新打开项目时，如果存档存在，页面会直接加载并显示结果，不需要先重新计算。
 
 典型工程链路：
 
-1. 在“轨道初始化”和“卫星状态设置”中固化任务初始条件。
+1. 在“轨道初始化”和“卫星3D模型配置”中固化轨道初值和卫星模型。
 2. 在“设计变轨策略”中生成脉冲规划，再优化连续推力模型参数。
 3. 通过“导入变轨策略”把设计结果引入工程变轨页面，生成 `data/full_orbit_history.csv`。
 4. 发射窗口、跟踪弧段、飞行程序和 STK 联动页面复用上述结果继续分析。

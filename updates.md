@@ -638,6 +638,10 @@
 - 提交：`ffe34ed`
 - 影响文件：`src/smart/agents/skills/project_consistency_audit.md`、`src/smart/services/mission_agent.py`、`tests/test_ai_project_analysis.py`、`doc/ai_project_analysis.md`、`HANDOFF.md`。
 
-## 2026-05-24T13:14:09+08:00 | Add AI analysis skill selection
-- 提交：`本次提交`
+## 2026-05-24T13:14:14+08:00 | Add AI analysis skill selection
+- 提交：`805a14f`
 - 影响文件：`src/smart/services/mission_agent.py`、`src/smart/services/project_ai_context.py`、`src/smart/ui/widgets/ai_project_analysis_page.py`、`tests/test_ai_project_analysis.py`、`doc/ai_project_analysis.md`、`HANDOFF.md`。
+
+## 2026-05-24T14:05:57+08:00 | Replace satellite status page with 3D model config
+- 提交：`本次提交`
+- 影响文件：`src/smart/services/project_workspace.py`、`src/smart/services/stk_link.py`、`src/smart/ui/i18n.py`、`src/smart/ui/main_window.py`、`src/smart/ui/widgets/satellite_status_page.py`、`tests/test_project_workspace.py`、`tests/test_stk_link.py`、`README.md` 等 9 个文件。

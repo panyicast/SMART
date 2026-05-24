@@ -297,6 +297,7 @@ class StkLinkService:
         self._ensure_satellite(satellite_name)
         self._execute(f'SetState */Satellite/{satellite_name} FromFile "{orbit_metadata.output_path}" FileFormat StkPL')
         self._apply_satellite_graphics(satellite_name, label=_english_stk_label(project.name, fallback=satellite_name))
+        self._apply_satellite_model(satellite_name)
 
         attitude_path: Path | None = None
         try:
@@ -467,6 +468,26 @@ class StkLinkService:
             f"VO {path} Pass3D Inherit Off GroundLead None GroundTrail SameAsLead OrbitLead All OrbitTrail SameAsLead",
             ignore_failure=True,
         )
+
+    def _apply_satellite_model(self, name: str) -> None:
+        config = self._workspace.load_satellite_3d_model_config()
+        if config is None:
+            return
+        raw_path = config.model_path.strip()
+        if not raw_path:
+            return
+        model_path = Path(raw_path).expanduser()
+        if not model_path.exists():
+            self._commands.append(f"# satellite model skipped: file not found: {raw_path}")
+            return
+        if model_path.suffix.lower() not in {".mdl", ".dae", ".glb", ".gltf"}:
+            self._commands.append(
+                f"# satellite model skipped: unsupported model file extension: {model_path}"
+            )
+            return
+        escaped_path = str(model_path.resolve()).replace('"', '\\"')
+        self._execute(f'VO */Satellite/{name} Model File "{escaped_path}" Use ModelFile', ignore_failure=True)
+        self._execute(f"VO */Satellite/{name} Model Show On", ignore_failure=True)
 
     def _execute(self, command: str, *, ignore_failure: bool = False) -> list[str]:
         executor = self.connect()

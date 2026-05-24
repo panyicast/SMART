@@ -40,6 +40,7 @@ CONFIG_DIR_NAME = "config"
 ORBIT_ELEMENTS_FILE = "orbit_elements.json"
 MANEUVER_SNAPSHOT_FILE = "maneuver_snapshot.json"
 SATELLITE_SETTINGS_FILE = "satellite_status.json"
+SATELLITE_3D_MODEL_FILE = "satellite_3d_model.json"
 ORBIT_INITIALIZATION_FILE = "orbit_initialization.json"
 MANEUVER_STRATEGY_FILE = "maneuver_strategy.json"
 DESIGN_MANEUVER_STRATEGY_FILE = "design_maneuver_strategy.json"
@@ -107,7 +108,7 @@ class ProjectWorkspace:
         _write_json(root_dir / PROJECT_META_FILE, metadata)
 
         self._project = self._read_project(root_dir)
-        self.save_satellite_status(SatelliteStatusSettings())
+        self.save_satellite_3d_model_config(SatelliteStructureConfig())
         self.save_orbit_initialization(OrbitInitializationSettings())
         self.save_maneuver_strategy(default_maneuver_strategy_payload())
         self.save_design_maneuver_strategy(default_design_maneuver_strategy_payload())
@@ -178,6 +179,9 @@ class ProjectWorkspace:
 
     def legacy_satellite_status_path(self) -> Path:
         return self.data_dir() / SATELLITE_SETTINGS_FILE
+
+    def satellite_3d_model_path(self) -> Path:
+        return self.config_dir() / SATELLITE_3D_MODEL_FILE
 
     def orbit_initialization_path(self) -> Path:
         return self.config_dir() / ORBIT_INITIALIZATION_FILE
@@ -425,6 +429,23 @@ class ProjectWorkspace:
             "transfer_time_s": float(payload["transfer_time_s"]),
         }
 
+    def save_satellite_3d_model_config(self, config: SatelliteStructureConfig) -> Path:
+        payload = _satellite_structure_payload(config)
+        file_path = self.satellite_3d_model_path()
+        _write_json(file_path, payload)
+        self._delete_legacy_satellite_status_files()
+        self._touch_updated_time()
+        return file_path
+
+    def load_satellite_3d_model_config(self) -> SatelliteStructureConfig | None:
+        file_path = self.satellite_3d_model_path()
+        if file_path.exists():
+            return _satellite_structure_from_payload(_read_json(file_path))
+        legacy = self.load_satellite_status()
+        if legacy is not None:
+            return legacy.structure
+        return None
+
     def save_satellite_status(self, settings: SatelliteStatusSettings) -> Path:
         payload: dict[str, Any] = {
             "launch_mass_kg": float(settings.launch_mass_kg),
@@ -638,6 +659,14 @@ class ProjectWorkspace:
             relay_satellites=relay_satellites,
         )
 
+    def _delete_legacy_satellite_status_files(self) -> None:
+        for path in (self.satellite_status_path(), self.legacy_satellite_status_path()):
+            try:
+                if path.exists():
+                    path.unlink()
+            except OSError:
+                pass
+
     def _require_project(self) -> ProjectInfo:
         if self._project is None:
             raise RuntimeError("No active project.")
@@ -720,6 +749,47 @@ def _orbital_elements_from_payload(payload: dict[str, Any]) -> OrbitalElements:
         mu_km3_s2=float(payload["mu_km3_s2"]),
         central_body_radius_km=float(payload["central_body_radius_km"]),
         central_body_name=str(payload["central_body_name"]),
+    )
+
+
+def _satellite_structure_payload(config: SatelliteStructureConfig) -> dict[str, Any]:
+    return {
+        "body_size_x_m": float(config.body_size_x_m),
+        "body_size_y_m": float(config.body_size_y_m),
+        "body_size_z_m": float(config.body_size_z_m),
+        "model_path": config.model_path,
+        "antenna_major_axis_m": float(config.antenna_major_axis_m),
+        "antenna_minor_axis_m": float(config.antenna_minor_axis_m),
+        "antenna_depth_m": float(config.antenna_depth_m),
+        "east_antenna_count": int(config.east_antenna_count),
+        "west_antenna_count": int(config.west_antenna_count),
+        "north_wing_count": int(config.north_wing_count),
+        "south_wing_count": int(config.south_wing_count),
+        "solar_panels_per_wing": int(config.solar_panels_per_wing),
+        "solar_panel_span_m": float(config.solar_panel_span_m),
+        "solar_panel_width_m": float(config.solar_panel_width_m),
+        "solar_panel_gap_m": float(config.solar_panel_gap_m),
+    }
+
+
+def _satellite_structure_from_payload(payload: dict[str, Any]) -> SatelliteStructureConfig:
+    defaults = SatelliteStructureConfig()
+    return SatelliteStructureConfig(
+        body_size_x_m=float(payload.get("body_size_x_m", defaults.body_size_x_m)),
+        body_size_y_m=float(payload.get("body_size_y_m", defaults.body_size_y_m)),
+        body_size_z_m=float(payload.get("body_size_z_m", defaults.body_size_z_m)),
+        model_path=str(payload.get("model_path", payload.get("dae_model_path", defaults.model_path))),
+        antenna_major_axis_m=float(payload.get("antenna_major_axis_m", defaults.antenna_major_axis_m)),
+        antenna_minor_axis_m=float(payload.get("antenna_minor_axis_m", defaults.antenna_minor_axis_m)),
+        antenna_depth_m=float(payload.get("antenna_depth_m", defaults.antenna_depth_m)),
+        east_antenna_count=int(payload.get("east_antenna_count", defaults.east_antenna_count)),
+        west_antenna_count=int(payload.get("west_antenna_count", defaults.west_antenna_count)),
+        north_wing_count=int(payload.get("north_wing_count", defaults.north_wing_count)),
+        south_wing_count=int(payload.get("south_wing_count", defaults.south_wing_count)),
+        solar_panels_per_wing=int(payload.get("solar_panels_per_wing", defaults.solar_panels_per_wing)),
+        solar_panel_span_m=float(payload.get("solar_panel_span_m", defaults.solar_panel_span_m)),
+        solar_panel_width_m=float(payload.get("solar_panel_width_m", defaults.solar_panel_width_m)),
+        solar_panel_gap_m=float(payload.get("solar_panel_gap_m", defaults.solar_panel_gap_m)),
     )
 
 

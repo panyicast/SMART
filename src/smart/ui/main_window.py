@@ -5,7 +5,7 @@ from typing import Any
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from smart.domain.models import OrbitInitializationSettings, SatelliteStatusSettings
+from smart.domain.models import OrbitInitializationSettings, SatelliteStructureConfig
 from smart.services.project_workspace import ProjectInfo, ProjectWorkspace
 from smart.services.spice_service import SpiceKernelManager
 from smart.services.stk_link import StkLinkService
@@ -19,7 +19,7 @@ from smart.ui.widgets.ai_project_analysis_page import AIProjectAnalysisPage
 from smart.ui.widgets.flight_program_page import FlightProgramPage
 from smart.ui.widgets.launch_window_page import LaunchWindowPage
 from smart.ui.widgets.maneuver_page import ManeuverPage
-from smart.ui.widgets.satellite_status_page import SatelliteStatusPage
+from smart.ui.widgets.satellite_status_page import Satellite3DModelPage
 from smart.ui.widgets.spice_kernel_page import SpiceKernelPage
 from smart.ui.widgets.stk_link_page import StkLinkPage
 from smart.ui.widgets.tracking_arc_page import TrackingArcPage
@@ -63,7 +63,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._stk_link_service = StkLinkService(self._workspace)
         self._projects_root = self._workspace.projects_dir(self._workspace_root)
         self._spice_manager = SpiceKernelManager()
-        self._latest_satellite_settings: SatelliteStatusSettings | None = None
+        self._latest_satellite_model_config: SatelliteStructureConfig | None = None
         self._latest_maneuver_strategy: dict[str, Any] | None = None
         self._autosave_enabled = True
         self._settings = QtCore.QSettings("SMART", "SMART")
@@ -89,7 +89,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._dashboard_page.open_project_requested.connect(self._open_project)
         self._dashboard_page.recent_project_requested.connect(self._open_recent_project)
         self._dashboard_page.set_recent_projects(self._recent_project_paths)
-        self._satellite_page = SatelliteStatusPage(self._i18n)
+        self._satellite_page = Satellite3DModelPage(self._i18n)
         self._maneuver_page = ManeuverPage(self._i18n, self._workspace)
         self._design_maneuver_page = DesignManeuverStrategyPage(self._i18n, self._workspace)
         self._launch_window_page = LaunchWindowPage(self._i18n, self._workspace)
@@ -128,7 +128,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._mission_state.trajectory_changed.connect(self._on_trajectory_changed)
         self._satellite_page.settings_changed.connect(self._on_satellite_settings_changed)
         self._maneuver_page.strategy_changed.connect(self._on_maneuver_strategy_changed)
-        self._latest_satellite_settings = self._satellite_page.settings()
+        self._latest_satellite_model_config = self._satellite_page.settings()
         self._reset_spice_workspace(self._workspace_root / "data" / "kernels")
 
         self.retranslate()
@@ -523,7 +523,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _activate_project(self, info: ProjectInfo, load_saved_data: bool) -> None:
         self._autosave_enabled = False
-        self._latest_satellite_settings = None
+        self._latest_satellite_model_config = None
         self._latest_maneuver_strategy = None
         try:
             self._reset_spice_workspace(self._workspace.kernels_dir())
@@ -542,12 +542,12 @@ class MainWindow(QtWidgets.QMainWindow):
                             )
                         )
 
-                saved_satellite_settings = self._workspace.load_satellite_status()
-                if saved_satellite_settings is not None:
-                    self._satellite_page.apply_settings(saved_satellite_settings)
-                    self._latest_satellite_settings = saved_satellite_settings
+                saved_satellite_model = self._workspace.load_satellite_3d_model_config()
+                if saved_satellite_model is not None:
+                    self._satellite_page.apply_settings(saved_satellite_model)
+                    self._latest_satellite_model_config = saved_satellite_model
                 else:
-                    self._latest_satellite_settings = self._satellite_page.settings()
+                    self._latest_satellite_model_config = self._satellite_page.settings()
 
                 self._maneuver_page.refresh_from_workspace()
                 self._design_maneuver_page.refresh_from_workspace()
@@ -558,7 +558,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self._stk_link_page.refresh_from_workspace()
                 self._latest_maneuver_strategy = self._maneuver_page.strategy()
             else:
-                self._latest_satellite_settings = self._satellite_page.settings()
+                self._latest_satellite_model_config = self._satellite_page.settings()
                 self._maneuver_page.refresh_from_workspace()
                 self._design_maneuver_page.refresh_from_workspace()
                 self._launch_window_page.refresh_from_workspace()
@@ -603,8 +603,8 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         self._persist_project_outputs()
 
-    def _on_satellite_settings_changed(self, settings: SatelliteStatusSettings) -> None:
-        self._latest_satellite_settings = settings
+    def _on_satellite_settings_changed(self, settings: SatelliteStructureConfig) -> None:
+        self._latest_satellite_model_config = settings
         if not self._autosave_enabled:
             return
         self._persist_satellite_config()
@@ -648,11 +648,11 @@ class MainWindow(QtWidgets.QMainWindow):
     def _persist_satellite_config(self) -> None:
         if self._workspace.current_project is None:
             return
-        if self._latest_satellite_settings is None:
+        if self._latest_satellite_model_config is None:
             return
 
         try:
-            self._workspace.save_satellite_status(self._latest_satellite_settings)
+            self._workspace.save_satellite_3d_model_config(self._latest_satellite_model_config)
         except Exception as exc:  # pragma: no cover - UI path
             self.statusBar().showMessage(
                 self._i18n.t("project.status.autosave_failed", error=str(exc)),

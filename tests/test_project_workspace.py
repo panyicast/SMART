@@ -6,10 +6,8 @@ from pathlib import Path
 import pytest
 
 from smart.domain.models import (
-    AntennaConfig,
     OrbitInitializationSettings,
     OrbitalElements,
-    SatelliteStatusSettings,
     SatelliteStructureConfig,
 )
 from smart.services.project_workspace import ProjectWorkspace
@@ -33,22 +31,19 @@ def test_create_project_creates_expected_structure(tmp_path: Path) -> None:
     assert (info.root_dir / "charts").is_dir()
     assert (info.root_dir / "config").is_dir()
     assert (info.root_dir / "config" / "orbit_initialization.json").exists()
-    assert (info.root_dir / "config" / "satellite_status.json").exists()
+    assert (info.root_dir / "config" / "satellite_3d_model.json").exists()
+    assert not (info.root_dir / "config" / "satellite_status.json").exists()
     assert (info.root_dir / "config" / "maneuver_strategy.json").exists()
     assert (info.root_dir / "config" / "design_maneuver_strategy.json").exists()
     assert (info.root_dir / "config" / "launch_window.json").exists()
     assert (info.root_dir / "config" / "tracking_arc.json").exists()
 
-    payload = json.loads((info.root_dir / "config" / "satellite_status.json").read_text(encoding="utf-8"))
-    assert payload["orbit_engine_thrust_n"] == pytest.approx(490.0)
-    assert payload["orbit_engine_isp_s"] == pytest.approx(314.1)
-    assert payload["settle_engine_thrust_n"] == pytest.approx(10.0)
-    assert payload["settle_engine_isp_s"] == pytest.approx(290.0)
-    assert payload["structure"]["body_size_x_m"] == pytest.approx(2.36)
-    assert payload["structure"]["body_size_y_m"] == pytest.approx(2.10)
-    assert payload["structure"]["body_size_z_m"] == pytest.approx(3.60)
-    assert payload["structure"]["solar_panels_per_wing"] == 3
-    assert payload["structure"]["model_path"] == ""
+    payload = json.loads((info.root_dir / "config" / "satellite_3d_model.json").read_text(encoding="utf-8"))
+    assert payload["body_size_x_m"] == pytest.approx(2.36)
+    assert payload["body_size_y_m"] == pytest.approx(2.10)
+    assert payload["body_size_z_m"] == pytest.approx(3.60)
+    assert payload["solar_panels_per_wing"] == 3
+    assert payload["model_path"] == ""
 
     strategy_payload = json.loads((info.root_dir / "config" / "maneuver_strategy.json").read_text(encoding="utf-8"))
     assert strategy_payload["launch_mass_kg"] == pytest.approx(5200.0)
@@ -74,7 +69,7 @@ def test_create_project_creates_expected_structure(tmp_path: Path) -> None:
     design_payload = json.loads(
         (info.root_dir / "config" / "design_maneuver_strategy.json").read_text(encoding="utf-8")
     )
-    assert design_payload["planner"]["version"] == "V4.2_simplified_transfer_type"
+    assert design_payload["planner"]["version"] == "V5.1_hard_constrained_phase_search"
     assert design_payload["initial"]["m0_kg"] == pytest.approx(6515.0)
     assert design_payload["initial"]["a_km"] == pytest.approx(29478.137)
     assert design_payload["initial"]["e"] == pytest.approx(0.77684692)
@@ -395,57 +390,50 @@ def test_open_project_requires_metadata_file(tmp_path: Path) -> None:
         workspace.open_project(orphan_dir)
 
 
-def test_save_and_load_satellite_status(tmp_path: Path) -> None:
+def test_save_and_load_satellite_3d_model_config(tmp_path: Path) -> None:
     workspace = ProjectWorkspace()
     workspace.create_project("mission_gamma", parent_dir=tmp_path)
 
-    settings = SatelliteStatusSettings(
-        launch_mass_kg=5800.0,
-        fuel_load_kg=2100.0,
-        helium_load_kg=77.5,
-        orbit_engine_thrust_n=510.0,
-        orbit_engine_isp_s=325.0,
-        settle_engine_thrust_n=28.0,
-        settle_engine_isp_s=292.0,
-        structure=SatelliteStructureConfig(
-            body_size_x_m=2.8,
-            body_size_y_m=2.4,
-            body_size_z_m=4.2,
-            model_path=r"C:\Program Files\AGI\STK 11\STKData\VO\Models\Space\satellite.dae",
-            east_antenna_count=2,
-            west_antenna_count=1,
-            north_wing_count=1,
-            south_wing_count=1,
-            solar_panels_per_wing=4,
-            solar_panel_span_m=1.6,
-            solar_panel_width_m=1.2,
-            solar_panel_gap_m=0.1,
-        ),
-        ttc_antennas=[AntennaConfig(name="TTC-X", band="S", gain_dbi=12.0, beamwidth_deg=40.0)],
+    legacy_config = workspace.root_dir / "config" / "satellite_status.json"
+    legacy_data = workspace.root_dir / "data" / "satellite_status.json"
+    legacy_config.write_text("{}", encoding="utf-8")
+    legacy_data.write_text("{}", encoding="utf-8")
+
+    config = SatelliteStructureConfig(
+        body_size_x_m=2.8,
+        body_size_y_m=2.4,
+        body_size_z_m=4.2,
+        model_path=r"D:\Program Files\AGI\STK 116\STKData\VO\Models\Space\satellite.dae",
+        east_antenna_count=2,
+        west_antenna_count=1,
+        north_wing_count=1,
+        south_wing_count=1,
+        solar_panels_per_wing=4,
+        solar_panel_span_m=1.6,
+        solar_panel_width_m=1.2,
+        solar_panel_gap_m=0.1,
     )
-    file_path = workspace.save_satellite_status(settings)
-    assert file_path == (workspace.root_dir / "config" / "satellite_status.json")
-    restored = workspace.load_satellite_status()
+    file_path = workspace.save_satellite_3d_model_config(config)
+    assert file_path == (workspace.root_dir / "config" / "satellite_3d_model.json")
+    assert not legacy_config.exists()
+    assert not legacy_data.exists()
+
+    restored = workspace.load_satellite_3d_model_config()
     assert restored is not None
-    assert restored.launch_mass_kg == pytest.approx(5800.0)
-    assert restored.fuel_load_kg == pytest.approx(2100.0)
-    assert restored.helium_load_kg == pytest.approx(77.5)
-    assert restored.ttc_antennas[0].name == "TTC-X"
-    assert restored.ttc_antennas[0].gain_dbi == pytest.approx(12.0)
-    assert restored.structure.body_size_x_m == pytest.approx(2.8)
-    assert restored.structure.body_size_y_m == pytest.approx(2.4)
-    assert restored.structure.body_size_z_m == pytest.approx(4.2)
-    assert restored.structure.model_path.endswith("satellite.dae")
-    assert restored.structure.east_antenna_count == 2
-    assert restored.structure.solar_panels_per_wing == 4
+    assert restored.body_size_x_m == pytest.approx(2.8)
+    assert restored.body_size_y_m == pytest.approx(2.4)
+    assert restored.body_size_z_m == pytest.approx(4.2)
+    assert restored.model_path.endswith("satellite.dae")
+    assert restored.east_antenna_count == 2
+    assert restored.solar_panels_per_wing == 4
 
 
-def test_load_satellite_status_supports_legacy_data_path(tmp_path: Path) -> None:
+def test_load_satellite_3d_model_config_supports_legacy_data_path(tmp_path: Path) -> None:
     workspace = ProjectWorkspace()
     workspace.create_project("mission_delta", parent_dir=tmp_path)
 
+    (workspace.root_dir / "config" / "satellite_3d_model.json").unlink()
     config_path = workspace.root_dir / "config" / "satellite_status.json"
-    config_path.unlink()
     legacy_path = workspace.root_dir / "data" / "satellite_status.json"
     legacy_path.write_text(
         """
@@ -480,8 +468,7 @@ def test_load_satellite_status_supports_legacy_data_path(tmp_path: Path) -> None
         encoding="utf-8",
     )
 
-    restored = workspace.load_satellite_status()
+    restored = workspace.load_satellite_3d_model_config()
     assert restored is not None
-    assert restored.launch_mass_kg == pytest.approx(6100.0)
-    assert restored.structure.body_size_x_m == pytest.approx(2.5)
-    assert restored.structure.model_path == "legacy/sample.dae"
+    assert restored.body_size_x_m == pytest.approx(2.5)
+    assert restored.model_path == "legacy/sample.dae"

@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import numpy as np
 from PySide6 import QtWidgets
 
+from smart.domain.models import SatelliteStructureConfig
 from smart.services.stk_link import (
     StkLinkService,
     _english_stk_label,
@@ -131,6 +132,38 @@ def test_sync_current_scenario_time_sets_stk_animation_time(tmp_path: Path) -> N
     assert StkLinkService(workspace, executor=executor).sync_current_scenario_time("2026-05-15T00:24:30Z") is True
 
     assert executor.commands == ['SetAnimation * CurrentTime "15 May 2026 00:24:30.000000"']
+
+
+def test_apply_satellite_model_uses_stk_supported_model_file(tmp_path: Path) -> None:
+    workspace = ProjectWorkspace()
+    workspace.create_project("stk-model", parent_dir=tmp_path)
+    model_path = tmp_path / "satellite.dae"
+    model_path.write_text("<COLLADA></COLLADA>", encoding="utf-8")
+    workspace.save_satellite_3d_model_config(SatelliteStructureConfig(model_path=str(model_path)))
+    executor = _RecordingExecutor(has_scenario=True)
+
+    StkLinkService(workspace, executor=executor)._apply_satellite_model("Sat1")
+
+    assert executor.commands == [
+        f'VO */Satellite/Sat1 Model File "{model_path.resolve()}" Use ModelFile',
+        "VO */Satellite/Sat1 Model Show On",
+    ]
+
+
+def test_apply_satellite_model_allows_gltf_family_for_stk(tmp_path: Path) -> None:
+    workspace = ProjectWorkspace()
+    workspace.create_project("stk-model-glb", parent_dir=tmp_path)
+    model_path = tmp_path / "satellite.glb"
+    model_path.write_bytes(b"glTF")
+    workspace.save_satellite_3d_model_config(SatelliteStructureConfig(model_path=str(model_path)))
+    executor = _RecordingExecutor(has_scenario=True)
+
+    StkLinkService(workspace, executor=executor)._apply_satellite_model("Sat1")
+
+    assert executor.commands == [
+        f'VO */Satellite/Sat1 Model File "{model_path.resolve()}" Use ModelFile',
+        "VO */Satellite/Sat1 Model Show On",
+    ]
 
 
 def test_clear_executor_keeps_established_scenario_state(tmp_path: Path) -> None:
