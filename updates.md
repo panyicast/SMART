@@ -650,6 +650,10 @@
 - 提交：`e277848`
 - 影响文件：`src/smart/domain/models.py`、`src/smart/ui/i18n.py`、`src/smart/ui/widgets/satellite_structure_view.py`、`tests/test_project_workspace.py`、`HANDOFF.md`。
 
-## 2026-05-24T17:39:26+08:00 | Clarify stkhelp search path guidance
-- 提交：`本次提交`
+## 2026-05-24T17:39:32+08:00 | Clarify stkhelp search path guidance
+- 提交：`09aa82a`
 - 影响文件：`src/smart/agents/skills/stk_11_6_operations.md`、`HANDOFF.md`。
+
+## 2026-05-24T19:58:39+08:00 | Update F4 project outputs and configuration
+- 提交：`本次提交`
+- 影响文件：`projects/F4/config/design_import_maneuver_strategy.json`、`projects/F4/config/flight_program.json`、`projects/F4/config/launch_window.json`、`projects/F4/config/maneuver_strategy.json`、`projects/F4/config/satellite_3d_model.json`、`projects/F4/config/satellite_status.json`、`projects/F4/config/tracking_arc.json`、`projects/F4/data/ai_project_analysis.md` 等 17 个文件。

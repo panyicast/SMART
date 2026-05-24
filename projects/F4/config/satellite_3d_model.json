@@ -1,0 +1,17 @@
+{
+  "body_size_x_m": 2.36,
+  "body_size_y_m": 2.1,
+  "body_size_z_m": 3.6,
+  "model_path": "",
+  "antenna_major_axis_m": 2.1,
+  "antenna_minor_axis_m": 2.72,
+  "antenna_depth_m": 0.18,
+  "east_antenna_count": 1,
+  "west_antenna_count": 1,
+  "north_wing_count": 1,
+  "south_wing_count": 1,
+  "solar_panels_per_wing": 3,
+  "solar_panel_span_m": 1.45,
+  "solar_panel_width_m": 1.1,
+  "solar_panel_gap_m": 0.08
+}
