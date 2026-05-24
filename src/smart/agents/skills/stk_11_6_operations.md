@@ -48,4 +48,4 @@
 - 不关闭 STK 场景或退出 STK，除非用户明确要求。
 - 修改场景前先建议读取对象列表、场景目录和当前设置。
 - 命令语法不确定时必须先查 STK 11.6 本机帮助或 KB。
-- 如果 `stkhelp` 命令不可用，应提示设置 `SMART_STK_HELP_CONFIG`、`SMART_STK_HELP_KB`、`SMART_STK_HELP_SCRIPT` 或检查 PATH。
+- 如果 `stkhelp` 命令不可用，应提示设置 `SMART_STK_HELP_CONFIG`、`SMART_STK_HELP_KB`、`SMART_STK_HELP_SCRIPT`，或检查 `stkhelp` 是否在命令搜索目录列表（PATH）中。

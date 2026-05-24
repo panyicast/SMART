@@ -646,6 +646,10 @@
 - 提交：`53daacf`
 - 影响文件：`src/smart/services/project_workspace.py`、`src/smart/services/stk_link.py`、`src/smart/ui/i18n.py`、`src/smart/ui/main_window.py`、`src/smart/ui/widgets/satellite_status_page.py`、`tests/test_project_workspace.py`、`tests/test_stk_link.py`、`README.md` 等 9 个文件。
 
-## 2026-05-24T14:28:53+08:00 | Update default satellite 3D reference shape
-- 提交：`本次提交`
+## 2026-05-24T14:28:59+08:00 | Update default satellite 3D reference shape
+- 提交：`e277848`
 - 影响文件：`src/smart/domain/models.py`、`src/smart/ui/i18n.py`、`src/smart/ui/widgets/satellite_structure_view.py`、`tests/test_project_workspace.py`、`HANDOFF.md`。
+
+## 2026-05-24T17:39:26+08:00 | Clarify stkhelp search path guidance
+- 提交：`本次提交`
+- 影响文件：`src/smart/agents/skills/stk_11_6_operations.md`、`HANDOFF.md`。
