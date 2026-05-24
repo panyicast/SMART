@@ -7,7 +7,7 @@ from pathlib import Path
 from statistics import mean
 from typing import Any
 
-from smart.services.mission_agent import render_mission_agent_manifest
+from smart.services.mission_agent import MissionAgentProfile, render_mission_agent_manifest
 
 
 DEFAULT_CONTEXT_ROW_LIMIT = 6
@@ -56,11 +56,17 @@ def build_project_analysis_context(
     return content
 
 
-def build_project_analysis_prompt(context: str, *, scope: str, question: str = "") -> str:
+def build_project_analysis_prompt(
+    context: str,
+    *,
+    scope: str,
+    question: str = "",
+    agent_profile: MissionAgentProfile | None = None,
+) -> str:
     scope_text = scope.strip() or "项目综合分析"
     question_text = question.strip()
     extra = f"\n用户补充问题：{question_text}\n" if question_text else ""
-    agent_manifest = render_mission_agent_manifest()
+    agent_manifest = render_mission_agent_manifest(agent_profile)
     return (
         "请基于下面的 SMART 内置 agent profile、项目配置和数据摘要进行工程分析。"
         "回答使用中文 Markdown，优先指出风险、异常、配置不一致、关键结论和建议的下一步验证。"

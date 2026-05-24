@@ -15,6 +15,8 @@ from smart.services.llm_client import (
 import smart.services.llm_client as llm_client
 from smart.services.mission_agent import (
     agent_document_paths,
+    mission_agent_profile_for_skill,
+    mission_agent_skill_options,
     render_mission_agent_manifest,
     render_mission_agent_system_prompt,
     resolve_stk_help_tool,
@@ -93,6 +95,22 @@ def test_mission_agent_profile_configures_calculation_and_stk_skills() -> None:
     assert "SMART_STK_HELP_SCRIPT" in manifest
 
 
+def test_mission_agent_profile_can_select_single_skill() -> None:
+    options = mission_agent_skill_options()
+    assert {option.skill_id for option in options} == {
+        "smart.skill.mission_analysis_calculation",
+        "smart.skill.project_consistency_audit",
+        "smart.skill.stk_11_6_operations",
+    }
+
+    profile = mission_agent_profile_for_skill("smart.skill.project_consistency_audit")
+    manifest = render_mission_agent_manifest(profile)
+
+    assert "smart.skill.project_consistency_audit" in manifest
+    assert "smart.skill.mission_analysis_calculation" not in manifest
+    assert "smart.skill.stk_11_6_operations" not in manifest
+
+
 def test_ai_project_analysis_nav_key_is_last() -> None:
     assert _NAV_KEYS[-1] == "nav.ai_project_analysis"
 
@@ -108,6 +126,7 @@ def test_ai_project_analysis_page_prioritizes_task_and_report(tmp_path) -> None:
         assert not hasattr(page, "_scope_combo")
         assert not hasattr(page, "_preview_button")
         assert isinstance(page._prompt_template_combo, NoWheelComboBox)
+        assert isinstance(page._skill_combo, NoWheelComboBox)
         assert isinstance(page._model_combo, NoWheelComboBox)
         assert isinstance(page._reasoning_effort_combo, NoWheelComboBox)
         assert page._tools_help_button.text() == "查看 Skill / Tools"
@@ -118,6 +137,14 @@ def test_ai_project_analysis_page_prioritizes_task_and_report(tmp_path) -> None:
         assert page._agent_group.maximumHeight() <= 44
         assert page._trace_card.isHidden()
         assert page._run_state_label.text() == "待生成"
+        assert page._skill_combo.currentData() == "all"
+
+        audit_index = page._skill_combo.findData("smart.skill.project_consistency_audit")
+        assert audit_index > 0
+        page._skill_combo.setCurrentIndex(audit_index)
+        skill_markdown = page._render_skill_help_markdown()
+        assert "smart.skill.project_consistency_audit" in skill_markdown
+        assert "smart.skill.mission_analysis_calculation" not in skill_markdown
 
         template_index = page._prompt_template_combo.findText(AI_ANALYSIS_PROMPT_TEMPLATES[0][0])
         assert template_index > 0
@@ -132,6 +159,7 @@ def test_ai_project_analysis_page_prioritizes_task_and_report(tmp_path) -> None:
         assert "不发送完整大 CSV" in preflight_text
         assert "项目摘要字符数" in preflight_text
         assert "待发送 prompt 字符数" in preflight_text
+        assert "本次对话 Skill：项目一致性审计 skill" in preflight_text
         assert "重点分析发射窗口结果" in page._trace_view.toPlainText()
     finally:
         page.deleteLater()

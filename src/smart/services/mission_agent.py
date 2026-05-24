@@ -46,6 +46,13 @@ class MissionAgentProfile:
 
 
 @dataclass(frozen=True, slots=True)
+class MissionAgentSkillOption:
+    skill_id: str
+    name: str
+    document_path: Path
+
+
+@dataclass(frozen=True, slots=True)
 class StkHelpToolStatus:
     available: bool
     command: tuple[str, ...]
@@ -144,6 +151,37 @@ def smart_mission_agent_profile() -> MissionAgentProfile:
     )
 
 
+def mission_agent_skill_options() -> tuple[MissionAgentSkillOption, ...]:
+    return tuple(
+        MissionAgentSkillOption(
+            skill_id=_skill_id_from_document(path),
+            name=_title_from_document(path),
+            document_path=path,
+        )
+        for path in _SKILL_DOC_PATHS
+    )
+
+
+def mission_agent_profile_for_skill(skill_id: str | None) -> MissionAgentProfile:
+    normalized = (skill_id or "all").strip()
+    base = smart_mission_agent_profile()
+    if normalized in {"", "all"}:
+        return base
+    selected = tuple(
+        option.document_path
+        for option in mission_agent_skill_options()
+        if option.skill_id == normalized
+    )
+    if not selected:
+        return base
+    return MissionAgentProfile(
+        agent_id=base.agent_id,
+        name=base.name,
+        document_path=base.document_path,
+        skill_document_paths=selected,
+    )
+
+
 def render_mission_agent_system_prompt(profile: MissionAgentProfile | None = None) -> str:
     profile = profile or smart_mission_agent_profile()
     return (
@@ -190,3 +228,12 @@ def _title_from_document(path: Path) -> str:
         if line.startswith("# "):
             return line.removeprefix("# ").strip()
     return path.stem
+
+
+def _skill_id_from_document(path: Path) -> str:
+    text = _read_text(path)
+    for line in text.splitlines():
+        value = line.strip().strip("`")
+        if value.startswith("smart.skill."):
+            return value
+    return f"smart.skill.{path.stem}"

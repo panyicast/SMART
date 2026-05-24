@@ -20,6 +20,8 @@ from smart.services.llm_client import (
 )
 from smart.services.mission_agent import (
     agent_document_paths,
+    mission_agent_profile_for_skill,
+    mission_agent_skill_options,
     render_mission_agent_manifest,
     render_mission_agent_summary,
     render_mission_agent_system_prompt,
@@ -155,6 +157,7 @@ class _ProjectAnalysisWorker(QtCore.QObject):
         config: LLMRequestConfig,
         scope: str,
         question: str,
+        skill_id: str,
     ) -> None:
         super().__init__()
         self._project_root = project_root
@@ -162,16 +165,24 @@ class _ProjectAnalysisWorker(QtCore.QObject):
         self._config = config
         self._scope = scope
         self._question = question
+        self._skill_id = skill_id
 
     @QtCore.Slot()
     def run(self) -> None:
         try:
+            agent_profile = mission_agent_profile_for_skill(self._skill_id)
             self.progress.emit(f"[工具] build_project_analysis_context(project_root={self._project_root})")
             context = build_project_analysis_context(self._project_root)
             self.progress.emit(f"[结果] 项目摘要构建完成，字符数 {len(context):,}")
             self.progress.emit(f"[工具] build_project_analysis_prompt(scope={self._scope!r})")
-            prompt = build_project_analysis_prompt(context, scope=self._scope, question=self._question)
+            prompt = build_project_analysis_prompt(
+                context,
+                scope=self._scope,
+                question=self._question,
+                agent_profile=agent_profile,
+            )
             self.progress.emit(f"[结果] LLM prompt 已组装，字符数 {len(prompt):,}")
+            self.progress.emit(f"[Skill] {render_mission_agent_summary(agent_profile)}")
             self.progress.emit("[阶段] 正在调用 DeepSeek 生成 AI 分析报告。")
             self.progress.emit(
                 "[DeepSeek] request_chat_completion("
@@ -183,7 +194,7 @@ class _ProjectAnalysisWorker(QtCore.QObject):
             response = request_chat_completion(
                 self._config,
                 prompt,
-                system_prompt=render_mission_agent_system_prompt(),
+                system_prompt=render_mission_agent_system_prompt(agent_profile),
                 tools=executor.tool_specs(),
                 tool_executor=executor.execute,
                 progress_callback=self.progress.emit,
@@ -294,6 +305,17 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
             self._prompt_template_combo.addItem(label, template)
         self._prompt_template_combo.currentIndexChanged.connect(self._apply_prompt_template)
         task_layout.addWidget(self._prompt_template_combo)
+
+        self._skill_combo = NoWheelComboBox()
+        self._skill_combo.setEditable(False)
+        self._skill_combo.addItem("全部内置 Skill", "all")
+        for option in mission_agent_skill_options():
+            self._skill_combo.addItem(option.name, option.skill_id)
+        self._skill_combo.currentIndexChanged.connect(self._handle_skill_selection_changed)
+        skill_label = QtWidgets.QLabel("本次对话使用的 Skill")
+        skill_label.setProperty("role", "cardCaption")
+        task_layout.addWidget(skill_label)
+        task_layout.addWidget(self._skill_combo)
 
         self._question_edit = QtWidgets.QPlainTextEdit()
         self._question_edit.setPlaceholderText(
@@ -490,6 +512,7 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
             context,
             scope=scope,
             question=self._question_edit.toPlainText(),
+            agent_profile=self._selected_agent_profile(),
         )
         self._append_trace(f"[结果] 待发送 LLM prompt 已组装，字符数 {len(prompt):,}")
         self._append_trace(
@@ -534,6 +557,7 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
             config=config,
             scope=self._analysis_scope(),
             question=self._question_edit.toPlainText(),
+            skill_id=self._selected_skill_id(),
         )
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.run)
@@ -609,12 +633,14 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
         self._reasoning_effort_combo.setCurrentIndex(max(0, effort_index))
         thinking_enabled = self._settings.value("ai/thinking_enabled", True, type=bool)
         self._thinking_checkbox.setChecked(bool(thinking_enabled))
+        self._set_skill(self._setting_text("ai/skill_id", "all"))
 
     def _save_settings(self) -> None:
         self._settings.setValue("ai/deepseek_base_url", self._base_url_edit.text().strip())
         self._settings.setValue("ai/model", self._selected_model())
         self._settings.setValue("ai/reasoning_effort", self._reasoning_effort_combo.currentData())
         self._settings.setValue("ai/thinking_enabled", self._thinking_checkbox.isChecked())
+        self._settings.setValue("ai/skill_id", self._selected_skill_id())
         self._settings.setValue("ai/api_key", self._api_key_edit.text().strip())
         self._settings.sync()
         self._set_status("DeepSeek API 配置已保存到本机设置。")
@@ -629,6 +655,27 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
                 self._model_combo.setCurrentIndex(index)
                 return
         self._model_combo.setCurrentIndex(0)
+
+    def _selected_skill_id(self) -> str:
+        return str(self._skill_combo.currentData() or "all").strip() or "all"
+
+    def _selected_agent_profile(self):
+        return mission_agent_profile_for_skill(self._selected_skill_id())
+
+    def _set_skill(self, skill_id: str) -> None:
+        normalized = (skill_id or "all").strip()
+        for index in range(self._skill_combo.count()):
+            if str(self._skill_combo.itemData(index)) == normalized:
+                self._skill_combo.setCurrentIndex(index)
+                return
+        self._skill_combo.setCurrentIndex(0)
+
+    @QtCore.Slot(int)
+    def _handle_skill_selection_changed(self, _index: int) -> None:
+        profile = self._selected_agent_profile()
+        self._agent_summary_label.setText(render_mission_agent_summary(profile))
+        self._agent_skills_view.setPlainText(render_mission_agent_manifest(profile))
+        self._set_status(f"本次对话将使用：{self._skill_combo.currentText()}。")
 
     @QtCore.Slot(int)
     def _apply_prompt_template(self, index: int) -> None:
@@ -676,14 +723,15 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
         dialog.exec()
 
     def _render_skill_help_markdown(self) -> str:
-        paths = "\n".join(f"- `{path}`" for path in agent_document_paths())
+        profile = self._selected_agent_profile()
+        paths = "\n".join(f"- `{path}`" for path in agent_document_paths(profile))
         return (
             "# SMART AI 分析 Agent\n\n"
-            f"{render_mission_agent_summary()}\n\n"
+            f"{render_mission_agent_summary(profile)}\n\n"
             "## 文档来源\n\n"
             f"{paths}\n\n"
             "## 详细说明\n\n"
-            f"{render_mission_agent_manifest()}"
+            f"{render_mission_agent_manifest(profile)}"
         )
 
     def _render_tools_help_text(self) -> str:
@@ -730,6 +778,7 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
             self._base_url_edit,
             self._api_key_edit,
             self._model_combo,
+            self._skill_combo,
             self._reasoning_effort_combo,
             self._thinking_checkbox,
             self._prompt_template_combo,
@@ -926,6 +975,7 @@ class AIProjectAnalysisPage(QtWidgets.QWidget):
         status = resolve_stk_help_tool()
         lines = [
             f"项目：{project_root.name}",
+            f"本次对话 Skill：{self._skill_combo.currentText()}",
             f"配置摘要：config/*.json 共 {config_count} 个",
             f"数据文件：data/* 共 {len(data_files)} 个",
             f"图表文件：charts/* 共 {chart_count} 个",
