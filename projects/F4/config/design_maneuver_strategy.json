@@ -1,6 +1,6 @@
 {
   "planner": {
-    "version": "V4.2_simplified_transfer_type",
+    "version": "V5.1_hard_constrained_phase_search",
     "auto_recommend_count": true,
     "maneuver_count_user": 6,
     "force_user_count": true

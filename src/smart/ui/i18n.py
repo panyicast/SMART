@@ -134,7 +134,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "module.maneuver_strategy.description": "支持圆轨道霍曼转移估算，并输出转移时间。",
         "module.maneuver_strategy.focus": "用于初步方案权衡的快速 delta-v 预算。",
         "module.design_maneuver_strategy.name": "设计变轨策略",
-        "module.design_maneuver_strategy.description": "按 V4.2 简化脉冲算法生成多次 A/P 点火初值。",
+        "module.design_maneuver_strategy.description": "按 V5.1 硬约束脉冲算法生成多次 A/P 点火初值。",
         "module.design_maneuver_strategy.focus": "输出次数推荐、脉冲点火表与约束检查。",
         "module.launch_window.name": "发射窗口",
         "module.launch_window.description": "基于 SPICE 的发射机会搜索与行星构型分析。",

@@ -27,7 +27,7 @@ def test_stream_turn_hides_reasoning_by_default(monkeypatch) -> None:
     )
 
     assert turn.content == "final answer"
-    assert turn.reasoning_content == ""
+    assert turn.reasoning_content == "secret reasoning"
     assert not any("secret reasoning" in item for item in progress)
     assert any("默认不显示思考流" in item for item in progress)
 

@@ -654,6 +654,10 @@
 - 提交：`09aa82a`
 - 影响文件：`src/smart/agents/skills/stk_11_6_operations.md`、`HANDOFF.md`。
 
-## 2026-05-24T19:58:39+08:00 | Update F4 project outputs and configuration
-- 提交：`本次提交`
+## 2026-05-24T19:58:44+08:00 | Update F4 project outputs and configuration
+- 提交：`a1293e0`
 - 影响文件：`projects/F4/config/design_import_maneuver_strategy.json`、`projects/F4/config/flight_program.json`、`projects/F4/config/launch_window.json`、`projects/F4/config/maneuver_strategy.json`、`projects/F4/config/satellite_3d_model.json`、`projects/F4/config/satellite_status.json`、`projects/F4/config/tracking_arc.json`、`projects/F4/data/ai_project_analysis.md` 等 17 个文件。
+
+## 2026-05-25T20:55:52+08:00 | Fix project result cache consistency
+- 提交：`本次提交`
+- 影响文件：`src/smart/services/design_maneuver_strategy.py`、`src/smart/services/project_workspace.py`、`src/smart/ui/i18n.py`、`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`src/smart/ui/widgets/launch_window_page.py`、`tests/test_design_maneuver_strategy.py`、`tests/test_llm_client.py`、`HANDOFF.md` 等 19 个文件。

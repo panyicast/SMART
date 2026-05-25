@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 from dataclasses import dataclass
@@ -327,27 +328,58 @@ class ProjectWorkspace:
 
     def save_design_maneuver_results(self, result: DesignManeuverResult) -> Path:
         file_path = self.design_maneuver_results_path()
-        _write_json(file_path, design_maneuver_result_to_payload(result))
+        payload = design_maneuver_result_to_payload(result)
+        payload["metadata"] = {
+            "config_hash": _stable_hash(payload["config"]),
+        }
+        _write_json(file_path, payload)
         self._touch_updated_time()
         return file_path
 
-    def load_design_maneuver_results(self) -> DesignManeuverResult | None:
+    def load_design_maneuver_results(self, *, require_current_config: bool = False) -> DesignManeuverResult | None:
         file_path = self.design_maneuver_results_path()
         if not file_path.exists():
             return None
-        return design_maneuver_result_from_payload(_read_json(file_path))
+        payload = _read_json(file_path)
+        if require_current_config:
+            metadata = payload.get("metadata")
+            current_config = self.load_design_maneuver_strategy()
+            current_hash = _stable_hash(current_config) if current_config is not None else ""
+            if not isinstance(metadata, dict) or metadata.get("config_hash") != current_hash:
+                return None
+        return design_maneuver_result_from_payload(payload)
 
-    def save_design_continuous_thrust_results(self, result: ContinuousThrustOptimizationResult) -> Path:
+    def save_design_continuous_thrust_results(
+        self,
+        result: ContinuousThrustOptimizationResult,
+        *,
+        pulse_result: DesignManeuverResult | None = None,
+    ) -> Path:
         file_path = self.design_continuous_thrust_results_path()
-        _write_json(file_path, continuous_thrust_result_to_payload(result))
+        payload = continuous_thrust_result_to_payload(result)
+        if pulse_result is not None:
+            payload["metadata"] = {
+                "pulse_result_hash": _stable_hash(design_maneuver_result_to_payload(pulse_result)),
+            }
+        _write_json(file_path, payload)
         self._touch_updated_time()
         return file_path
 
-    def load_design_continuous_thrust_results(self) -> ContinuousThrustOptimizationResult | None:
+    def load_design_continuous_thrust_results(
+        self,
+        *,
+        pulse_result: DesignManeuverResult | None = None,
+    ) -> ContinuousThrustOptimizationResult | None:
         file_path = self.design_continuous_thrust_results_path()
         if not file_path.exists():
             return None
-        return continuous_thrust_result_from_payload(_read_json(file_path))
+        payload = _read_json(file_path)
+        if pulse_result is not None:
+            metadata = payload.get("metadata")
+            expected_hash = _stable_hash(design_maneuver_result_to_payload(pulse_result))
+            if not isinstance(metadata, dict) or metadata.get("pulse_result_hash") != expected_hash:
+                return None
+        return continuous_thrust_result_from_payload(payload)
 
     def save_launch_window_config(self, config: dict[str, Any]) -> Path:
         payload = normalize_launch_window_config(config)
@@ -702,6 +734,11 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
         json.dump(payload, handle, ensure_ascii=False, indent=2)
+
+
+def _stable_hash(payload: Any) -> str:
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _read_json(path: Path) -> dict[str, Any]:

@@ -749,7 +749,10 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
             import_strategy_path = None
             result_path = None
             if self._workspace.current_project is not None:
-                result_path = self._workspace.save_design_continuous_thrust_results(continuous_result)
+                result_path = self._workspace.save_design_continuous_thrust_results(
+                    continuous_result,
+                    pulse_result=self._last_result,
+                )
                 history_path = export_continuous_thrust_orbit_history_csv(
                     continuous_result,
                     self._workspace.data_dir() / "design_continuous_thrust_orbit_history.csv",
@@ -813,7 +816,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         if self._workspace.current_project is None:
             return False
         try:
-            result = self._workspace.load_design_maneuver_results()
+            result = self._workspace.load_design_maneuver_results(require_current_config=True)
         except Exception as exc:
             self._set_status(
                 "statusDisconnected",
@@ -830,7 +833,7 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         if self._workspace.current_project is None:
             return False
         try:
-            result = self._workspace.load_design_continuous_thrust_results()
+            result = self._workspace.load_design_continuous_thrust_results(pulse_result=self._last_result)
         except Exception as exc:
             self._set_status(
                 "statusDisconnected",

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from datetime import timedelta, timezone
+import hashlib
+import json
 from pathlib import Path
 import time
 from typing import Any
@@ -660,12 +662,18 @@ class LaunchWindowPage(QtWidgets.QWidget):
     def _sample_csv_path(self) -> Path:
         return self._workspace.data_dir() / "launch_window_samples.csv"
 
+    def _sample_meta_path(self) -> Path:
+        return self._workspace.data_dir() / "launch_window_samples.meta.json"
+
     def _result_csv_path(self) -> Path:
         return self._workspace.data_dir() / "launch_window_results.csv"
 
     def _load_cached_results(self, config: Any) -> bool | None:
         path = self._sample_csv_path()
         if not path.exists():
+            return False
+        if not self._cached_samples_match_current_inputs(config):
+            self._set_status("statusReady", "已有发射窗口缓存已过期，请重新计算。")
             return False
         try:
             samples = self._read_sample_csv(path)
@@ -678,6 +686,27 @@ class LaunchWindowPage(QtWidgets.QWidget):
         self._progress_bar.setFormat("已加载")
         self._set_status("statusReady", f"已加载已有发射窗口计算结果：{len(windows)} 个窗口。")
         return True
+
+    def _cached_samples_match_current_inputs(self, config: Any) -> bool:
+        meta_path = self._sample_meta_path()
+        if not meta_path.exists():
+            return False
+        try:
+            metadata = json.loads(meta_path.read_text(encoding="utf-8"))
+        except Exception:
+            return False
+        if not isinstance(metadata, dict):
+            return False
+        return metadata == self._sample_cache_metadata(config)
+
+    def _sample_cache_metadata(self, config: Any) -> dict[str, str]:
+        strategy_path = self._workspace.maneuver_strategy_path()
+        history_path = self._workspace.data_dir() / "full_orbit_history.csv"
+        return {
+            "config_hash": _stable_hash(_hashable_dataclass(config)),
+            "maneuver_strategy_hash": _file_hash(strategy_path),
+            "orbit_history_hash": _file_hash(history_path),
+        }
 
     def _show_calculation_results(self, windows: list[Any], samples: list[dict[str, Any]], sample_path: Path) -> None:
         self._last_result_path = self._result_csv_path()
@@ -752,7 +781,6 @@ class LaunchWindowPage(QtWidgets.QWidget):
         ]
         with path.open("w", encoding="utf-8", newline="") as handle:
             import csv
-            import json
 
             writer = csv.DictWriter(handle, fieldnames=columns)
             writer.writeheader()
@@ -765,6 +793,14 @@ class LaunchWindowPage(QtWidgets.QWidget):
                     separators=(",", ":"),
                 )
                 writer.writerow(row)
+        try:
+            config = config_from_payload(self.config_payload())
+            self._sample_meta_path().write_text(
+                json.dumps(self._sample_cache_metadata(config), ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except Exception:
+            self._sample_meta_path().unlink(missing_ok=True)
         return path
 
     def _save_result_csv(self) -> Path | None:
@@ -1192,3 +1228,18 @@ class LaunchWindowPage(QtWidgets.QWidget):
             return float(value)
         except (TypeError, ValueError):
             return 0.0
+
+
+def _stable_hash(payload: Any) -> str:
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _file_hash(path: Path) -> str:
+    if not path.exists():
+        return ""
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _hashable_dataclass(value: Any) -> Any:
+    return asdict(value) if is_dataclass(value) else value
