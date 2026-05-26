@@ -66,6 +66,11 @@ def test_launch_window_state_settings_use_dialog_and_cancel_restores_values(tmp_
     assert page._ground_station_table.window() is dialog
     assert page._relay_satellite_table.window() is dialog
     assert page._constraint_table.window() is dialog
+    assert dialog.minimumWidth() >= 1120
+    assert page._ground_station_table.columnWidth(1) >= 220
+    assert page._ground_station_table.maximumWidth() < dialog.minimumWidth()
+    assert page._constraint_table.columnWidth(1) >= 250
+    assert page._constraint_table.columnWidth(2) >= 190
     assert "启用条件" in page._state_summary_label.text()
     assert "地面站" in page._state_summary_label.text()
 

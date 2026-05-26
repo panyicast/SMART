@@ -662,6 +662,10 @@
 - 提交：`a35019a`
 - 影响文件：`src/smart/services/design_maneuver_strategy.py`、`src/smart/services/project_workspace.py`、`src/smart/ui/i18n.py`、`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`src/smart/ui/widgets/launch_window_page.py`、`tests/test_design_maneuver_strategy.py`、`tests/test_llm_client.py`、`HANDOFF.md` 等 19 个文件。
 
-## 2026-05-26T16:49:17+08:00 | Refine launch window status configuration UI
-- 提交：`本次提交`
+## 2026-05-26T16:49:22+08:00 | Refine launch window status configuration UI
+- 提交：`5f25f71`
 - 影响文件：`src/smart/ui/widgets/launch_window_page.py`、`tests/test_launch_window_page.py`、`doc/launch_window_workflow.md`、`HANDOFF.md`。
+
+## 2026-05-26T17:06:57+08:00 | Polish launch window settings dialog layout
+- 提交：`本次提交`
+- 影响文件：`src/smart/ui/widgets/launch_window_page.py`、`tests/test_launch_window_page.py`、`HANDOFF.md`。

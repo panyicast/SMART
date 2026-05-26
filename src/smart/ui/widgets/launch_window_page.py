@@ -55,8 +55,8 @@ class _LaunchWindowStateDialog(QtWidgets.QDialog):
         self.setObjectName("launchWindowStateDialog")
         self.setWindowTitle("状态设置")
         self.setWindowFlag(QtCore.Qt.WindowType.FramelessWindowHint, True)
-        self.resize(1120, 860)
-        self.setMinimumSize(980, 680)
+        self.resize(1280, 900)
+        self.setMinimumSize(1120, 720)
         self._apply_dialog_style()
 
         root = QtWidgets.QVBoxLayout(self)
@@ -92,12 +92,13 @@ class _LaunchWindowStateDialog(QtWidgets.QDialog):
         root.addWidget(caption)
 
         scroll = QtWidgets.QScrollArea()
+        scroll.setObjectName("stateDialogScrollArea")
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
         canvas = QtWidgets.QWidget()
         contents = QtWidgets.QVBoxLayout(canvas)
-        contents.setContentsMargins(0, 0, 8, 0)
-        contents.setSpacing(14)
+        contents.setContentsMargins(0, 0, 18, 0)
+        contents.setSpacing(16)
         contents.addWidget(page._build_tracking_asset_card())
         contents.addWidget(page._build_constraint_card())
         contents.addStretch(1)
@@ -189,6 +190,33 @@ class _LaunchWindowStateDialog(QtWidgets.QDialog):
                 font-weight: 800;
             }
             QDialog#launchWindowStateDialog QLabel[role="cardCaption"] { color: #8fb0bb; }
+            QDialog#launchWindowStateDialog QLabel[role="stateFieldLabel"] {
+                color: #d7edf5;
+                font-size: 10.5pt;
+                font-weight: 600;
+            }
+            QDialog#launchWindowStateDialog QScrollArea#stateDialogScrollArea {
+                border: none;
+                background: transparent;
+            }
+            QDialog#launchWindowStateDialog QScrollBar:vertical {
+                background: rgba(7, 19, 28, 0.52);
+                border: 1px solid rgba(45, 112, 129, 0.58);
+                width: 12px;
+                margin: 0px;
+                border-radius: 6px;
+            }
+            QDialog#launchWindowStateDialog QScrollBar::handle:vertical {
+                background: #2c7c93;
+                border-radius: 5px;
+                min-height: 56px;
+            }
+            QDialog#launchWindowStateDialog QScrollBar::add-line:vertical,
+            QDialog#launchWindowStateDialog QScrollBar::sub-line:vertical {
+                height: 0px;
+                border: none;
+                background: transparent;
+            }
             QDialog#launchWindowStateDialog QTableWidget {
                 background: rgba(7, 20, 29, 0.72);
                 alternate-background-color: rgba(14, 43, 55, 0.72);
@@ -201,6 +229,21 @@ class _LaunchWindowStateDialog(QtWidgets.QDialog):
             QDialog#launchWindowStateDialog QTableWidget::item {
                 color: #e6f6fb;
                 padding: 4px 7px;
+            }
+            QDialog#launchWindowStateDialog QTableWidget::indicator {
+                width: 17px;
+                height: 17px;
+                border-radius: 3px;
+                border: 1px solid #36a8bd;
+                background: rgba(11, 35, 45, 0.90);
+            }
+            QDialog#launchWindowStateDialog QTableWidget::indicator:checked {
+                background: #2fc3d6;
+                image: none;
+            }
+            QDialog#launchWindowStateDialog QTableWidget::indicator:unchecked:hover {
+                border: 1px solid #7eeaff;
+                background: rgba(33, 101, 118, 0.65);
             }
             QDialog#launchWindowStateDialog QHeaderView::section {
                 background: #0a2b3b;
@@ -218,6 +261,28 @@ class _LaunchWindowStateDialog(QtWidgets.QDialog):
                 border-radius: 6px;
                 padding: 7px 10px;
                 color: #e6f6fb;
+            }
+            QDialog#launchWindowStateDialog QTableWidget QComboBox {
+                min-height: 30px;
+                padding: 3px 28px 3px 10px;
+            }
+            QDialog#launchWindowStateDialog QComboBox QAbstractItemView {
+                background: #07141d;
+                color: #f3fbff;
+                border: 1px solid #1e7892;
+                selection-background-color: #153e4d;
+                outline: none;
+            }
+            QDialog#launchWindowStateDialog QComboBox::drop-down {
+                subcontrol-origin: padding;
+                subcontrol-position: top right;
+                width: 26px;
+                border-left: 1px solid #25586a;
+            }
+            QDialog#launchWindowStateDialog QComboBox::down-arrow {
+                image: none;
+                width: 0px;
+                height: 0px;
             }
             QDialog#launchWindowStateDialog QPushButton {
                 color: #d7edf5;
@@ -433,7 +498,8 @@ class LaunchWindowPage(QtWidgets.QWidget):
         self._constraint_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
         self._constraint_table.setHorizontalScrollMode(QtWidgets.QAbstractItemView.ScrollMode.ScrollPerPixel)
         self._constraint_table.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self._constraint_table.setMinimumHeight(300)
+        self._constraint_table.setMinimumHeight(390)
+        self._constraint_table.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
         install_table_edit_delegate(self._constraint_table)
         self._configure_constraint_table_columns()
         layout.addWidget(self._constraint_table)
@@ -518,21 +584,18 @@ class LaunchWindowPage(QtWidgets.QWidget):
         ground_visibility_title = self._section_label("地面站测控可见条件")
         layout.addWidget(ground_visibility_title)
         ground_visibility_form = QtWidgets.QGridLayout()
-        ground_visibility_form.setHorizontalSpacing(12)
-        ground_visibility_form.setVerticalSpacing(10)
+        self._prepare_state_form_grid(ground_visibility_form)
         self._number_fields["ground_station_min_elevation_deg"] = self._double_spin(5.0, -90.0, 90.0, 0.5, 2)
         self._number_fields["ground_station_max_theta_st_deg"] = self._double_spin(70.0, 0.0, 180.0, 0.5, 2)
         for field in (
             self._number_fields["ground_station_min_elevation_deg"],
             self._number_fields["ground_station_max_theta_st_deg"],
         ):
-            field.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
-        ground_visibility_form.addWidget(QtWidgets.QLabel("仰角最小值 (deg)"), 0, 0)
+            self._prepare_state_field(field)
+        ground_visibility_form.addWidget(self._state_field_label("仰角最小值 (deg)"), 0, 0)
         ground_visibility_form.addWidget(self._number_fields["ground_station_min_elevation_deg"], 0, 1)
-        ground_visibility_form.addWidget(QtWidgets.QLabel("天线角最大值 (deg)"), 0, 2)
+        ground_visibility_form.addWidget(self._state_field_label("天线角最大值 (deg)"), 0, 2)
         ground_visibility_form.addWidget(self._number_fields["ground_station_max_theta_st_deg"], 0, 3)
-        ground_visibility_form.setColumnStretch(1, 1)
-        ground_visibility_form.setColumnStretch(3, 1)
         layout.addLayout(ground_visibility_form)
 
         self._relay_satellite_table = self._asset_table(with_enabled=True)
@@ -560,8 +623,7 @@ class LaunchWindowPage(QtWidgets.QWidget):
         relay_visibility_title = self._section_label("中继星测控可见条件")
         layout.addWidget(relay_visibility_title)
         relay_visibility_form = QtWidgets.QGridLayout()
-        relay_visibility_form.setHorizontalSpacing(12)
-        relay_visibility_form.setVerticalSpacing(10)
+        self._prepare_state_form_grid(relay_visibility_form)
         self._number_fields["relay_alpha_abs_max_deg"] = self._double_spin(20.0, 0.0, 180.0, 0.5, 2)
         self._number_fields["relay_beta_abs_max_deg"] = self._double_spin(40.0, 0.0, 180.0, 0.5, 2)
         self._number_fields["relay_max_theta_st_deg"] = self._double_spin(80.0, 0.0, 180.0, 0.5, 2)
@@ -570,39 +632,27 @@ class LaunchWindowPage(QtWidgets.QWidget):
             self._number_fields["relay_beta_abs_max_deg"],
             self._number_fields["relay_max_theta_st_deg"],
         ):
-            field.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
-        relay_visibility_form.addWidget(QtWidgets.QLabel("alpha 最大值 (deg)"), 0, 0)
+            self._prepare_state_field(field)
+        relay_visibility_form.addWidget(self._state_field_label("alpha 最大值 (deg)"), 0, 0)
         relay_visibility_form.addWidget(self._number_fields["relay_alpha_abs_max_deg"], 0, 1)
-        relay_visibility_form.addWidget(QtWidgets.QLabel("beta 最大值 (deg)"), 0, 2)
+        relay_visibility_form.addWidget(self._state_field_label("beta 最大值 (deg)"), 0, 2)
         relay_visibility_form.addWidget(self._number_fields["relay_beta_abs_max_deg"], 0, 3)
-        relay_visibility_form.addWidget(QtWidgets.QLabel("天线覆盖角最大值 (deg)"), 0, 4)
-        relay_visibility_form.addWidget(self._number_fields["relay_max_theta_st_deg"], 0, 5)
-        relay_visibility_form.setColumnStretch(1, 1)
-        relay_visibility_form.setColumnStretch(3, 1)
-        relay_visibility_form.setColumnStretch(5, 1)
+        relay_visibility_form.addWidget(self._state_field_label("天线覆盖角最大值 (deg)"), 1, 0)
+        relay_visibility_form.addWidget(self._number_fields["relay_max_theta_st_deg"], 1, 1)
         layout.addLayout(relay_visibility_form)
 
         burn_visibility_title = self._section_label("点火期间约束")
         layout.addWidget(burn_visibility_title)
         burn_visibility_form = QtWidgets.QGridLayout()
-        burn_visibility_form.setHorizontalSpacing(12)
-        burn_visibility_form.setVerticalSpacing(10)
+        self._prepare_state_form_grid(burn_visibility_form)
         self._number_fields["burn_sun_angle_max_deg"] = self._double_spin(90.0, 0.0, 180.0, 0.5, 2)
-        self._number_fields["burn_sun_angle_max_deg"].setSizePolicy(
-            QtWidgets.QSizePolicy.Policy.Expanding,
-            QtWidgets.QSizePolicy.Policy.Fixed,
-        )
+        self._prepare_state_field(self._number_fields["burn_sun_angle_max_deg"])
         self._combo_fields["burn_sun_axis"] = self._burn_sun_axis_combo(BURN_SUN_AXIS_MINUS_Z)
-        self._combo_fields["burn_sun_axis"].setSizePolicy(
-            QtWidgets.QSizePolicy.Policy.Expanding,
-            QtWidgets.QSizePolicy.Policy.Fixed,
-        )
-        burn_visibility_form.addWidget(QtWidgets.QLabel("点火期间 θs 最大值 (deg)"), 0, 0)
+        self._prepare_state_field(self._combo_fields["burn_sun_axis"])
+        burn_visibility_form.addWidget(self._state_field_label("点火期间 θs 最大值 (deg)"), 0, 0)
         burn_visibility_form.addWidget(self._number_fields["burn_sun_angle_max_deg"], 0, 1)
-        burn_visibility_form.addWidget(QtWidgets.QLabel("帆板方向"), 0, 2)
+        burn_visibility_form.addWidget(self._state_field_label("帆板方向"), 0, 2)
         burn_visibility_form.addWidget(self._combo_fields["burn_sun_axis"], 0, 3)
-        burn_visibility_form.setColumnStretch(1, 1)
-        burn_visibility_form.setColumnStretch(3, 1)
         layout.addLayout(burn_visibility_form)
         return card
 
@@ -909,7 +959,7 @@ class LaunchWindowPage(QtWidgets.QWidget):
             self._constraint_table.setItem(row, offset, item)
         type_box = self._constraint_type_combo(str(row_payload.get("condition_type", CONSTRAINT_TYPE_GROUND_VISIBLE)))
         self._constraint_table.setCellWidget(row, 4, type_box)
-        self._constraint_table.setRowHeight(row, max(self._constraint_table.rowHeight(row), 36))
+        self._constraint_table.setRowHeight(row, max(self._constraint_table.rowHeight(row), 42))
 
     def _constraint_rows_payload(self) -> list[dict[str, Any]]:
         if self._constraint_table is None:
@@ -1193,10 +1243,18 @@ class LaunchWindowPage(QtWidgets.QWidget):
         )
         table.setAlternatingRowColors(True)
         table.verticalHeader().setVisible(False)
-        table.horizontalHeader().setStretchLastSection(True)
-        table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
+        table.verticalHeader().setDefaultSectionSize(40)
+        table.horizontalHeader().setStretchLastSection(False)
+        table.horizontalHeader().setMinimumHeight(42)
+        table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.Fixed)
+        widths = (58, 220, 150, 150, 190) if with_enabled else (220, 150, 150, 190)
+        for column, width in enumerate(widths):
+            table.setColumnWidth(column, width)
         table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
-        table.setMinimumHeight(120)
+        table.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        table.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        table.setMaximumWidth(sum(widths) + table.frameWidth() * 2 + 4)
+        table.setMinimumHeight(172)
         install_table_edit_delegate(table)
         return table
 
@@ -1204,6 +1262,29 @@ class LaunchWindowPage(QtWidgets.QWidget):
         label = QtWidgets.QLabel(text)
         label.setProperty("role", "cardCaption")
         return label
+
+    @staticmethod
+    def _state_field_label(text: str) -> QtWidgets.QLabel:
+        label = QtWidgets.QLabel(text)
+        label.setProperty("role", "stateFieldLabel")
+        label.setAlignment(QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter)
+        label.setMinimumWidth(178)
+        return label
+
+    @staticmethod
+    def _prepare_state_field(field: QtWidgets.QWidget) -> None:
+        field.setMinimumHeight(42)
+        field.setMinimumWidth(220)
+        field.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+
+    @staticmethod
+    def _prepare_state_form_grid(grid: QtWidgets.QGridLayout) -> None:
+        grid.setHorizontalSpacing(14)
+        grid.setVerticalSpacing(14)
+        grid.setColumnMinimumWidth(0, 178)
+        grid.setColumnMinimumWidth(2, 178)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(3, 1)
 
     def _constraint_type_combo(self, current_value: str) -> QtWidgets.QComboBox:
         combo = NoWheelComboBox()
@@ -1237,17 +1318,18 @@ class LaunchWindowPage(QtWidgets.QWidget):
             return
         header = self._constraint_table.horizontalHeader()
         header.setStretchLastSection(False)
-        header.setMinimumSectionSize(56)
+        header.setMinimumSectionSize(64)
         header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.Fixed)
-        header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeMode.Fixed)
         header.setSectionResizeMode(2, QtWidgets.QHeaderView.ResizeMode.Fixed)
         header.setSectionResizeMode(3, QtWidgets.QHeaderView.ResizeMode.Fixed)
-        header.setSectionResizeMode(4, QtWidgets.QHeaderView.ResizeMode.Interactive)
-        self._constraint_table.setColumnWidth(0, 56)
-        self._constraint_table.setColumnWidth(1, 154)
-        self._constraint_table.setColumnWidth(2, 136)
-        self._constraint_table.setColumnWidth(3, 136)
-        self._constraint_table.setColumnWidth(4, 180)
+        header.setSectionResizeMode(4, QtWidgets.QHeaderView.ResizeMode.Stretch)
+        header.setMinimumHeight(44)
+        self._constraint_table.verticalHeader().setDefaultSectionSize(42)
+        self._constraint_table.setColumnWidth(0, 68)
+        self._constraint_table.setColumnWidth(1, 250)
+        self._constraint_table.setColumnWidth(2, 190)
+        self._constraint_table.setColumnWidth(3, 190)
 
     @staticmethod
     def _burn_sun_axis_combo(current_value: str) -> NoWheelComboBox:
@@ -1277,6 +1359,7 @@ class LaunchWindowPage(QtWidgets.QWidget):
         table.setRowCount(0)
         for row in rows:
             self._append_asset_row(table, row, with_enabled=with_enabled)
+        self._adjust_asset_table_height(table)
 
     def _append_asset_row(
         self,
@@ -1314,6 +1397,8 @@ class LaunchWindowPage(QtWidgets.QWidget):
             if offset > start_col:
                 item.setTextAlignment(QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter)
             table.setItem(row, offset, item)
+        table.setRowHeight(row, 40)
+        self._adjust_asset_table_height(table)
 
     def _asset_rows_payload(self, table: QtWidgets.QTableWidget | None, *, asset_type: str) -> list[dict[str, Any]]:
         if table is None:
@@ -1355,6 +1440,19 @@ class LaunchWindowPage(QtWidgets.QWidget):
             rows = [table.currentRow()]
         for row in rows:
             table.removeRow(row)
+        self._adjust_asset_table_height(table)
+
+    @staticmethod
+    def _adjust_asset_table_height(table: QtWidgets.QTableWidget | None) -> None:
+        if table is None:
+            return
+        visible_rows = min(max(table.rowCount(), 3), 6)
+        row_height = 40
+        header_height = max(table.horizontalHeader().height(), 42)
+        frame_height = table.frameWidth() * 2
+        height = header_height + row_height * visible_rows + frame_height + 8
+        table.setMinimumHeight(height)
+        table.setMaximumHeight(height)
 
     def retranslate(self, _language: str | None = None) -> None:
         self._title_label.setText("发射窗口分析")
