@@ -55,8 +55,8 @@ class _LaunchWindowStateDialog(QtWidgets.QDialog):
         self.setObjectName("launchWindowStateDialog")
         self.setWindowTitle("状态设置")
         self.setWindowFlag(QtCore.Qt.WindowType.FramelessWindowHint, True)
-        self.resize(1280, 900)
-        self.setMinimumSize(1120, 720)
+        self.resize(1160, 880)
+        self.setMinimumSize(1040, 700)
         self._apply_dialog_style()
 
         root = QtWidgets.QVBoxLayout(self)
@@ -950,12 +950,7 @@ class LaunchWindowPage(QtWidgets.QWidget):
         for offset, value in enumerate(values, start=1):
             item = QtWidgets.QTableWidgetItem(value)
             if offset in {2, 3}:
-                alignment = (
-                    QtCore.Qt.AlignmentFlag.AlignRight
-                    if self._is_numeric_text(value)
-                    else QtCore.Qt.AlignmentFlag.AlignLeft
-                )
-                item.setTextAlignment(alignment | QtCore.Qt.AlignmentFlag.AlignVCenter)
+                item.setTextAlignment(QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter)
             self._constraint_table.setItem(row, offset, item)
         type_box = self._constraint_type_combo(str(row_payload.get("condition_type", CONSTRAINT_TYPE_GROUND_VISIBLE)))
         self._constraint_table.setCellWidget(row, 4, type_box)
@@ -1320,16 +1315,17 @@ class LaunchWindowPage(QtWidgets.QWidget):
         header.setStretchLastSection(False)
         header.setMinimumSectionSize(64)
         header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.Fixed)
-        header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeMode.Fixed)
+        header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(2, QtWidgets.QHeaderView.ResizeMode.Fixed)
         header.setSectionResizeMode(3, QtWidgets.QHeaderView.ResizeMode.Fixed)
-        header.setSectionResizeMode(4, QtWidgets.QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(4, QtWidgets.QHeaderView.ResizeMode.Fixed)
         header.setMinimumHeight(44)
         self._constraint_table.verticalHeader().setDefaultSectionSize(42)
         self._constraint_table.setColumnWidth(0, 68)
-        self._constraint_table.setColumnWidth(1, 250)
-        self._constraint_table.setColumnWidth(2, 190)
-        self._constraint_table.setColumnWidth(3, 190)
+        self._constraint_table.setColumnWidth(1, 240)
+        self._constraint_table.setColumnWidth(2, 170)
+        self._constraint_table.setColumnWidth(3, 170)
+        self._constraint_table.setColumnWidth(4, 180)
 
     @staticmethod
     def _burn_sun_axis_combo(current_value: str) -> NoWheelComboBox:

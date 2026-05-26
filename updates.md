@@ -666,6 +666,10 @@
 - 提交：`5f25f71`
 - 影响文件：`src/smart/ui/widgets/launch_window_page.py`、`tests/test_launch_window_page.py`、`doc/launch_window_workflow.md`、`HANDOFF.md`。
 
-## 2026-05-26T17:06:57+08:00 | Polish launch window settings dialog layout
+## 2026-05-26T17:07:03+08:00 | Polish launch window settings dialog layout
+- 提交：`c4b6070`
+- 影响文件：`src/smart/ui/widgets/launch_window_page.py`、`tests/test_launch_window_page.py`、`HANDOFF.md`。
+
+## 2026-05-26T17:24:57+08:00 | Tighten launch window constraint dialog columns
 - 提交：`本次提交`
 - 影响文件：`src/smart/ui/widgets/launch_window_page.py`、`tests/test_launch_window_page.py`、`HANDOFF.md`。
