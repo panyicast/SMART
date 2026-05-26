@@ -73,6 +73,8 @@ def test_launch_window_state_settings_use_dialog_and_cancel_restores_values(tmp_
     assert 1040 <= dialog.minimumWidth() < 1120
     assert page._ground_station_table.columnWidth(1) >= 220
     assert page._ground_station_table.maximumWidth() < dialog.minimumWidth()
+    assert page._constraint_table.width() == page._ground_station_table.width()
+    assert page._constraint_table.maximumWidth() == page._ground_station_table.maximumWidth()
     assert page._constraint_table.horizontalHeader().sectionResizeMode(1) == QtWidgets.QHeaderView.ResizeMode.Stretch
     assert page._constraint_table.columnWidth(2) == 170
     assert page._constraint_table.columnWidth(3) == 170

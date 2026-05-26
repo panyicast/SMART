@@ -345,6 +345,8 @@ class _LaunchWindowStateDialog(QtWidgets.QDialog):
 
 
 class LaunchWindowPage(QtWidgets.QWidget):
+    _STATE_TABLE_WIDTHS = (58, 220, 150, 150, 190)
+
     def __init__(
         self,
         i18n: I18nManager,
@@ -519,7 +521,8 @@ class LaunchWindowPage(QtWidgets.QWidget):
         self._constraint_table.setHorizontalScrollMode(QtWidgets.QAbstractItemView.ScrollMode.ScrollPerPixel)
         self._constraint_table.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self._constraint_table.setMinimumHeight(390)
-        self._constraint_table.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        self._constraint_table.setFixedWidth(self._state_table_width())
+        self._constraint_table.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
         install_table_edit_delegate(self._constraint_table)
         self._configure_constraint_table_columns()
         layout.addWidget(self._constraint_table)
@@ -1297,13 +1300,13 @@ class LaunchWindowPage(QtWidgets.QWidget):
         table.horizontalHeader().setStretchLastSection(False)
         table.horizontalHeader().setMinimumHeight(42)
         table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.Fixed)
-        widths = (58, 220, 150, 150, 190) if with_enabled else (220, 150, 150, 190)
+        widths = self._STATE_TABLE_WIDTHS if with_enabled else self._STATE_TABLE_WIDTHS[1:]
         for column, width in enumerate(widths):
             table.setColumnWidth(column, width)
         table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
         table.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        table.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
-        table.setMaximumWidth(sum(widths) + table.frameWidth() * 2 + 4)
+        table.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
+        table.setFixedWidth(sum(widths) + table.frameWidth() * 2 + 4)
         table.setMinimumHeight(172)
         install_table_edit_delegate(table)
         return table
@@ -1339,8 +1342,10 @@ class LaunchWindowPage(QtWidgets.QWidget):
         grid.setVerticalSpacing(14)
         grid.setColumnMinimumWidth(0, 178)
         grid.setColumnMinimumWidth(2, 178)
-        grid.setColumnStretch(1, 1)
-        grid.setColumnStretch(3, 1)
+        grid.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignTop)
+
+    def _state_table_width(self) -> int:
+        return sum(self._STATE_TABLE_WIDTHS) + 6
 
     def _constraint_type_combo(self, current_value: str) -> QtWidgets.QComboBox:
         combo = _StateComboBox()

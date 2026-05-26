@@ -682,6 +682,10 @@
 - 提交：`117f236`
 - 影响文件：`src/smart/ui/widgets/launch_window_page.py`、`tests/test_launch_window_page.py`、`HANDOFF.md`。
 
-## 2026-05-26T20:59:53+08:00 | Compact launch window dialog fields
+## 2026-05-26T20:59:58+08:00 | Compact launch window dialog fields
+- 提交：`ee73c3a`
+- 影响文件：`src/smart/ui/widgets/launch_window_page.py`、`tests/test_launch_window_page.py`、`HANDOFF.md`。
+
+## 2026-05-26T21:09:08+08:00 | Align launch window state dialog content
 - 提交：`本次提交`
 - 影响文件：`src/smart/ui/widgets/launch_window_page.py`、`tests/test_launch_window_page.py`、`HANDOFF.md`。
