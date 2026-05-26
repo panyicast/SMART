@@ -75,8 +75,8 @@ class _LaunchWindowStateDialog(QtWidgets.QDialog):
         self.setObjectName("launchWindowStateDialog")
         self.setWindowTitle("状态设置")
         self.setWindowFlag(QtCore.Qt.WindowType.FramelessWindowHint, True)
-        self.resize(1160, 880)
-        self.setMinimumSize(1040, 700)
+        self.resize(930, 880)
+        self.setMinimumSize(900, 700)
         self._apply_dialog_style()
 
         root = QtWidgets.QVBoxLayout(self)
