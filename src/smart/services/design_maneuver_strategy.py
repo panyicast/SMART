@@ -2761,7 +2761,7 @@ def _plan_v51_hard_constrained(
             )
         q_ranked.sort(key=lambda item: item[0])
         q_cap = 10 if fixed_rp else 5
-        q_prefilter = min(q_cap, max(1, int(hard_cfg["prefilter_top_k"])))
+        q_prefilter = min(q_cap, max(2, int(hard_cfg["prefilter_top_k"])))
         q_aa_to_test = [q_aa for _score, q_aa in q_ranked[:q_prefilter]]
 
     records: list[dict[str, Any]] = []

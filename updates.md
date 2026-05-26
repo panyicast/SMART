@@ -654,6 +654,46 @@
 - 提交：`09aa82a`
 - 影响文件：`src/smart/agents/skills/stk_11_6_operations.md`、`HANDOFF.md`。
 
-## 2026-05-24T19:58:39+08:00 | Update F4 project outputs and configuration
-- 提交：`本次提交`
+## 2026-05-24T19:58:44+08:00 | Update F4 project outputs and configuration
+- 提交：`a1293e0`
 - 影响文件：`projects/F4/config/design_import_maneuver_strategy.json`、`projects/F4/config/flight_program.json`、`projects/F4/config/launch_window.json`、`projects/F4/config/maneuver_strategy.json`、`projects/F4/config/satellite_3d_model.json`、`projects/F4/config/satellite_status.json`、`projects/F4/config/tracking_arc.json`、`projects/F4/data/ai_project_analysis.md` 等 17 个文件。
+
+## 2026-05-25T20:55:57+08:00 | Fix project result cache consistency
+- 提交：`a35019a`
+- 影响文件：`src/smart/services/design_maneuver_strategy.py`、`src/smart/services/project_workspace.py`、`src/smart/ui/i18n.py`、`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`src/smart/ui/widgets/launch_window_page.py`、`tests/test_design_maneuver_strategy.py`、`tests/test_llm_client.py`、`HANDOFF.md` 等 19 个文件。
+
+## 2026-05-26T16:49:22+08:00 | Refine launch window status configuration UI
+- 提交：`5f25f71`
+- 影响文件：`src/smart/ui/widgets/launch_window_page.py`、`tests/test_launch_window_page.py`、`doc/launch_window_workflow.md`、`HANDOFF.md`。
+
+## 2026-05-26T17:07:03+08:00 | Polish launch window settings dialog layout
+- 提交：`c4b6070`
+- 影响文件：`src/smart/ui/widgets/launch_window_page.py`、`tests/test_launch_window_page.py`、`HANDOFF.md`。
+
+## 2026-05-26T17:25:04+08:00 | Tighten launch window constraint dialog columns
+- 提交：`8feb745`
+- 影响文件：`src/smart/ui/widgets/launch_window_page.py`、`tests/test_launch_window_page.py`、`HANDOFF.md`。
+
+## 2026-05-26T17:35:20+08:00 | Improve launch window result export flow
+- 提交：`4127c03`
+- 影响文件：`src/smart/ui/widgets/launch_window_page.py`、`tests/test_launch_window_page.py`、`HANDOFF.md`。
+
+## 2026-05-26T20:56:56+08:00 | Show enabled launch window tracking assets
+- 提交：`117f236`
+- 影响文件：`src/smart/ui/widgets/launch_window_page.py`、`tests/test_launch_window_page.py`、`HANDOFF.md`。
+
+## 2026-05-26T20:59:58+08:00 | Compact launch window dialog fields
+- 提交：`ee73c3a`
+- 影响文件：`src/smart/ui/widgets/launch_window_page.py`、`tests/test_launch_window_page.py`、`HANDOFF.md`。
+
+## 2026-05-26T21:09:14+08:00 | Align launch window state dialog content
+- 提交：`d1c86a4`
+- 影响文件：`src/smart/ui/widgets/launch_window_page.py`、`tests/test_launch_window_page.py`、`HANDOFF.md`。
+
+## 2026-05-26T21:15:51+08:00 | Narrow launch window state dialog
+- 提交：`1faaa11`
+- 影响文件：`src/smart/ui/widgets/launch_window_page.py`、`tests/test_launch_window_page.py`、`HANDOFF.md`。
+
+## 2026-05-26T21:34:40+08:00 | Fix launch window dialog close cursor
+- 提交：`本次提交`
+- 影响文件：`src/smart/ui/widgets/launch_window_page.py`、`tests/test_launch_window_page.py`、`HANDOFF.md`。
