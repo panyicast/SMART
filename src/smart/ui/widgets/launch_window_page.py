@@ -671,9 +671,10 @@ class LaunchWindowPage(QtWidgets.QWidget):
         self._save_button = QtWidgets.QPushButton("保存参数")
         self._save_button.clicked.connect(self.save_config)
         self._calculate_button = QtWidgets.QPushButton("计算发射窗口")
+        self._calculate_button.setProperty("variant", "primaryAction")
         self._calculate_button.clicked.connect(self.calculate_windows)
-        self._save_results_button = QtWidgets.QPushButton("保存结果 CSV")
-        self._save_results_button.clicked.connect(self._save_result_csv)
+        self._save_results_button = QtWidgets.QPushButton("导出结果")
+        self._save_results_button.clicked.connect(self._export_result_csv)
         self._save_results_button.setEnabled(False)
         for button in (
             self._reload_button,
@@ -809,8 +810,12 @@ class LaunchWindowPage(QtWidgets.QWidget):
                 QtWidgets.QApplication.restoreOverrideCursor()
 
         self._show_calculation_results(windows, samples, sample_path)
+        result_path = self._save_result_csv()
         self._progress_bar.setValue(100)
-        self._set_status("statusReady", f"发射窗口计算完成：{len(windows)} 个窗口。")
+        if result_path is None:
+            self._set_status("statusReady", f"发射窗口计算完成：{len(windows)} 个窗口。")
+        else:
+            self._set_status("statusReady", f"发射窗口计算完成：{len(windows)} 个窗口，已自动保存结果 CSV：{result_path}")
 
     def config_payload(self) -> dict[str, Any]:
         payload: dict[str, Any] = {}
@@ -1026,7 +1031,7 @@ class LaunchWindowPage(QtWidgets.QWidget):
     def _show_calculation_results(self, windows: list[Any], samples: list[dict[str, Any]], sample_path: Path) -> None:
         self._last_result_path = self._result_csv_path()
         self._set_result_rows(windows)
-        self._save_results_button.setEnabled(self._result_table.rowCount() > 0)
+        self._save_results_button.setEnabled(self._result_table.columnCount() > 0)
         if self._gantt_chart is not None:
             self._gantt_chart.set_samples(samples)
         self._summary_values["window_count"].setText(str(len(windows)))
@@ -1118,14 +1123,15 @@ class LaunchWindowPage(QtWidgets.QWidget):
             self._sample_meta_path().unlink(missing_ok=True)
         return path
 
-    def _save_result_csv(self) -> Path | None:
+    def _save_result_csv(self, path: Path | None = None, *, announce: bool = False) -> Path | None:
         if self._workspace.current_project is None:
             self._set_status("statusDisconnected", "没有活动项目。")
             return None
-        if self._result_table.rowCount() <= 0:
+        if self._result_table.columnCount() <= 0:
             self._set_status("statusDisconnected", "没有可保存的发射窗口计算结果。")
             return None
-        path = self._result_csv_path()
+        if path is None:
+            path = self._result_csv_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         try:
             import csv
@@ -1150,8 +1156,27 @@ class LaunchWindowPage(QtWidgets.QWidget):
             self._set_status("statusDisconnected", f"保存结果 CSV 失败：{exc}")
             return None
         self._last_result_path = path
-        self._set_status("statusReady", f"已保存结果 CSV：{path}")
+        if announce:
+            self._set_status("statusReady", f"已导出结果 CSV：{path}")
         return path
+
+    def _export_result_csv(self) -> Path | None:
+        if self._workspace.current_project is None:
+            self._set_status("statusDisconnected", "没有活动项目。")
+            return None
+        default_path = self._last_result_path or self._result_csv_path()
+        selected, _filter = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "导出发射窗口结果 CSV",
+            str(default_path),
+            "CSV 文件 (*.csv);;所有文件 (*)",
+        )
+        if not selected:
+            return None
+        path = Path(selected)
+        if path.suffix.lower() != ".csv":
+            path = path.with_suffix(".csv")
+        return self._save_result_csv(path, announce=True)
 
     def _set_result_rows(self, windows: list[Any]) -> None:
         headers = [

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import timezone
+from types import SimpleNamespace
 
 from PySide6 import QtCore, QtWidgets
 
@@ -8,6 +9,7 @@ from smart.services.earth_orientation import parse_utc
 from smart.services.launch_window import BURN_SUN_AXIS_MINUS_Z, CONSTRAINT_TYPE_GROUND_VISIBLE
 from smart.services.project_workspace import ProjectWorkspace
 from smart.ui.i18n import I18nManager
+import smart.ui.widgets.launch_window_page as launch_window_page_module
 from smart.ui.widgets.launch_window_page import (
     LaunchWindowGanttWidget,
     LaunchWindowPage,
@@ -90,6 +92,54 @@ def test_launch_window_state_settings_use_dialog_and_cancel_restores_values(tmp_
 
     assert page._number_fields["ground_station_min_elevation_deg"].value() == original_elevation
     assert f"{original_elevation:.2f} deg" in page._state_details_label.text()
+
+
+def test_launch_window_calculate_button_is_primary_and_exports_csv(tmp_path, monkeypatch) -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    workspace = ProjectWorkspace()
+    workspace.create_project("launch-window-export", tmp_path)
+    page = LaunchWindowPage(I18nManager("zh"), workspace)
+
+    assert page._calculate_button.property("variant") == "primaryAction"
+    assert page._save_results_button.text() == "导出结果"
+
+    def fake_compute_launch_windows(**_kwargs):
+        return [
+            SimpleNamespace(
+                window_start_utc="2026-05-15T00:00:00Z",
+                window_end_utc="2026-05-15T00:10:00Z",
+                duration_min=10.0,
+                first_orbit_shadow_min=1.0,
+                window_start_longest_shadow_min=2.0,
+                window_end_longest_shadow_min=3.0,
+                window_start_constraint="",
+                window_end_constraint="",
+            )
+        ], [{"launch_utc": "2026-05-15T00:00:00Z", "t0_utc": "2026-05-15T00:35:34Z", "ok": True}]
+
+    monkeypatch.setattr(launch_window_page_module, "compute_launch_windows", fake_compute_launch_windows)
+    page.calculate_windows()
+
+    default_csv = workspace.data_dir() / "launch_window_results.csv"
+    assert default_csv.exists()
+    assert page._save_results_button.isEnabled()
+    assert "已自动保存结果 CSV" in page._status_label.text()
+
+    export_csv = tmp_path / "selected_export.csv"
+    monkeypatch.setattr(
+        QtWidgets.QFileDialog,
+        "getSaveFileName",
+        lambda *_args, **_kwargs: (str(export_csv), "CSV 文件 (*.csv)"),
+    )
+    page._save_results_button.click()
+
+    assert export_csv.exists()
+    assert "已导出结果 CSV" in page._status_label.text()
+
+    page._set_result_rows([])
+    empty_csv = tmp_path / "empty_export.csv"
+    assert page._save_result_csv(empty_csv) == empty_csv
+    assert empty_csv.exists()
 
 
 def test_launch_window_gantt_supports_local_zoom_and_reset() -> None:
