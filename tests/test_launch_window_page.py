@@ -2,11 +2,18 @@ from __future__ import annotations
 
 from datetime import timezone
 
-from PySide6 import QtWidgets
+from PySide6 import QtCore, QtWidgets
 
 from smart.services.earth_orientation import parse_utc
 from smart.services.launch_window import BURN_SUN_AXIS_MINUS_Z, CONSTRAINT_TYPE_GROUND_VISIBLE
-from smart.ui.widgets.launch_window_page import LaunchWindowGanttWidget, LaunchWindowPage, _GanttScrollArea
+from smart.services.project_workspace import ProjectWorkspace
+from smart.ui.i18n import I18nManager
+from smart.ui.widgets.launch_window_page import (
+    LaunchWindowGanttWidget,
+    LaunchWindowPage,
+    _GanttScrollArea,
+    _LaunchWindowStateDialog,
+)
 from smart.ui.widgets.spinboxes import NoWheelComboBox
 
 
@@ -44,6 +51,36 @@ def test_burn_sun_axis_combo_uses_no_wheel_combo() -> None:
 
     assert isinstance(combo, NoWheelComboBox)
     assert combo.currentData() == BURN_SUN_AXIS_MINUS_Z
+
+
+def test_launch_window_state_settings_use_dialog_and_cancel_restores_values(tmp_path) -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    workspace = ProjectWorkspace()
+    workspace.create_project("launch-window-page", tmp_path)
+
+    page = LaunchWindowPage(I18nManager("zh"), workspace)
+    dialog = page._state_dialog
+
+    assert isinstance(dialog, _LaunchWindowStateDialog)
+    assert page._edit_state_button.text() == "状态设置"
+    assert page._ground_station_table.window() is dialog
+    assert page._relay_satellite_table.window() is dialog
+    assert page._constraint_table.window() is dialog
+    assert "启用条件" in page._state_summary_label.text()
+    assert "地面站" in page._state_summary_label.text()
+
+    original_elevation = page._number_fields["ground_station_min_elevation_deg"].value()
+
+    def change_and_reject() -> None:
+        page._number_fields["ground_station_min_elevation_deg"].setValue(original_elevation + 10.0)
+        dialog.reject()
+
+    QtWidgets.QApplication.instance().processEvents()
+    QtCore.QTimer.singleShot(0, change_and_reject)
+    page._open_state_settings_dialog()
+
+    assert page._number_fields["ground_station_min_elevation_deg"].value() == original_elevation
+    assert f"{original_elevation:.2f} deg" in page._state_details_label.text()
 
 
 def test_launch_window_gantt_supports_local_zoom_and_reset() -> None:

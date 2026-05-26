@@ -47,6 +47,218 @@ def _beijing_qtimezone() -> QtCore.QTimeZone:
     return QtCore.QTimeZone(BEIJING_QT_TIMEZONE_ID)
 
 
+class _LaunchWindowStateDialog(QtWidgets.QDialog):
+    def __init__(self, page: "LaunchWindowPage") -> None:
+        super().__init__(page)
+        self._page = page
+        self._drag_position: QtCore.QPoint | None = None
+        self.setObjectName("launchWindowStateDialog")
+        self.setWindowTitle("状态设置")
+        self.setWindowFlag(QtCore.Qt.WindowType.FramelessWindowHint, True)
+        self.resize(1120, 860)
+        self.setMinimumSize(980, 680)
+        self._apply_dialog_style()
+
+        root = QtWidgets.QVBoxLayout(self)
+        root.setContentsMargins(24, 20, 24, 24)
+        root.setSpacing(14)
+
+        self._title_bar = QtWidgets.QWidget()
+        self._title_bar.setCursor(QtCore.Qt.CursorShape.SizeAllCursor)
+        title_row = QtWidgets.QHBoxLayout(self._title_bar)
+        title_row.setContentsMargins(0, 0, 0, 0)
+        title_row.setSpacing(12)
+        title_icon = QtWidgets.QLabel("◎")
+        title_icon.setObjectName("dialogTitleIcon")
+        title_icon.setFixedSize(28, 28)
+        title_icon.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        title_row.addWidget(title_icon)
+        title_label = QtWidgets.QLabel("发射窗口状态设置")
+        title_label.setProperty("role", "pageTitle")
+        title_row.addWidget(title_label)
+        title_row.addStretch(1)
+        close_button = QtWidgets.QToolButton()
+        close_button.setObjectName("dialogCloseButton")
+        close_button.setText("X")
+        close_button.clicked.connect(self.reject)
+        title_row.addWidget(close_button)
+        for drag_widget in (self._title_bar, title_icon, title_label):
+            drag_widget.installEventFilter(self)
+        root.addWidget(self._title_bar)
+
+        caption = QtWidgets.QLabel("设置测控资源、可见性阈值、点火姿态约束及分阶段限制条件。应用后仍需保存参数或重新计算。")
+        caption.setProperty("role", "cardCaption")
+        caption.setWordWrap(True)
+        root.addWidget(caption)
+
+        scroll = QtWidgets.QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+        canvas = QtWidgets.QWidget()
+        contents = QtWidgets.QVBoxLayout(canvas)
+        contents.setContentsMargins(0, 0, 8, 0)
+        contents.setSpacing(14)
+        contents.addWidget(page._build_tracking_asset_card())
+        contents.addWidget(page._build_constraint_card())
+        contents.addStretch(1)
+        scroll.setWidget(canvas)
+        root.addWidget(scroll, 1)
+
+        buttons = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.StandardButton.Save | QtWidgets.QDialogButtonBox.StandardButton.Cancel
+        )
+        apply_button = buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Save)
+        cancel_button = buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Cancel)
+        apply_button.setText("应用状态设置")
+        cancel_button.setText("取消")
+        apply_button.setProperty("variant", "primaryAction")
+        cancel_button.setProperty("variant", "secondary")
+        apply_button.setMinimumHeight(48)
+        cancel_button.setMinimumHeight(48)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        root.addWidget(buttons, 0, QtCore.Qt.AlignmentFlag.AlignRight)
+
+    def eventFilter(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:
+        if watched in {self._title_bar, *self._title_bar.findChildren(QtWidgets.QLabel)}:
+            if self._handle_drag_event(event):
+                return True
+        return super().eventFilter(watched, event)
+
+    def _handle_drag_event(self, event: QtCore.QEvent) -> bool:
+        if not isinstance(event, QtGui.QMouseEvent):
+            return False
+        if event.type() == QtCore.QEvent.Type.MouseButtonPress and event.button() == QtCore.Qt.MouseButton.LeftButton:
+            self._drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            event.accept()
+            return True
+        if event.type() == QtCore.QEvent.Type.MouseMove and self._drag_position is not None:
+            if event.buttons() & QtCore.Qt.MouseButton.LeftButton:
+                self.move(event.globalPosition().toPoint() - self._drag_position)
+                event.accept()
+                return True
+        if event.type() == QtCore.QEvent.Type.MouseButtonRelease and self._drag_position is not None:
+            self._drag_position = None
+            event.accept()
+            return True
+        return False
+
+    def _apply_dialog_style(self) -> None:
+        self.setStyleSheet(
+            """
+            QDialog#launchWindowStateDialog {
+                background: qradialgradient(cx:0.50, cy:0.10, radius:1.15, fx:0.50, fy:0.10, stop:0 #0c2230, stop:0.50 #07131c, stop:1 #03090f);
+                border: 1px solid #1c7d9a;
+                border-radius: 22px;
+            }
+            QDialog#launchWindowStateDialog QWidget { background: transparent; }
+            QDialog#launchWindowStateDialog QFrame[role="card"] {
+                background: rgba(5, 17, 25, 0.62);
+                border: 1px solid #1e7892;
+                border-radius: 14px;
+            }
+            QDialog#launchWindowStateDialog QLabel { color: #d7edf5; }
+            QDialog#launchWindowStateDialog QLabel[role="pageTitle"] {
+                color: #f4fbff;
+                font-size: 17pt;
+                font-weight: 800;
+            }
+            QDialog#launchWindowStateDialog QLabel#dialogTitleIcon {
+                background: rgba(19, 48, 63, 0.9);
+                border: 1px solid #27677d;
+                border-radius: 14px;
+                color: #3bdcff;
+                font-size: 13pt;
+                font-weight: 700;
+            }
+            QDialog#launchWindowStateDialog QToolButton#dialogCloseButton {
+                background: transparent;
+                color: #c4d4dc;
+                border: none;
+                font-size: 18pt;
+                padding: 2px 8px;
+            }
+            QDialog#launchWindowStateDialog QToolButton#dialogCloseButton:hover {
+                color: #ffffff;
+                background: rgba(59, 169, 198, 0.18);
+                border-radius: 8px;
+            }
+            QDialog#launchWindowStateDialog QLabel[role="cardTitle"] {
+                color: #f2fbff;
+                font-size: 13pt;
+                font-weight: 800;
+            }
+            QDialog#launchWindowStateDialog QLabel[role="cardCaption"] { color: #8fb0bb; }
+            QDialog#launchWindowStateDialog QTableWidget {
+                background: rgba(7, 20, 29, 0.72);
+                alternate-background-color: rgba(14, 43, 55, 0.72);
+                border: 1px solid #1d6f86;
+                border-radius: 8px;
+                gridline-color: #1d6f86;
+                selection-background-color: rgba(26, 130, 156, 0.55);
+                color: #e6f6fb;
+            }
+            QDialog#launchWindowStateDialog QTableWidget::item {
+                color: #e6f6fb;
+                padding: 4px 7px;
+            }
+            QDialog#launchWindowStateDialog QHeaderView::section {
+                background: #0a2b3b;
+                color: #f1fbff;
+                padding: 8px;
+                border: none;
+                border-right: 1px solid #1d6f86;
+                border-bottom: 1px solid #1d6f86;
+                font-weight: 700;
+            }
+            QDialog#launchWindowStateDialog QDoubleSpinBox,
+            QDialog#launchWindowStateDialog QComboBox {
+                background: rgba(7, 19, 28, 0.98);
+                border: 1px solid #2b6075;
+                border-radius: 6px;
+                padding: 7px 10px;
+                color: #e6f6fb;
+            }
+            QDialog#launchWindowStateDialog QPushButton {
+                color: #d7edf5;
+                border: 1px solid #2b6075;
+                border-radius: 7px;
+                padding: 8px 16px;
+                background: rgba(8, 26, 36, 0.82);
+            }
+            QDialog#launchWindowStateDialog QPushButton:hover {
+                border: 1px solid #62d8ea;
+                color: #ffffff;
+            }
+            QDialog#launchWindowStateDialog QPushButton[variant="secondary"] {
+                min-width: 108px;
+                border-radius: 7px;
+                padding: 10px 18px;
+                color: #d7edf5;
+                border: 1px solid #2b6075;
+                background: rgba(8, 26, 36, 0.82);
+            }
+            QDialog#launchWindowStateDialog QPushButton[variant="secondary"]:hover {
+                border: 1px solid #62d8ea;
+                color: #ffffff;
+            }
+            QDialog#launchWindowStateDialog QPushButton[variant="primaryAction"] {
+                min-width: 166px;
+                border-radius: 7px;
+                padding: 10px 22px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ff9b35, stop:1 #ff5a22);
+                border: 1px solid #ffbd6a;
+                color: #ffffff;
+                font-size: 11pt;
+                font-weight: 800;
+            }
+            QDialog#launchWindowStateDialog QPushButton[variant="primaryAction"]:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ffae53, stop:1 #ff6d35);
+            }
+            """
+        )
+
+
 class LaunchWindowPage(QtWidgets.QWidget):
     def __init__(
         self,
@@ -68,6 +280,7 @@ class LaunchWindowPage(QtWidgets.QWidget):
         self._gantt_chart: LaunchWindowGanttWidget | None = None
         self._ground_station_table: QtWidgets.QTableWidget | None = None
         self._relay_satellite_table: QtWidgets.QTableWidget | None = None
+        self._state_dialog: _LaunchWindowStateDialog | None = None
         self._progress_last_percent = -1
         self._progress_last_update_monotonic = 0.0
         self._ground_station_preset_names = {str(item["name"]) for item in default_ground_station_presets()}
@@ -100,6 +313,7 @@ class LaunchWindowPage(QtWidgets.QWidget):
         self._status_label.setWordWrap(True)
         root.addWidget(self._status_label)
 
+        self._state_dialog = _LaunchWindowStateDialog(self)
         self._i18n.language_changed.connect(self.retranslate)
         self.retranslate()
         self.refresh_from_workspace()
@@ -138,8 +352,7 @@ class LaunchWindowPage(QtWidgets.QWidget):
         layout.setSpacing(14)
         layout.addWidget(self._build_source_card())
         layout.addWidget(self._build_scan_card())
-        layout.addWidget(self._build_tracking_asset_card())
-        layout.addWidget(self._build_constraint_card())
+        layout.addWidget(self._build_state_summary_card())
         layout.addWidget(self._build_action_card())
         layout.addStretch(1)
         return scroll
@@ -244,6 +457,28 @@ class LaunchWindowPage(QtWidgets.QWidget):
             button_row.addWidget(button)
         button_row.addStretch(1)
         layout.addLayout(button_row)
+        return card
+
+    def _build_state_summary_card(self) -> QtWidgets.QWidget:
+        card = self._card()
+        layout = QtWidgets.QVBoxLayout(card)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(10)
+
+        self._state_title_label = self._card_title()
+        layout.addWidget(self._state_title_label)
+        self._state_summary_label = QtWidgets.QLabel("--")
+        self._state_summary_label.setProperty("role", "pageBody")
+        self._state_summary_label.setWordWrap(True)
+        layout.addWidget(self._state_summary_label)
+        self._state_details_label = QtWidgets.QLabel("--")
+        self._state_details_label.setProperty("role", "cardCaption")
+        self._state_details_label.setWordWrap(True)
+        layout.addWidget(self._state_details_label)
+        self._edit_state_button = QtWidgets.QPushButton("状态设置")
+        self._edit_state_button.setProperty("variant", "secondary")
+        self._edit_state_button.clicked.connect(self._open_state_settings_dialog)
+        layout.addWidget(self._edit_state_button, 0, QtCore.Qt.AlignmentFlag.AlignLeft)
         return card
 
     def _build_tracking_asset_card(self) -> QtWidgets.QWidget:
@@ -468,6 +703,17 @@ class LaunchWindowPage(QtWidgets.QWidget):
         self._set_status("statusReady", f"已保存发射窗口参数：{path}")
         return path
 
+    def _open_state_settings_dialog(self) -> None:
+        if self._state_dialog is None:
+            return
+        original_payload = self.config_payload()
+        result = self._state_dialog.exec()
+        if result != QtWidgets.QDialog.DialogCode.Accepted:
+            self._set_config(original_payload)
+            return
+        self._refresh_state_summary()
+        self._set_status("statusReady", "状态设置已应用；保存参数或计算后写入项目。")
+
     def calculate_windows(self) -> None:
         if self._workspace.current_project is None:
             self._set_status("statusDisconnected", "没有活动项目。")
@@ -572,6 +818,30 @@ class LaunchWindowPage(QtWidgets.QWidget):
             self._relay_satellite_table,
             [*config.relay_satellite_presets, *config.custom_relay_satellites],
             with_enabled=True,
+        )
+        self._refresh_state_summary()
+
+    def _refresh_state_summary(self) -> None:
+        if not hasattr(self, "_state_summary_label"):
+            return
+        constraint_rows = self._constraint_rows_payload()
+        enabled_constraints = sum(1 for row in constraint_rows if bool(row.get("enabled", True)))
+        ground_rows = self._asset_rows_payload(self._ground_station_table, asset_type="ground")
+        relay_rows = self._asset_rows_payload(self._relay_satellite_table, asset_type="relay")
+        enabled_ground = sum(1 for row in ground_rows if bool(row.get("enabled", True)))
+        enabled_relay = sum(1 for row in relay_rows if bool(row.get("enabled", True)))
+        self._state_summary_label.setText(
+            f"启用条件 {enabled_constraints}/{len(constraint_rows)} · 地面站 {enabled_ground}/{len(ground_rows)} · 中继星 {enabled_relay}/{len(relay_rows)}"
+        )
+        ground_elevation = self._number_fields.get("ground_station_min_elevation_deg")
+        burn_angle = self._number_fields.get("burn_sun_angle_max_deg")
+        if ground_elevation is None or burn_angle is None:
+            self._state_details_label.setText("--")
+            return
+        axis = self._combo_fields.get("burn_sun_axis")
+        axis_text = axis.currentText() if axis is not None else "--"
+        self._state_details_label.setText(
+            f"地面站最低仰角 {ground_elevation.value():.2f} deg · 点火 θs ≤ {burn_angle.value():.2f} deg · {axis_text}"
         )
 
     def _set_constraint_rows(self, rows: list[dict[str, Any]]) -> None:
@@ -895,6 +1165,7 @@ class LaunchWindowPage(QtWidgets.QWidget):
             self._delete_custom_ground_button,
             self._add_custom_relay_button,
             self._delete_custom_relay_button,
+            self._edit_state_button,
             self._reload_button,
             self._save_button,
             self._calculate_button,
@@ -1093,6 +1364,7 @@ class LaunchWindowPage(QtWidgets.QWidget):
         self._source_title_label.setText("轨道来源")
         self._source_body_label.setText("请先在“变轨策略”页面完成计算，本页复用 full_orbit_history.csv 作为相对航时轨道；窗口扫描时间按北京时间输入。")
         self._scan_title_label.setText("窗口扫描参数")
+        self._state_title_label.setText("状态设置概览")
         self._constraint_title_label.setText("限制条件")
         self._action_title_label.setText("计算")
         self._summary_title_label.setText("计算结果")
