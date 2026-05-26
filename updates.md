@@ -690,6 +690,10 @@
 - 提交：`d1c86a4`
 - 影响文件：`src/smart/ui/widgets/launch_window_page.py`、`tests/test_launch_window_page.py`、`HANDOFF.md`。
 
-## 2026-05-26T21:15:46+08:00 | Narrow launch window state dialog
+## 2026-05-26T21:15:51+08:00 | Narrow launch window state dialog
+- 提交：`1faaa11`
+- 影响文件：`src/smart/ui/widgets/launch_window_page.py`、`tests/test_launch_window_page.py`、`HANDOFF.md`。
+
+## 2026-05-26T21:34:40+08:00 | Fix launch window dialog close cursor
 - 提交：`本次提交`
 - 影响文件：`src/smart/ui/widgets/launch_window_page.py`、`tests/test_launch_window_page.py`、`HANDOFF.md`。

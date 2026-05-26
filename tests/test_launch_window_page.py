@@ -67,6 +67,9 @@ def test_launch_window_state_settings_use_dialog_and_cancel_restores_values(tmp_
 
     assert isinstance(dialog, _LaunchWindowStateDialog)
     assert page._edit_state_button.text() == "状态设置"
+    close_button = dialog.findChild(QtWidgets.QToolButton, "dialogCloseButton")
+    assert close_button is not None
+    assert close_button.cursor().shape() == QtCore.Qt.CursorShape.PointingHandCursor
     assert page._ground_station_table.window() is dialog
     assert page._relay_satellite_table.window() is dialog
     assert page._constraint_table.window() is dialog

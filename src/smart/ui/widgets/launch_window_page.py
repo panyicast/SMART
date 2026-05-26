@@ -100,6 +100,7 @@ class _LaunchWindowStateDialog(QtWidgets.QDialog):
         close_button = QtWidgets.QToolButton()
         close_button.setObjectName("dialogCloseButton")
         close_button.setText("X")
+        close_button.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
         close_button.clicked.connect(self.reject)
         title_row.addWidget(close_button)
         for drag_widget in (self._title_bar, title_icon, title_label):
