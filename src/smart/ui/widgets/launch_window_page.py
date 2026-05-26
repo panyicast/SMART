@@ -537,6 +537,10 @@ class LaunchWindowPage(QtWidgets.QWidget):
         self._state_summary_label.setProperty("role", "pageBody")
         self._state_summary_label.setWordWrap(True)
         layout.addWidget(self._state_summary_label)
+        self._state_assets_label = QtWidgets.QLabel("--")
+        self._state_assets_label.setProperty("role", "cardCaption")
+        self._state_assets_label.setWordWrap(True)
+        layout.addWidget(self._state_assets_label)
         self._state_details_label = QtWidgets.QLabel("--")
         self._state_details_label.setProperty("role", "cardCaption")
         self._state_details_label.setWordWrap(True)
@@ -885,8 +889,14 @@ class LaunchWindowPage(QtWidgets.QWidget):
         relay_rows = self._asset_rows_payload(self._relay_satellite_table, asset_type="relay")
         enabled_ground = sum(1 for row in ground_rows if bool(row.get("enabled", True)))
         enabled_relay = sum(1 for row in relay_rows if bool(row.get("enabled", True)))
+        ground_names = [str(row.get("name", "")).strip() for row in ground_rows if bool(row.get("enabled", True))]
+        relay_names = [str(row.get("name", "")).strip() for row in relay_rows if bool(row.get("enabled", True))]
         self._state_summary_label.setText(
             f"启用条件 {enabled_constraints}/{len(constraint_rows)} · 地面站 {enabled_ground}/{len(ground_rows)} · 中继星 {enabled_relay}/{len(relay_rows)}"
+        )
+        self._state_assets_label.setText(
+            f"使用地面站：{', '.join(name for name in ground_names if name) or '无'}\n"
+            f"使用中继星：{', '.join(name for name in relay_names if name) or '无'}"
         )
         ground_elevation = self._number_fields.get("ground_station_min_elevation_deg")
         burn_angle = self._number_fields.get("burn_sun_angle_max_deg")

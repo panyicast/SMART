@@ -674,6 +674,10 @@
 - 提交：`8feb745`
 - 影响文件：`src/smart/ui/widgets/launch_window_page.py`、`tests/test_launch_window_page.py`、`HANDOFF.md`。
 
-## 2026-05-26T17:35:13+08:00 | Improve launch window result export flow
+## 2026-05-26T17:35:20+08:00 | Improve launch window result export flow
+- 提交：`4127c03`
+- 影响文件：`src/smart/ui/widgets/launch_window_page.py`、`tests/test_launch_window_page.py`、`HANDOFF.md`。
+
+## 2026-05-26T20:56:51+08:00 | Show enabled launch window tracking assets
 - 提交：`本次提交`
 - 影响文件：`src/smart/ui/widgets/launch_window_page.py`、`tests/test_launch_window_page.py`、`HANDOFF.md`。

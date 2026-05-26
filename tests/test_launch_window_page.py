@@ -79,6 +79,9 @@ def test_launch_window_state_settings_use_dialog_and_cancel_restores_values(tmp_
     assert page._constraint_table.item(0, 3).textAlignment() & QtCore.Qt.AlignmentFlag.AlignRight
     assert "启用条件" in page._state_summary_label.text()
     assert "地面站" in page._state_summary_label.text()
+    assert "Xiamen Station" in page._state_assets_label.text()
+    assert "Weinan Station" in page._state_assets_label.text()
+    assert "TL2-2" in page._state_assets_label.text()
 
     original_elevation = page._number_fields["ground_station_min_elevation_deg"].value()
 
