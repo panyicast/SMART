@@ -47,6 +47,26 @@ def _beijing_qtimezone() -> QtCore.QTimeZone:
     return QtCore.QTimeZone(BEIJING_QT_TIMEZONE_ID)
 
 
+class _StateComboBox(NoWheelComboBox):
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
+        super().paintEvent(event)
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(QtCore.Qt.PenStyle.NoPen)
+        painter.setBrush(QtGui.QColor("#58dff4"))
+        center_x = self.width() - 13
+        center_y = self.height() // 2 + 1
+        painter.drawPolygon(
+            QtGui.QPolygon(
+                [
+                    QtCore.QPoint(center_x - 5, center_y - 3),
+                    QtCore.QPoint(center_x + 5, center_y - 3),
+                    QtCore.QPoint(center_x, center_y + 3),
+                ]
+            )
+        )
+
+
 class _LaunchWindowStateDialog(QtWidgets.QDialog):
     def __init__(self, page: "LaunchWindowPage") -> None:
         super().__init__(page)
@@ -595,7 +615,7 @@ class LaunchWindowPage(QtWidgets.QWidget):
             self._number_fields["ground_station_min_elevation_deg"],
             self._number_fields["ground_station_max_theta_st_deg"],
         ):
-            self._prepare_state_field(field)
+            self._prepare_state_numeric_field(field)
         ground_visibility_form.addWidget(self._state_field_label("仰角最小值 (deg)"), 0, 0)
         ground_visibility_form.addWidget(self._number_fields["ground_station_min_elevation_deg"], 0, 1)
         ground_visibility_form.addWidget(self._state_field_label("天线角最大值 (deg)"), 0, 2)
@@ -636,7 +656,7 @@ class LaunchWindowPage(QtWidgets.QWidget):
             self._number_fields["relay_beta_abs_max_deg"],
             self._number_fields["relay_max_theta_st_deg"],
         ):
-            self._prepare_state_field(field)
+            self._prepare_state_numeric_field(field)
         relay_visibility_form.addWidget(self._state_field_label("alpha 最大值 (deg)"), 0, 0)
         relay_visibility_form.addWidget(self._number_fields["relay_alpha_abs_max_deg"], 0, 1)
         relay_visibility_form.addWidget(self._state_field_label("beta 最大值 (deg)"), 0, 2)
@@ -650,9 +670,9 @@ class LaunchWindowPage(QtWidgets.QWidget):
         burn_visibility_form = QtWidgets.QGridLayout()
         self._prepare_state_form_grid(burn_visibility_form)
         self._number_fields["burn_sun_angle_max_deg"] = self._double_spin(90.0, 0.0, 180.0, 0.5, 2)
-        self._prepare_state_field(self._number_fields["burn_sun_angle_max_deg"])
+        self._prepare_state_numeric_field(self._number_fields["burn_sun_angle_max_deg"])
         self._combo_fields["burn_sun_axis"] = self._burn_sun_axis_combo(BURN_SUN_AXIS_MINUS_Z)
-        self._prepare_state_field(self._combo_fields["burn_sun_axis"])
+        self._prepare_state_combo_field(self._combo_fields["burn_sun_axis"])
         burn_visibility_form.addWidget(self._state_field_label("点火期间 θs 最大值 (deg)"), 0, 0)
         burn_visibility_form.addWidget(self._number_fields["burn_sun_angle_max_deg"], 0, 1)
         burn_visibility_form.addWidget(self._state_field_label("帆板方向"), 0, 2)
@@ -1302,10 +1322,16 @@ class LaunchWindowPage(QtWidgets.QWidget):
         return label
 
     @staticmethod
-    def _prepare_state_field(field: QtWidgets.QWidget) -> None:
+    def _prepare_state_numeric_field(field: QtWidgets.QWidget) -> None:
         field.setMinimumHeight(42)
-        field.setMinimumWidth(220)
-        field.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        field.setFixedWidth(132)
+        field.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
+
+    @staticmethod
+    def _prepare_state_combo_field(field: QtWidgets.QWidget) -> None:
+        field.setMinimumHeight(42)
+        field.setFixedWidth(210)
+        field.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
 
     @staticmethod
     def _prepare_state_form_grid(grid: QtWidgets.QGridLayout) -> None:
@@ -1317,7 +1343,7 @@ class LaunchWindowPage(QtWidgets.QWidget):
         grid.setColumnStretch(3, 1)
 
     def _constraint_type_combo(self, current_value: str) -> QtWidgets.QComboBox:
-        combo = NoWheelComboBox()
+        combo = _StateComboBox()
         labels: list[tuple[str, str]] = []
         for value, label, tooltip in (
             (CONSTRAINT_TYPE_NO_SHADOW, "无地影", "转移轨道 - 无地影"),
@@ -1364,7 +1390,7 @@ class LaunchWindowPage(QtWidgets.QWidget):
 
     @staticmethod
     def _burn_sun_axis_combo(current_value: str) -> NoWheelComboBox:
-        combo = NoWheelComboBox()
+        combo = _StateComboBox()
         combo.addItem("卫星 -Z 轴", BURN_SUN_AXIS_MINUS_Z)
         combo.addItem("卫星 +Z 轴", BURN_SUN_AXIS_PLUS_Z)
         index = combo.findData(current_value)

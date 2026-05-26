@@ -15,6 +15,7 @@ from smart.ui.widgets.launch_window_page import (
     LaunchWindowPage,
     _GanttScrollArea,
     _LaunchWindowStateDialog,
+    _StateComboBox,
 )
 from smart.ui.widgets.spinboxes import NoWheelComboBox
 
@@ -52,6 +53,7 @@ def test_burn_sun_axis_combo_uses_no_wheel_combo() -> None:
     combo = LaunchWindowPage._burn_sun_axis_combo(BURN_SUN_AXIS_MINUS_Z)
 
     assert isinstance(combo, NoWheelComboBox)
+    assert isinstance(combo, _StateComboBox)
     assert combo.currentData() == BURN_SUN_AXIS_MINUS_Z
 
 
@@ -77,6 +79,10 @@ def test_launch_window_state_settings_use_dialog_and_cancel_restores_values(tmp_
     assert page._constraint_table.columnWidth(4) == 180
     assert page._constraint_table.item(0, 2).textAlignment() & QtCore.Qt.AlignmentFlag.AlignRight
     assert page._constraint_table.item(0, 3).textAlignment() & QtCore.Qt.AlignmentFlag.AlignRight
+    assert page._number_fields["ground_station_min_elevation_deg"].width() == 132
+    assert page._number_fields["relay_alpha_abs_max_deg"].width() == 132
+    assert isinstance(page._combo_fields["burn_sun_axis"], _StateComboBox)
+    assert page._combo_fields["burn_sun_axis"].width() == 210
     assert "启用条件" in page._state_summary_label.text()
     assert "地面站" in page._state_summary_label.text()
     assert "Xiamen Station" in page._state_assets_label.text()

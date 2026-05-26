@@ -678,6 +678,10 @@
 - 提交：`4127c03`
 - 影响文件：`src/smart/ui/widgets/launch_window_page.py`、`tests/test_launch_window_page.py`、`HANDOFF.md`。
 
-## 2026-05-26T20:56:51+08:00 | Show enabled launch window tracking assets
+## 2026-05-26T20:56:56+08:00 | Show enabled launch window tracking assets
+- 提交：`117f236`
+- 影响文件：`src/smart/ui/widgets/launch_window_page.py`、`tests/test_launch_window_page.py`、`HANDOFF.md`。
+
+## 2026-05-26T20:59:53+08:00 | Compact launch window dialog fields
 - 提交：`本次提交`
 - 影响文件：`src/smart/ui/widgets/launch_window_page.py`、`tests/test_launch_window_page.py`、`HANDOFF.md`。
