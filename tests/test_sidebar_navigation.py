@@ -10,6 +10,7 @@ def test_each_nav_key_has_an_icon() -> None:
     _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
 
     assert _NAV_KEYS.index("nav.design_maneuver_strategy") < _NAV_KEYS.index("nav.maneuver_strategy")
+    assert "nav.spice_kernels" not in _NAV_KEYS
 
     for key in _NAV_KEYS:
         assert has_icon(key), f"nav key {key} is missing an icon"
@@ -95,6 +96,23 @@ def test_common_tools_menu_exposes_orbital_analysis_actions() -> None:
             "Lambert 转移计算",
             "两体轨道传播",
         ]
+    finally:
+        window.deleteLater()
+
+
+def test_settings_menu_opens_spice_kernel_page() -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    window = MainWindow()
+    try:
+        assert window._settings_menu.title() == "设置"
+        assert [action.text() for action in window._settings_menu.actions()] == ["SPICE 内核"]
+        assert window._nav_list.findItems("SPICE 内核", QtCore.Qt.MatchFlag.MatchExactly) == []
+
+        window._spice_kernels_action.trigger()
+
+        assert window._stack.currentWidget() is window._spice_page
+        assert window._nav_list.currentRow() == -1
     finally:
         window.deleteLater()
 

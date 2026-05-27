@@ -46,7 +46,6 @@ _NAV_KEYS = [
     "nav.flight_program",
     "nav.data_visualization",
     "nav.stk_link",
-    "nav.spice_kernels",
     "nav.ai_project_analysis",
 ]
 
@@ -118,11 +117,11 @@ class MainWindow(QtWidgets.QMainWindow):
             self._flight_program_page,
             self._viz_page,
             self._stk_link_page,
-            self._spice_page,
             self._ai_project_page,
         ]
         for page in self._pages:
             self._stack.addWidget(page)
+        self._stack.addWidget(self._spice_page)
 
         self._build_menu()
         self._mission_state.trajectory_changed.connect(self._on_trajectory_changed)
@@ -207,6 +206,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self._two_body_propagation_action = QtGui.QAction(self)
         self._two_body_propagation_action.triggered.connect(self._open_two_body_propagation_tool)
         self._common_tools_menu.addAction(self._two_body_propagation_action)
+
+        self._settings_menu = self.menuBar().addMenu("")
+        self._spice_kernels_action = QtGui.QAction(self)
+        self._spice_kernels_action.triggered.connect(self._open_spice_kernel_settings)
+        self._settings_menu.addAction(self._spice_kernels_action)
 
     def _build_sidebar(self) -> QtWidgets.QWidget:
         sidebar = QtWidgets.QFrame()
@@ -298,6 +302,12 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _open_two_body_propagation_tool(self) -> None:
         TwoBodyPropagationDialog(self._i18n, self).exec()
+
+    def _open_spice_kernel_settings(self) -> None:
+        self._nav_list.blockSignals(True)
+        self._nav_list.setCurrentRow(-1)
+        self._nav_list.blockSignals(False)
+        self._stack.setCurrentWidget(self._spice_page)
 
     def _toggle_sidebar_collapsed(self) -> None:
         self._apply_sidebar_collapsed(not self._sidebar_collapsed, persist=True)
@@ -700,6 +710,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._plane_change_action.setText(t("common_tools.action.plane_change"))
         self._lambert_transfer_action.setText(t("common_tools.action.lambert_transfer"))
         self._two_body_propagation_action.setText(t("common_tools.action.two_body_propagation"))
+        self._settings_menu.setTitle(t("settings.menu_title"))
+        self._spice_kernels_action.setText(t("settings.action.spice_kernels"))
         self._refresh_recent_project_actions()
         self._refresh_project_actions()
 

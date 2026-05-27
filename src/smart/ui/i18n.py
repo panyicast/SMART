@@ -27,6 +27,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "common_tools.action.plane_change": "平面变轨计算",
         "common_tools.action.lambert_transfer": "Lambert 转移计算",
         "common_tools.action.two_body_propagation": "两体轨道传播",
+        "settings.menu_title": "设置",
+        "settings.action.spice_kernels": "SPICE 内核",
         "common_tools.orbit_conversion.title": "轨道六根数与状态矢量转换",
         "common_tools.apsis_parameters.title": "近远地点参数换算",
         "common_tools.circular_period.title": "圆轨道速度与周期校核",
