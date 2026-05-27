@@ -132,7 +132,6 @@ python .\scripts\update_updates_md.py
 项目激活后，程序会自动保存：
 
 - 卫星3D模型配置文件：`config/satellite_3d_model.json`
-- 轨道初始化配置：`config/orbit_initialization.json`
 - 设计变轨策略配置：`config/design_maneuver_strategy.json`
 - 设计页生成的导入配置：`config/design_import_maneuver_strategy.json`
 - 变轨策略配置文件：`config/maneuver_strategy.json`

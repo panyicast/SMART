@@ -722,6 +722,10 @@
 - 提交：`13b7928`
 - 影响文件：`HANDOFF.md`。
 
-## 2026-05-27T22:57:47+08:00 | Remove legacy maneuver snapshot support
-- 提交：`本次提交`
+## 2026-05-27T22:57:53+08:00 | Remove legacy maneuver snapshot support
+- 提交：`2229d0e`
 - 影响文件：`src/smart/agents/skills/mission_analysis_calculation.md`、`src/smart/agents/skills/project_consistency_audit.md`、`src/smart/services/project_ai_context.py`、`src/smart/services/project_workspace.py`、`tests/test_project_workspace.py`、`doc/ai_project_analysis.md`、`HANDOFF.md`、`projects/F4/data/ai_project_analysis.md` 等 9 个文件。
+
+## 2026-05-27T23:05:37+08:00 | Remove orbit initialization project file
+- 提交：`本次提交`
+- 影响文件：`src/smart/services/project_workspace.py`、`src/smart/ui/main_window.py`、`tests/test_project_workspace.py`、`README.md`、`HANDOFF.md`、`projects/F1/config/orbit_initialization.json`、`projects/F4/config/orbit_initialization.json`、`projects/F4/data/ai_project_analysis.md`。

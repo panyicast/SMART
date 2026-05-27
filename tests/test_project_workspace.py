@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 
 from smart.domain.models import (
-    OrbitInitializationSettings,
     OrbitalElements,
     SatelliteStructureConfig,
 )
@@ -30,7 +29,7 @@ def test_create_project_creates_expected_structure(tmp_path: Path) -> None:
     assert (info.root_dir / "data" / "kernels").is_dir()
     assert (info.root_dir / "charts").is_dir()
     assert (info.root_dir / "config").is_dir()
-    assert (info.root_dir / "config" / "orbit_initialization.json").exists()
+    assert not (info.root_dir / "config" / "orbit_initialization.json").exists()
     assert (info.root_dir / "config" / "satellite_3d_model.json").exists()
     assert not (info.root_dir / "config" / "satellite_status.json").exists()
     assert (info.root_dir / "config" / "maneuver_strategy.json").exists()
@@ -154,37 +153,6 @@ def test_save_and_load_orbit_elements(tmp_path: Path) -> None:
     assert restored.semi_major_axis_km == pytest.approx(9000.0)
     assert restored.eccentricity == pytest.approx(0.11)
     assert restored.inclination_deg == pytest.approx(35.0)
-
-
-def test_save_and_load_orbit_initialization(tmp_path: Path) -> None:
-    workspace = ProjectWorkspace()
-    workspace.create_project("mission_orbit_init", parent_dir=tmp_path)
-
-    settings = OrbitInitializationSettings(
-        mode="tle",
-        epoch_utc="2024-04-17T07:21:27Z",
-        elements=OrbitalElements(
-            semi_major_axis_km=6794.0,
-            eccentricity=0.0006064,
-            inclination_deg=51.639,
-            raan_deg=164.248,
-            argument_of_periapsis_deg=22.8152,
-            true_anomaly_deg=79.198,
-        ),
-        tle_line1="1 25544U 98067A   24108.30656250  .00026428  00000+0  47638-3 0  9998",
-        tle_line2="2 25544  51.6390 164.2480 0006064  22.8152  79.1310 15.50316081449833",
-    )
-
-    file_path = workspace.save_orbit_initialization(settings)
-
-    assert file_path == (workspace.root_dir / "config" / "orbit_initialization.json")
-    restored = workspace.load_orbit_initialization()
-    assert restored is not None
-    assert restored.mode == "tle"
-    assert restored.epoch_utc == "2024-04-17T07:21:27Z"
-    assert restored.tle_line1.startswith("1 25544U")
-    assert restored.tle_line2.startswith("2 25544")
-    assert restored.elements.semi_major_axis_km == pytest.approx(6794.0)
 
 
 def test_save_and_load_maneuver_strategy(tmp_path: Path) -> None:

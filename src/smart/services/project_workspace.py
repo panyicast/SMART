@@ -10,7 +10,6 @@ from typing import Any
 from smart.domain.models import (
     AntennaConfig,
     GroundAssetConfig,
-    OrbitInitializationSettings,
     OrbitalElements,
     RelaySatelliteConfig,
     SatelliteStructureConfig,
@@ -41,7 +40,6 @@ CONFIG_DIR_NAME = "config"
 ORBIT_ELEMENTS_FILE = "orbit_elements.json"
 SATELLITE_SETTINGS_FILE = "satellite_status.json"
 SATELLITE_3D_MODEL_FILE = "satellite_3d_model.json"
-ORBIT_INITIALIZATION_FILE = "orbit_initialization.json"
 MANEUVER_STRATEGY_FILE = "maneuver_strategy.json"
 DESIGN_MANEUVER_STRATEGY_FILE = "design_maneuver_strategy.json"
 DESIGN_IMPORT_MANEUVER_STRATEGY_FILE = "design_import_maneuver_strategy.json"
@@ -109,7 +107,6 @@ class ProjectWorkspace:
 
         self._project = self._read_project(root_dir)
         self.save_satellite_3d_model_config(SatelliteStructureConfig())
-        self.save_orbit_initialization(OrbitInitializationSettings())
         self.save_maneuver_strategy(default_maneuver_strategy_payload())
         self.save_design_maneuver_strategy(default_design_maneuver_strategy_payload())
         launch_window_config = default_launch_window_config()
@@ -183,9 +180,6 @@ class ProjectWorkspace:
     def satellite_3d_model_path(self) -> Path:
         return self.config_dir() / SATELLITE_3D_MODEL_FILE
 
-    def orbit_initialization_path(self) -> Path:
-        return self.config_dir() / ORBIT_INITIALIZATION_FILE
-
     def maneuver_strategy_path(self) -> Path:
         return self.config_dir() / MANEUVER_STRATEGY_FILE
 
@@ -229,37 +223,6 @@ class ProjectWorkspace:
             return None
         payload = _read_json(file_path)
         return _orbital_elements_from_payload(payload)
-
-    def save_orbit_initialization(self, settings: OrbitInitializationSettings) -> Path:
-        payload: dict[str, Any] = {
-            "mode": settings.mode,
-            "epoch_utc": settings.epoch_utc,
-            "elements": _orbital_elements_payload(settings.elements),
-            "tle_line1": settings.tle_line1,
-            "tle_line2": settings.tle_line2,
-            "ephemeris_file_path": settings.ephemeris_file_path,
-        }
-        file_path = self.orbit_initialization_path()
-        _write_json(file_path, payload)
-        self._touch_updated_time()
-        return file_path
-
-    def load_orbit_initialization(self) -> OrbitInitializationSettings | None:
-        file_path = self.orbit_initialization_path()
-        if not file_path.exists():
-            return None
-        payload = _read_json(file_path)
-        elements_payload = payload.get("elements")
-        if not isinstance(elements_payload, dict):
-            raise ValueError("Invalid orbit initialization JSON payload.")
-        return OrbitInitializationSettings(
-            mode=str(payload.get("mode", "classical")),
-            epoch_utc=str(payload.get("epoch_utc", "")),
-            elements=_orbital_elements_from_payload(elements_payload),
-            tle_line1=str(payload.get("tle_line1", "")),
-            tle_line2=str(payload.get("tle_line2", "")),
-            ephemeris_file_path=str(payload.get("ephemeris_file_path", "")),
-        )
 
     def save_maneuver_strategy(self, strategy: dict[str, Any]) -> Path:
         payload = _normalize_maneuver_strategy_payload(strategy)

@@ -5,7 +5,7 @@ from typing import Any
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from smart.domain.models import OrbitInitializationSettings, SatelliteStructureConfig
+from smart.domain.models import SatelliteStructureConfig
 from smart.services.project_workspace import ProjectInfo, ProjectWorkspace
 from smart.services.spice_service import SpiceKernelManager
 from smart.services.stk_link import StkLinkService
@@ -538,19 +538,9 @@ class MainWindow(QtWidgets.QMainWindow):
         try:
             self._reset_spice_workspace(self._workspace.kernels_dir())
             if load_saved_data:
-                saved_initialization = self._workspace.load_orbit_initialization()
-                if saved_initialization is not None:
-                    self._mission_state.update_initialization(saved_initialization)
-                else:
-                    saved_elements = self._workspace.load_orbit_elements()
-                    if saved_elements is not None:
-                        self._mission_state.update_initialization(
-                            OrbitInitializationSettings(
-                                mode="classical",
-                                epoch_utc=self._mission_state.initialization.epoch_utc,
-                                elements=saved_elements,
-                            )
-                        )
+                saved_elements = self._workspace.load_orbit_elements()
+                if saved_elements is not None:
+                    self._mission_state.update_elements(saved_elements)
 
                 saved_satellite_model = self._workspace.load_satellite_3d_model_config()
                 if saved_satellite_model is not None:
@@ -630,7 +620,6 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         try:
-            self._workspace.save_orbit_initialization(self._mission_state.initialization)
             self._workspace.save_orbit_elements(self._mission_state.elements)
             if self._latest_maneuver_strategy is not None:
                 self._workspace.save_maneuver_strategy(self._latest_maneuver_strategy)
