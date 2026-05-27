@@ -408,6 +408,266 @@ class _GanttScrollArea(QtWidgets.QScrollArea):
         chart.update()
         return True
 
+
+class _TrackingArcSettingsDialog(QtWidgets.QDialog):
+    def __init__(self, page: "TrackingArcPage") -> None:
+        super().__init__(page)
+        self._page = page
+        self.setObjectName("trackingArcSettingsDialog")
+        self.setWindowTitle("跟踪弧段主要设置")
+        self.setWindowFlag(QtCore.Qt.WindowType.FramelessWindowHint, True)
+        self.resize(1080, 760)
+        self.setMinimumSize(940, 680)
+        self._drag_position: QtCore.QPoint | None = None
+        self._apply_dialog_style()
+
+        root = QtWidgets.QVBoxLayout(self)
+        root.setContentsMargins(24, 20, 24, 24)
+        root.setSpacing(14)
+
+        self._title_bar = QtWidgets.QWidget()
+        self._title_bar.setObjectName("dialogTitleBar")
+        self._title_bar.setCursor(QtCore.Qt.CursorShape.SizeAllCursor)
+        title_row = QtWidgets.QHBoxLayout(self._title_bar)
+        title_row.setContentsMargins(0, 0, 0, 0)
+        title_row.setSpacing(12)
+        title_icon = QtWidgets.QLabel("◎")
+        title_icon.setObjectName("dialogTitleIcon")
+        title_icon.setFixedSize(28, 28)
+        title_icon.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        title_row.addWidget(title_icon, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
+        title_label = QtWidgets.QLabel("跟踪弧段主要设置")
+        title_label.setProperty("role", "pageTitle")
+        title_row.addWidget(title_label, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
+        title_row.addStretch(1)
+        close_button = QtWidgets.QToolButton()
+        close_button.setObjectName("dialogCloseButton")
+        close_button.setText("X")
+        close_button.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        close_button.clicked.connect(self.reject)
+        title_row.addWidget(close_button, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
+        for drag_widget in (self._title_bar, title_icon, title_label):
+            drag_widget.installEventFilter(self)
+        root.addWidget(self._title_bar)
+
+        scroll = QtWidgets.QScrollArea()
+        scroll.setObjectName("trackingSettingsScrollArea")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+        canvas = QtWidgets.QWidget()
+        scroll.setWidget(canvas)
+        content = QtWidgets.QVBoxLayout(canvas)
+        content.setContentsMargins(0, 0, 0, 0)
+        content.setSpacing(14)
+        content.addWidget(page._build_tracking_asset_card())
+        content.addStretch(1)
+        root.addWidget(scroll, 1)
+
+        buttons = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.StandardButton.Save | QtWidgets.QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.setCenterButtons(False)
+        save_button = buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Save)
+        cancel_button = buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Cancel)
+        save_button.setText("应用设置")
+        cancel_button.setText("取消")
+        save_button.setProperty("variant", "primaryAction")
+        cancel_button.setProperty("variant", "secondary")
+        save_button.setMinimumHeight(48)
+        cancel_button.setMinimumHeight(48)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        root.addWidget(buttons, 0, QtCore.Qt.AlignmentFlag.AlignRight)
+
+    def showEvent(self, event: QtGui.QShowEvent) -> None:
+        super().showEvent(event)
+        self._page._refresh_asset_table_metrics()
+
+    def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
+        super().resizeEvent(event)
+        QtCore.QTimer.singleShot(0, self._page._refresh_asset_table_metrics)
+
+    def eventFilter(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:
+        if watched in {self._title_bar, *self._title_bar.findChildren(QtWidgets.QLabel)}:
+            if self._handle_drag_event(event):
+                return True
+        return super().eventFilter(watched, event)
+
+    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
+        if self._handle_drag_event(event):
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
+        if self._handle_drag_event(event):
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
+        if self._handle_drag_event(event):
+            return
+        super().mouseReleaseEvent(event)
+
+    def _handle_drag_event(self, event: QtCore.QEvent) -> bool:
+        if not isinstance(event, QtGui.QMouseEvent):
+            return False
+        if event.type() == QtCore.QEvent.Type.MouseButtonPress and event.button() == QtCore.Qt.MouseButton.LeftButton:
+            self._drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            event.accept()
+            return True
+        if event.type() == QtCore.QEvent.Type.MouseMove and self._drag_position is not None:
+            if event.buttons() & QtCore.Qt.MouseButton.LeftButton:
+                self.move(event.globalPosition().toPoint() - self._drag_position)
+                event.accept()
+                return True
+        if event.type() == QtCore.QEvent.Type.MouseButtonRelease:
+            self._drag_position = None
+            event.accept()
+            return True
+        return False
+
+    def _apply_dialog_style(self) -> None:
+        self.setStyleSheet(
+            """
+            QDialog#trackingArcSettingsDialog {
+                background: qradialgradient(cx:0.50, cy:0.10, radius:1.15, fx:0.50, fy:0.10, stop:0 #0c2230, stop:0.50 #07131c, stop:1 #03090f);
+                border: 1px solid #1c7d9a;
+                border-radius: 22px;
+            }
+            QDialog#trackingArcSettingsDialog QWidget { background: transparent; }
+            QDialog#trackingArcSettingsDialog QFrame[role="card"] {
+                background: rgba(5, 17, 25, 0.62);
+                border: 1px solid #1e7892;
+                border-radius: 14px;
+            }
+            QDialog#trackingArcSettingsDialog QLabel { color: #d7edf5; }
+            QDialog#trackingArcSettingsDialog QLabel[role="pageTitle"] {
+                color: #f4fbff;
+                font-size: 17pt;
+                font-weight: 800;
+            }
+            QDialog#trackingArcSettingsDialog QLabel#dialogTitleIcon {
+                background: rgba(19, 48, 63, 0.9);
+                border: 1px solid #27677d;
+                border-radius: 14px;
+                color: #3bdcff;
+                font-size: 13pt;
+                font-weight: 700;
+            }
+            QDialog#trackingArcSettingsDialog QToolButton#dialogCloseButton {
+                background: transparent;
+                color: #c4d4dc;
+                border: none;
+                font-size: 18pt;
+                font-weight: 300;
+                padding: 2px 8px;
+            }
+            QDialog#trackingArcSettingsDialog QToolButton#dialogCloseButton:hover {
+                color: #ffffff;
+                background: rgba(59, 169, 198, 0.18);
+                border-radius: 8px;
+            }
+            QDialog#trackingArcSettingsDialog QLabel[role="cardTitle"] {
+                color: #f2fbff;
+                font-size: 14pt;
+                font-weight: 800;
+            }
+            QDialog#trackingArcSettingsDialog QLabel[role="cardCaption"] { color: #8fb0bb; }
+            QDialog#trackingArcSettingsDialog QLabel[role="stateFieldLabel"] {
+                color: #d7edf5;
+                font-weight: 600;
+            }
+            QDialog#trackingArcSettingsDialog QScrollArea#trackingSettingsScrollArea { border: none; }
+            QDialog#trackingArcSettingsDialog QScrollBar:vertical {
+                background: rgba(3, 12, 18, 0.7);
+                width: 10px;
+                margin: 2px 0 2px 0;
+                border-radius: 5px;
+            }
+            QDialog#trackingArcSettingsDialog QScrollBar::handle:vertical {
+                background: #2f8aa1;
+                border-radius: 5px;
+                min-height: 48px;
+            }
+            QDialog#trackingArcSettingsDialog QScrollBar::add-line:vertical,
+            QDialog#trackingArcSettingsDialog QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+            QDialog#trackingArcSettingsDialog QTableWidget {
+                background: rgba(7, 20, 29, 0.72);
+                alternate-background-color: rgba(14, 43, 55, 0.72);
+                border: 1px solid #1d6f86;
+                border-radius: 8px;
+                gridline-color: #1d6f86;
+                selection-background-color: rgba(26, 130, 156, 0.55);
+                color: #e6f6fb;
+            }
+            QDialog#trackingArcSettingsDialog QTableWidget::item {
+                border-bottom: 1px solid #1d6f86;
+                padding: 6px 8px;
+            }
+            QDialog#trackingArcSettingsDialog QTableWidget::indicator {
+                width: 16px;
+                height: 16px;
+            }
+            QDialog#trackingArcSettingsDialog QTableWidget::indicator:checked {
+                background: #32d3f2;
+                border: 1px solid #8cf0ff;
+            }
+            QDialog#trackingArcSettingsDialog QTableWidget::indicator:unchecked {
+                background: #081620;
+                border: 1px solid #2a6174;
+            }
+            QDialog#trackingArcSettingsDialog QHeaderView::section {
+                background: #0a2b3b;
+                color: #f1fbff;
+                padding: 9px 8px;
+                border: none;
+                border-right: 1px solid #1d6f86;
+                border-bottom: 1px solid #1d6f86;
+                font-size: 10.5pt;
+                font-weight: 800;
+            }
+            QDialog#trackingArcSettingsDialog QDoubleSpinBox {
+                background: rgba(7, 19, 28, 0.98);
+                border: 1px solid #2b6075;
+                border-radius: 6px;
+                padding: 8px 10px;
+                color: #e6f6fb;
+            }
+            QDialog#trackingArcSettingsDialog QDoubleSpinBox:focus {
+                border: 1px solid #62d8ea;
+            }
+            QDialog#trackingArcSettingsDialog QPushButton {
+                min-width: 112px;
+                border-radius: 7px;
+                padding: 10px 16px;
+            }
+            QDialog#trackingArcSettingsDialog QPushButton[variant="secondary"] {
+                background: rgba(8, 28, 39, 0.82);
+                border: 1px solid #2f7182;
+                color: #d7edf5;
+            }
+            QDialog#trackingArcSettingsDialog QPushButton[variant="secondary"]:hover {
+                background: rgba(26, 87, 106, 0.76);
+                border: 1px solid #56cbe6;
+            }
+            QDialog#trackingArcSettingsDialog QPushButton[variant="primaryAction"] {
+                min-width: 148px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ff9b35, stop:1 #ff5a22);
+                border: 1px solid #ffbd6a;
+                color: #ffffff;
+                font-size: 12pt;
+                font-weight: 800;
+            }
+            QDialog#trackingArcSettingsDialog QPushButton[variant="primaryAction"]:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ffae53, stop:1 #ff6d35);
+                border: 1px solid #ffd196;
+            }
+            """
+        )
+
+
 class TrackingArcPage(QtWidgets.QWidget):
     def __init__(
         self,
@@ -427,6 +687,7 @@ class TrackingArcPage(QtWidgets.QWidget):
         self._relay_satellite_table: QtWidgets.QTableWidget | None = None
         self._ground_station_preset_names = {str(item["name"]) for item in default_ground_station_presets()}
         self._relay_satellite_preset_names = {str(item["name"]) for item in default_relay_satellite_presets()}
+        self._settings_dialog: _TrackingArcSettingsDialog | None = None
 
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(24, 24, 24, 24)
@@ -446,14 +707,15 @@ class TrackingArcPage(QtWidgets.QWidget):
         root.addWidget(splitter, 1)
         splitter.addWidget(self._build_left_panel())
         splitter.addWidget(self._build_result_panel())
-        splitter.setStretchFactor(0, 3)
-        splitter.setStretchFactor(1, 4)
-        splitter.setSizes([600, 900])
+        splitter.setStretchFactor(0, 2)
+        splitter.setStretchFactor(1, 5)
+        splitter.setSizes([560, 940])
 
         self._status_label = QtWidgets.QLabel()
         self._status_label.setWordWrap(True)
         root.addWidget(self._status_label)
 
+        self._settings_dialog = _TrackingArcSettingsDialog(self)
         self._i18n.language_changed.connect(self.retranslate)
         self.retranslate()
         self.refresh_from_workspace()
@@ -492,6 +754,7 @@ class TrackingArcPage(QtWidgets.QWidget):
         scroll = QtWidgets.QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         canvas = QtWidgets.QWidget()
         scroll.setWidget(canvas)
         layout = QtWidgets.QVBoxLayout(canvas)
@@ -499,7 +762,7 @@ class TrackingArcPage(QtWidgets.QWidget):
         layout.setSpacing(14)
         layout.addWidget(self._build_source_card())
         layout.addWidget(self._build_window_card())
-        layout.addWidget(self._build_tracking_asset_card())
+        layout.addWidget(self._build_settings_overview_card())
         layout.addWidget(self._build_action_card())
         layout.addStretch(1)
         return scroll
@@ -539,6 +802,7 @@ class TrackingArcPage(QtWidgets.QWidget):
         form = QtWidgets.QFormLayout()
         form.setSpacing(10)
         self._window_combo = NoWheelComboBox()
+        self._window_combo.setSizePolicy(QtWidgets.QSizePolicy.Policy.Ignored, QtWidgets.QSizePolicy.Policy.Fixed)
         self._window_combo.currentIndexChanged.connect(self._on_window_selection_changed)
         form.addRow("发射窗口", self._window_combo)
         self._rocket_flight_time_label = QtWidgets.QLabel("--")
@@ -566,6 +830,50 @@ class TrackingArcPage(QtWidgets.QWidget):
         layout.addLayout(button_row)
         return card
 
+    def _build_settings_overview_card(self) -> QtWidgets.QWidget:
+        card = self._card()
+        layout = QtWidgets.QVBoxLayout(card)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(12)
+
+        header_row = QtWidgets.QHBoxLayout()
+        header_row.setSpacing(10)
+        self._settings_title_label = self._card_title()
+        self._settings_title_label.setText("主要设置")
+        header_row.addWidget(self._settings_title_label, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
+        header_row.addStretch(1)
+        self._edit_settings_button = QtWidgets.QPushButton("设置")
+        self._edit_settings_button.setProperty("variant", "primaryAction")
+        self._edit_settings_button.clicked.connect(self._open_settings_dialog)
+        header_row.addWidget(self._edit_settings_button, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
+        layout.addLayout(header_row)
+
+        grid = QtWidgets.QGridLayout()
+        grid.setHorizontalSpacing(14)
+        grid.setVerticalSpacing(8)
+        self._settings_overview_values: dict[str, QtWidgets.QLabel] = {}
+        rows = (
+            ("ground", "启用地面站"),
+            ("relay", "启用中继星"),
+            ("ground_limits", "地面站阈值"),
+            ("relay_limits", "中继阈值"),
+        )
+        for row, (key, caption) in enumerate(rows):
+            label = QtWidgets.QLabel(caption)
+            label.setProperty("role", "cardCaption")
+            value = QtWidgets.QLabel("--")
+            value.setProperty("role", "pageBody")
+            value.setWordWrap(True)
+            value.setSizePolicy(QtWidgets.QSizePolicy.Policy.Ignored, QtWidgets.QSizePolicy.Policy.Preferred)
+            value.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextSelectableByMouse)
+            grid.addWidget(label, row, 0)
+            grid.addWidget(value, row, 1)
+            self._settings_overview_values[key] = value
+        grid.setColumnMinimumWidth(0, 92)
+        grid.setColumnStretch(1, 1)
+        layout.addLayout(grid)
+        return card
+
     def _build_tracking_asset_card(self) -> QtWidgets.QWidget:
         card = self._card()
         layout = QtWidgets.QVBoxLayout(card)
@@ -581,30 +889,35 @@ class TrackingArcPage(QtWidgets.QWidget):
         layout.addWidget(self._ground_station_table)
         ground_buttons = QtWidgets.QHBoxLayout()
         self._add_custom_ground_button = QtWidgets.QPushButton("新增地面站")
+        self._add_custom_ground_button.setProperty("variant", "secondary")
         self._add_custom_ground_button.clicked.connect(
-            lambda: self._append_asset_row(
+            lambda: self._append_asset_row_and_refresh(
                 self._ground_station_table,
                 {"enabled": True, "name": "自定义地面站", "longitude_deg": 0.0, "latitude_deg": 0.0, "altitude_m": 0.0},
             )
         )
         self._delete_custom_ground_button = QtWidgets.QPushButton("删除地面站")
-        self._delete_custom_ground_button.clicked.connect(lambda: self._delete_selected_rows(self._ground_station_table))
+        self._delete_custom_ground_button.setProperty("variant", "secondary")
+        self._delete_custom_ground_button.clicked.connect(lambda: self._delete_selected_rows_and_refresh(self._ground_station_table))
         ground_buttons.addWidget(self._add_custom_ground_button)
         ground_buttons.addWidget(self._delete_custom_ground_button)
         ground_buttons.addStretch(1)
         layout.addLayout(ground_buttons)
 
         ground_form = QtWidgets.QGridLayout()
-        ground_form.setHorizontalSpacing(12)
-        ground_form.setVerticalSpacing(10)
+        ground_form.setHorizontalSpacing(18)
+        ground_form.setVerticalSpacing(12)
         self._number_fields["ground_station_min_elevation_deg"] = self._double_spin(5.0, -90.0, 90.0, 0.5, 2)
         self._number_fields["ground_station_max_theta_st_deg"] = self._double_spin(70.0, 0.0, 180.0, 0.5, 2)
-        ground_form.addWidget(QtWidgets.QLabel("仰角最小值 (deg)"), 0, 0)
+        ground_form.addWidget(self._field_label("仰角最小值 (deg)"), 0, 0)
         ground_form.addWidget(self._number_fields["ground_station_min_elevation_deg"], 0, 1)
-        ground_form.addWidget(QtWidgets.QLabel("天线角最大值 (deg)"), 0, 2)
+        ground_form.addWidget(self._field_label("天线角最大值 (deg)"), 0, 2)
         ground_form.addWidget(self._number_fields["ground_station_max_theta_st_deg"], 0, 3)
-        ground_form.setColumnStretch(1, 1)
-        ground_form.setColumnStretch(3, 1)
+        self._fit_dialog_number_field(self._number_fields["ground_station_min_elevation_deg"])
+        self._fit_dialog_number_field(self._number_fields["ground_station_max_theta_st_deg"])
+        ground_form.setColumnMinimumWidth(0, 170)
+        ground_form.setColumnMinimumWidth(2, 170)
+        ground_form.setColumnStretch(4, 1)
         layout.addLayout(ground_form)
 
         self._relay_satellite_table = self._asset_table()
@@ -617,33 +930,38 @@ class TrackingArcPage(QtWidgets.QWidget):
 
         relay_buttons = QtWidgets.QHBoxLayout()
         self._add_custom_relay_button = QtWidgets.QPushButton("新增中继星")
+        self._add_custom_relay_button.setProperty("variant", "secondary")
         self._add_custom_relay_button.clicked.connect(
-            lambda: self._append_asset_row(
+            lambda: self._append_asset_row_and_refresh(
                 self._relay_satellite_table,
                 {"enabled": True, "name": "自定义中继星", "longitude_deg": 0.0, "latitude_deg": 0.0, "altitude_m": 35786000.0},
             )
         )
         self._delete_custom_relay_button = QtWidgets.QPushButton("删除中继星")
-        self._delete_custom_relay_button.clicked.connect(lambda: self._delete_selected_rows(self._relay_satellite_table))
+        self._delete_custom_relay_button.setProperty("variant", "secondary")
+        self._delete_custom_relay_button.clicked.connect(lambda: self._delete_selected_rows_and_refresh(self._relay_satellite_table))
         relay_buttons.addWidget(self._add_custom_relay_button)
         relay_buttons.addWidget(self._delete_custom_relay_button)
         relay_buttons.addStretch(1)
         layout.addLayout(relay_buttons)
 
         relay_form = QtWidgets.QGridLayout()
-        relay_form.setHorizontalSpacing(12)
-        relay_form.setVerticalSpacing(10)
+        relay_form.setHorizontalSpacing(18)
+        relay_form.setVerticalSpacing(12)
         self._number_fields["relay_alpha_abs_max_deg"] = self._double_spin(20.0, 0.0, 180.0, 0.5, 2)
         self._number_fields["relay_beta_abs_max_deg"] = self._double_spin(40.0, 0.0, 180.0, 0.5, 2)
         self._number_fields["relay_max_theta_st_deg"] = self._double_spin(80.0, 0.0, 180.0, 0.5, 2)
-        relay_form.addWidget(QtWidgets.QLabel("alpha 最大值 (deg)"), 0, 0)
+        relay_form.addWidget(self._field_label("alpha 最大值 (deg)"), 0, 0)
         relay_form.addWidget(self._number_fields["relay_alpha_abs_max_deg"], 0, 1)
-        relay_form.addWidget(QtWidgets.QLabel("beta 最大值 (deg)"), 0, 2)
+        relay_form.addWidget(self._field_label("beta 最大值 (deg)"), 0, 2)
         relay_form.addWidget(self._number_fields["relay_beta_abs_max_deg"], 0, 3)
-        relay_form.addWidget(QtWidgets.QLabel("天线覆盖角最大值 (deg)"), 1, 0)
+        relay_form.addWidget(self._field_label("天线覆盖角最大值 (deg)"), 1, 0)
         relay_form.addWidget(self._number_fields["relay_max_theta_st_deg"], 1, 1)
-        relay_form.setColumnStretch(1, 1)
-        relay_form.setColumnStretch(3, 1)
+        for key in ("relay_alpha_abs_max_deg", "relay_beta_abs_max_deg", "relay_max_theta_st_deg"):
+            self._fit_dialog_number_field(self._number_fields[key])
+        relay_form.setColumnMinimumWidth(0, 170)
+        relay_form.setColumnMinimumWidth(2, 170)
+        relay_form.setColumnStretch(4, 1)
         layout.addLayout(relay_form)
 
         return card
@@ -663,6 +981,7 @@ class TrackingArcPage(QtWidgets.QWidget):
         self._save_button = QtWidgets.QPushButton("保存参数")
         self._save_button.clicked.connect(self.save_config)
         self._calculate_button = QtWidgets.QPushButton("计算跟踪弧段")
+        self._calculate_button.setProperty("variant", "primaryAction")
         self._calculate_button.clicked.connect(self.calculate_tracking_arcs)
         self._reload_windows_button = QtWidgets.QPushButton("刷新窗口")
         self._reload_windows_button.clicked.connect(lambda: self._reload_windows(show_status=True))
@@ -750,6 +1069,18 @@ class TrackingArcPage(QtWidgets.QWidget):
             return None
         self._set_status("statusReady", f"已保存跟踪弧段参数：{path}")
         return path
+
+    def _open_settings_dialog(self) -> None:
+        if self._settings_dialog is None:
+            return
+        snapshot = self.config_payload()
+        self._refresh_asset_table_metrics()
+        result = self._settings_dialog.exec()
+        if result != QtWidgets.QDialog.DialogCode.Accepted:
+            self._set_config(snapshot)
+            return
+        self._refresh_settings_overview()
+        self._set_status("statusReady", "主要设置已应用；保存参数或计算后写入项目。")
 
     def calculate_tracking_arcs(self) -> None:
         if self._workspace.current_project is None:
@@ -850,6 +1181,8 @@ class TrackingArcPage(QtWidgets.QWidget):
             self._relay_satellite_table,
             [*config.relay_satellite_presets, *config.custom_relay_satellites],
         )
+        self._refresh_settings_overview()
+        self._refresh_asset_table_metrics()
 
     def _reload_windows(self, *, show_status: bool) -> None:
         if self._workspace.current_project is None:
@@ -1245,6 +1578,7 @@ class TrackingArcPage(QtWidgets.QWidget):
             *self._number_fields.values(),
             self._ground_station_table,
             self._relay_satellite_table,
+            self._edit_settings_button,
             self._window_combo,
             self._orbit_point_combo,
             self._add_custom_ground_button,
@@ -1277,10 +1611,15 @@ class TrackingArcPage(QtWidgets.QWidget):
         table.setHorizontalHeaderLabels(["启用", "名称", "经度/deg", "纬度/deg", "高度/m"])
         table.setAlternatingRowColors(True)
         table.verticalHeader().setVisible(False)
-        table.horizontalHeader().setStretchLastSection(True)
-        table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
+        table.horizontalHeader().setStretchLastSection(False)
+        table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.Fixed)
+        table.horizontalHeader().setMinimumHeight(42)
         table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
-        table.setMinimumHeight(120)
+        table.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.SingleSelection)
+        table.setShowGrid(True)
+        table.setGridStyle(QtCore.Qt.PenStyle.SolidLine)
+        table.setHorizontalScrollMode(QtWidgets.QAbstractItemView.ScrollMode.ScrollPerPixel)
+        table.setMinimumHeight(140)
         install_table_edit_delegate(table)
         return table
 
@@ -1290,6 +1629,7 @@ class TrackingArcPage(QtWidgets.QWidget):
         table.setRowCount(0)
         for row in rows:
             self._append_asset_row(table, row)
+        self._refresh_asset_table_metrics()
 
     def _append_asset_row(self, table: QtWidgets.QTableWidget | None, row_payload: dict[str, Any]) -> None:
         if table is None:
@@ -1314,6 +1654,11 @@ class TrackingArcPage(QtWidgets.QWidget):
             if offset > 1:
                 item.setTextAlignment(QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter)
             table.setItem(row, offset, item)
+        self._refresh_asset_table_metrics()
+
+    def _append_asset_row_and_refresh(self, table: QtWidgets.QTableWidget | None, row_payload: dict[str, Any]) -> None:
+        self._append_asset_row(table, row_payload)
+        self._refresh_settings_overview()
 
     def _asset_rows_payload(self, table: QtWidgets.QTableWidget | None, *, asset_type: str) -> list[dict[str, Any]]:
         if table is None:
@@ -1339,6 +1684,93 @@ class TrackingArcPage(QtWidgets.QWidget):
             rows = [table.currentRow()]
         for row in rows:
             table.removeRow(row)
+        self._refresh_asset_table_metrics()
+
+    def _delete_selected_rows_and_refresh(self, table: QtWidgets.QTableWidget | None) -> None:
+        self._delete_selected_rows(table)
+        self._refresh_settings_overview()
+
+    def _refresh_asset_table_metrics(self) -> None:
+        for table in (self._ground_station_table, self._relay_satellite_table):
+            if table is None:
+                continue
+            self._sync_asset_table_column_widths(table)
+            self._adjust_asset_table_height(table)
+
+    def _sync_asset_table_column_widths(self, table: QtWidgets.QTableWidget) -> None:
+        header = table.horizontalHeader()
+        if header.count() <= 0:
+            return
+        font_metrics = table.fontMetrics()
+        header_metrics = header.fontMetrics()
+        minimums = [58, 150, 104, 104, 116]
+        maximums = [70, 260, 150, 150, 170]
+        widths: list[int] = []
+        for column in range(table.columnCount()):
+            header_text = table.horizontalHeaderItem(column).text() if table.horizontalHeaderItem(column) is not None else ""
+            width = header_metrics.horizontalAdvance(header_text) + 28
+            for row in range(table.rowCount()):
+                item = table.item(row, column)
+                if item is not None:
+                    width = max(width, font_metrics.horizontalAdvance(item.text()) + 26)
+            width = max(minimums[column], min(maximums[column], width))
+            widths.append(width)
+        viewport_width = table.viewport().width()
+        if viewport_width <= 0:
+            viewport_width = table.width() - table.frameWidth() * 2
+        extra = max(0, viewport_width - sum(widths))
+        if extra:
+            widths[1] += extra
+        for column, width in enumerate(widths):
+            header.setSectionResizeMode(column, QtWidgets.QHeaderView.ResizeMode.Fixed)
+            table.setColumnWidth(column, width)
+
+    def _adjust_asset_table_height(self, table: QtWidgets.QTableWidget) -> None:
+        row_height = max(table.fontMetrics().height() + 18, 38)
+        for row in range(table.rowCount()):
+            table.setRowHeight(row, row_height)
+        visible_rows = min(max(table.rowCount(), 2), 6)
+        header_height = table.horizontalHeader().height()
+        scrollbar_height = table.horizontalScrollBar().sizeHint().height()
+        frame_height = table.frameWidth() * 2
+        height = header_height + visible_rows * row_height + scrollbar_height + frame_height + 8
+        table.verticalHeader().setDefaultSectionSize(row_height)
+        table.setMinimumHeight(height)
+        table.setMaximumHeight(height)
+
+    def _refresh_settings_overview(self) -> None:
+        if not hasattr(self, "_settings_overview_values"):
+            return
+        ground_rows = self._asset_rows_payload(self._ground_station_table, asset_type="ground")
+        relay_rows = self._asset_rows_payload(self._relay_satellite_table, asset_type="relay")
+        enabled_ground = [str(row.get("name", "")).strip() for row in ground_rows if bool(row.get("enabled", True))]
+        enabled_relay = [str(row.get("name", "")).strip() for row in relay_rows if bool(row.get("enabled", True))]
+        self._settings_overview_values["ground"].setText(self._asset_overview_text(enabled_ground))
+        self._settings_overview_values["relay"].setText(self._asset_overview_text(enabled_relay))
+        ground_min = self._number_field_value("ground_station_min_elevation_deg")
+        ground_theta = self._number_field_value("ground_station_max_theta_st_deg")
+        relay_alpha = self._number_field_value("relay_alpha_abs_max_deg")
+        relay_beta = self._number_field_value("relay_beta_abs_max_deg")
+        relay_theta = self._number_field_value("relay_max_theta_st_deg")
+        self._settings_overview_values["ground_limits"].setText(
+            f"仰角 >= {ground_min:.2f} deg；天线角 <= {ground_theta:.2f} deg"
+        )
+        self._settings_overview_values["relay_limits"].setText(
+            f"alpha <= {relay_alpha:.2f} deg；beta <= {relay_beta:.2f} deg；覆盖角 <= {relay_theta:.2f} deg"
+        )
+
+    @staticmethod
+    def _asset_overview_text(names: list[str]) -> str:
+        visible = [name for name in names if name]
+        if not visible:
+            return "0 个；无"
+        if len(visible) <= 2:
+            return f"{len(visible)} 个；{', '.join(visible)}"
+        return f"{len(visible)} 个；{', '.join(visible[:2])} 等"
+
+    def _number_field_value(self, key: str) -> float:
+        field = self._number_fields.get(key)
+        return 0.0 if field is None else float(field.value())
 
     def retranslate(self, _language: str | None = None) -> None:
         self._title_label.setText("跟踪弧段分析")
@@ -1349,6 +1781,7 @@ class TrackingArcPage(QtWidgets.QWidget):
         self._source_body_label.setText("本页复用发射窗口结果、变轨策略和 full_orbit_history.csv；所有时刻显示为北京时间。")
         self._window_title_label.setText("窗口选择")
         self._action_title_label.setText("计算")
+        self._settings_title_label.setText("主要设置")
         self._summary_title_label.setText("轨道结果")
         self._refresh_source_labels()
 
@@ -1376,6 +1809,7 @@ class TrackingArcPage(QtWidgets.QWidget):
         label = QtWidgets.QLabel()
         label.setProperty("role", "cardCaption")
         label.setWordWrap(True)
+        label.setSizePolicy(QtWidgets.QSizePolicy.Policy.Ignored, QtWidgets.QSizePolicy.Policy.Preferred)
         label.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextSelectableByMouse)
         return label
 
@@ -1386,6 +1820,13 @@ class TrackingArcPage(QtWidgets.QWidget):
         return label
 
     @staticmethod
+    def _field_label(text: str) -> QtWidgets.QLabel:
+        label = QtWidgets.QLabel(text)
+        label.setProperty("role", "stateFieldLabel")
+        label.setAlignment(QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter)
+        return label
+
+    @staticmethod
     def _double_spin(value: float, minimum: float, maximum: float, step: float, decimals: int) -> NoWheelDoubleSpinBox:
         field = NoWheelDoubleSpinBox()
         field.setRange(minimum, maximum)
@@ -1393,7 +1834,13 @@ class TrackingArcPage(QtWidgets.QWidget):
         field.setSingleStep(step)
         field.setDecimals(decimals)
         field.setButtonSymbols(QtWidgets.QAbstractSpinBox.ButtonSymbols.NoButtons)
+        field.setMinimumHeight(40)
         return field
+
+    @staticmethod
+    def _fit_dialog_number_field(field: QtWidgets.QWidget) -> None:
+        field.setFixedWidth(132)
+        field.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
 
     @staticmethod
     def _format_beijing(value: str) -> str:

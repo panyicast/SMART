@@ -694,6 +694,14 @@
 - 提交：`1faaa11`
 - 影响文件：`src/smart/ui/widgets/launch_window_page.py`、`tests/test_launch_window_page.py`、`HANDOFF.md`。
 
-## 2026-05-26T21:34:40+08:00 | Fix launch window dialog close cursor
-- 提交：`本次提交`
+## 2026-05-26T21:34:45+08:00 | Fix launch window dialog close cursor
+- 提交：`482c084`
 - 影响文件：`src/smart/ui/widgets/launch_window_page.py`、`tests/test_launch_window_page.py`、`HANDOFF.md`。
+
+## 2026-05-26T21:46:47+08:00 | Merge launch window UI updates
+- 提交：`aef49df`
+- 影响文件：自动刷新记录，无额外文件。
+
+## 2026-05-27T21:26:46+08:00 | Refine tracking arc settings dialog
+- 提交：`本次提交`
+- 影响文件：`src/smart/ui/widgets/tracking_arc_page.py`、`tests/test_tracking_arc.py`、`HANDOFF.md`。

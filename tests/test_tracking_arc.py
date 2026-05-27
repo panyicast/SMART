@@ -5,7 +5,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 import pytest
-from PySide6 import QtWidgets
+from PySide6 import QtCore, QtWidgets
 
 from smart.ui.i18n import I18nManager
 from smart.services.project_workspace import ProjectWorkspace
@@ -20,7 +20,12 @@ from smart.services.tracking_arc import (
     compute_tracking_arcs_for_window,
     tracking_arc_launch_points,
 )
-from smart.ui.widgets.tracking_arc_page import TrackingArcGanttWidget, TrackingArcPage, _GanttScrollArea
+from smart.ui.widgets.tracking_arc_page import (
+    TrackingArcGanttWidget,
+    TrackingArcPage,
+    _GanttScrollArea,
+    _TrackingArcSettingsDialog,
+)
 
 
 def _write_history(path: Path) -> None:
@@ -184,6 +189,32 @@ def test_tracking_arc_page_warns_and_syncs_when_launch_windows_change(tmp_path: 
     assert page._window_consistency_ok is True
     assert not page._sync_windows_button.isEnabled()
     assert page._windows[0].window_start_utc == "2026-05-15T01:00:00Z"
+
+
+def test_tracking_arc_settings_use_dialog_and_cancel_restores_values(tmp_path: Path) -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    workspace = _page_workspace(tmp_path)
+    page = TrackingArcPage(I18nManager("zh"), workspace)
+    page._window_check_timer.stop()
+    dialog = page._settings_dialog
+
+    assert isinstance(dialog, _TrackingArcSettingsDialog)
+    assert page._edit_settings_button.text() == "设置"
+    assert page._ground_station_table.window() is dialog
+    assert page._relay_satellite_table.window() is dialog
+    assert page._ground_station_table.columnWidth(1) >= 150
+    assert page._ground_station_table.columnWidth(2) >= 104
+
+    original_value = page._number_fields["ground_station_min_elevation_deg"].value()
+    QtCore.QTimer.singleShot(
+        0,
+        lambda: page._number_fields["ground_station_min_elevation_deg"].setValue(original_value + 10.0),
+    )
+    QtCore.QTimer.singleShot(0, dialog.reject)
+    page._open_settings_dialog()
+
+    assert page._number_fields["ground_station_min_elevation_deg"].value() == pytest.approx(original_value)
+    assert "个" in page._settings_overview_values["ground"].text()
 
 
 def test_tracking_arc_page_loads_archived_results_on_open(tmp_path: Path) -> None:
