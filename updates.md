@@ -714,6 +714,10 @@
 - 提交：`c39d90a`
 - 影响文件：`src/smart/ui/widgets/tracking_arc_page.py`、`HANDOFF.md`。
 
-## 2026-05-27T21:40:10+08:00 | Move SPICE kernels into settings menu
-- 提交：`本次提交`
+## 2026-05-27T21:40:16+08:00 | Move SPICE kernels into settings menu
+- 提交：`2df21cf`
 - 影响文件：`src/smart/ui/i18n.py`、`src/smart/ui/main_window.py`、`tests/test_sidebar_navigation.py`、`HANDOFF.md`。
+
+## 2026-05-27T22:13:50+08:00 | Record configuration audit findings
+- 提交：`本次提交`
+- 影响文件：`HANDOFF.md`。
