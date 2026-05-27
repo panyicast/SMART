@@ -26,7 +26,7 @@
 | **发射窗口缓存** | 🔴 过期 | `launch_window_results.csv` 窗口时长 90 min，工具实时计算为 110 min（差距 20 min） |
 | **跟踪弧段/甘特图** | 🔴 过期 | `flight_program_reference_results.json` 和 `tracking_arc_results.json` 基于旧窗口和旧策略 |
 | **轨道历史 CSV** | 🟡 版本待确认 | 无法从元数据直接验证与当前 maneuver_strategy (5/24) 的一致性 |
-| **遗留文件** | 🟡 混淆风险 | 3 个配置文件描述无关 LEO 任务 |
+| **遗留文件** | 🟡 混淆风险 | 2 个配置文件描述无关 LEO 任务，旧快照文件已移除 |
 
 ---
 
@@ -127,7 +127,7 @@
 |:--|:--|
 | `config/orbit_initialization.json` | LEO: a=7,000 km, e=0.05, i=28.5° |
 | `data/orbit_elements.json` | 同上 |
-| `data/maneuver_snapshot.json` | 400→1,200 km Hohmann 转移 (Δv≈416 m/s) |
+| 旧快照文件 | 已删除 |
 
 | **风险** | 若新用户或脚本误读这些文件作为初始轨道，将得到完全错误的任务设定 |
 | **建议** | 归档到 `legacy/` 子目录或删除 |
@@ -198,7 +198,7 @@ config/design_maneuver_strategy.json (脉冲输入, stable)
 | **P1** | **重新生成 `flight_program_reference_results.json`** | 依赖 P0 完成后执行，更新甘特图所有分段 |
 | **P1** | **重新生成 `tracking_arc_results.json`** | 依赖 P0+P1 完成后执行 |
 | **P1** | **确认 `full_orbit_history.csv` 版本** | 如无法确认，使用当前 `maneuver_strategy.json` 重新积分生成（需连续推力优化工具 `save_result=true`） |
-| **P2** | **清理遗留文件** | 归档或删除 `orbit_initialization.json`、`orbit_elements.json`、`maneuver_snapshot.json` |
+| **P2** | **清理遗留文件** | 归档或删除 `orbit_initialization.json`、`orbit_elements.json` |
 | **P2** | **统一发射窗口/跟踪弧段配置源** | 合并 `launch_window.json` 和 `tracking_arc.json`，消除冗余 |
 | **P2** | **将点火测控约束改为动态引用** | `T2_start`/`T2_end` 替代固定数值，提高鲁棒性 |
 | **P3** | **重新导出 STK 星历/姿态** | 在所有更新完成后导出 `.e` 和 `.a` 文件用于 STK 11.6 验证 |

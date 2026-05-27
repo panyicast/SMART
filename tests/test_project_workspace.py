@@ -136,7 +136,7 @@ def test_create_project_without_parent_dir_uses_projects_directory(
     assert (info.root_dir / "smart_project.json").exists()
 
 
-def test_save_and_load_orbit_elements_and_maneuver_snapshot(tmp_path: Path) -> None:
+def test_save_and_load_orbit_elements(tmp_path: Path) -> None:
     workspace = ProjectWorkspace()
     workspace.create_project("mission_beta", parent_dir=tmp_path)
 
@@ -154,18 +154,6 @@ def test_save_and_load_orbit_elements_and_maneuver_snapshot(tmp_path: Path) -> N
     assert restored.semi_major_axis_km == pytest.approx(9000.0)
     assert restored.eccentricity == pytest.approx(0.11)
     assert restored.inclination_deg == pytest.approx(35.0)
-
-    snapshot = {
-        "initial_altitude_km": 400.0,
-        "target_altitude_km": 1200.0,
-        "delta_v1_km_s": 0.12,
-        "delta_v2_km_s": 0.21,
-        "total_delta_v_km_s": 0.33,
-        "transfer_time_s": 3200.0,
-    }
-    workspace.save_maneuver_snapshot(snapshot)
-    loaded_snapshot = workspace.load_maneuver_snapshot()
-    assert loaded_snapshot == pytest.approx(snapshot)
 
 
 def test_save_and_load_orbit_initialization(tmp_path: Path) -> None:

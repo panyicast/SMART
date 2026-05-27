@@ -39,7 +39,6 @@ CHARTS_DIR_NAME = "charts"
 CONFIG_DIR_NAME = "config"
 
 ORBIT_ELEMENTS_FILE = "orbit_elements.json"
-MANEUVER_SNAPSHOT_FILE = "maneuver_snapshot.json"
 SATELLITE_SETTINGS_FILE = "satellite_status.json"
 SATELLITE_3D_MODEL_FILE = "satellite_3d_model.json"
 ORBIT_INITIALIZATION_FILE = "orbit_initialization.json"
@@ -262,20 +261,6 @@ class ProjectWorkspace:
             ephemeris_file_path=str(payload.get("ephemeris_file_path", "")),
         )
 
-    def save_maneuver_snapshot(self, snapshot: dict[str, float]) -> Path:
-        payload = {
-            "initial_altitude_km": float(snapshot["initial_altitude_km"]),
-            "target_altitude_km": float(snapshot["target_altitude_km"]),
-            "delta_v1_km_s": float(snapshot["delta_v1_km_s"]),
-            "delta_v2_km_s": float(snapshot["delta_v2_km_s"]),
-            "total_delta_v_km_s": float(snapshot["total_delta_v_km_s"]),
-            "transfer_time_s": float(snapshot["transfer_time_s"]),
-        }
-        file_path = self.data_dir() / MANEUVER_SNAPSHOT_FILE
-        _write_json(file_path, payload)
-        self._touch_updated_time()
-        return file_path
-
     def save_maneuver_strategy(self, strategy: dict[str, Any]) -> Path:
         payload = _normalize_maneuver_strategy_payload(strategy)
         file_path = self.maneuver_strategy_path()
@@ -446,20 +431,6 @@ class ProjectWorkspace:
         if not file_path.exists():
             return None
         return _read_json(file_path)
-
-    def load_maneuver_snapshot(self) -> dict[str, float] | None:
-        file_path = self.data_dir() / MANEUVER_SNAPSHOT_FILE
-        if not file_path.exists():
-            return None
-        payload = _read_json(file_path)
-        return {
-            "initial_altitude_km": float(payload["initial_altitude_km"]),
-            "target_altitude_km": float(payload["target_altitude_km"]),
-            "delta_v1_km_s": float(payload["delta_v1_km_s"]),
-            "delta_v2_km_s": float(payload["delta_v2_km_s"]),
-            "total_delta_v_km_s": float(payload["total_delta_v_km_s"]),
-            "transfer_time_s": float(payload["transfer_time_s"]),
-        }
 
     def save_satellite_3d_model_config(self, config: SatelliteStructureConfig) -> Path:
         payload = _satellite_structure_payload(config)

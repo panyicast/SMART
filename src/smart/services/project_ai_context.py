@@ -83,7 +83,6 @@ def build_project_analysis_prompt(
 def _selected_data_files(data_dir: Path) -> list[Path]:
     preferred_names = [
         "orbit_elements.json",
-        "maneuver_snapshot.json",
         "full_orbit_history.csv",
         "launch_window_samples.csv",
         "launch_window_results.csv",

@@ -41,7 +41,6 @@ API key 可通过页面输入，也可通过环境变量提供：
 - `smart_project.json`
 - `config/*.json`
 - `data/orbit_elements.json`
-- `data/maneuver_snapshot.json`
 - `data/full_orbit_history.csv` 的列名、行数、数值统计和少量样本行
 - `data/launch_window_samples.csv` 的列名、行数、数值统计和少量样本行
 - `data/launch_window_results.csv`

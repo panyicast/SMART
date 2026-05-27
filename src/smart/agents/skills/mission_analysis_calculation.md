@@ -12,7 +12,7 @@
 
 - 设计变轨策略（脉冲）计算，优先调用 SMART 本地 `plan_design_maneuver_strategy` 工具，不要手算点火时刻、经度和推进剂结果。
 - 设计变轨策略（连续推力）优化，优先调用 SMART 本地 `optimize_design_continuous_thrust` 工具；存在已归档脉冲结果时可直接复用。
-- 变轨策略与 delta-v / 转移时间复核，支持从 `config/maneuver_strategy.json`、`config/design_maneuver_strategy.json` 和 `data/maneuver_snapshot.json` 读取参数。
+- 变轨策略与 delta-v / 转移时间复核，支持从 `config/maneuver_strategy.json` 和 `config/design_maneuver_strategy.json` 读取参数。
 - 发射窗口约束分析和重新采样，优先调用 SMART 本地 `compute_launch_window_samples` 工具，支持采样步长、测控资源、太阳角、地影、倾角等参数解释与复核。
 - 跟踪弧段分析，覆盖地面站、中继星、点火时段、地影时段和可见性汇总。
 - 轨道根数、状态矢量、历元、坐标系转换和 STK `.e` 星历导入前检查。

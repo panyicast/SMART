@@ -10,7 +10,7 @@
 
 ## 能力
 
-- 检查项目关键文件是否存在，包括 `smart_project.json`、`config/*.json`、`data/full_orbit_history.csv`、`data/launch_window_samples.csv`、`data/launch_window_results.csv`、`data/maneuver_snapshot.json`、设计变轨结果、连续推力结果和图表目录。
+- 检查项目关键文件是否存在，包括 `smart_project.json`、`config/*.json`、`data/full_orbit_history.csv`、`data/launch_window_samples.csv`、`data/launch_window_results.csv`、设计变轨结果、连续推力结果和图表目录。
 - 对比配置文件与缓存结果的时间范围、采样步长、火箭飞行时间、约束阈值、测控资源和变轨策略依赖，识别结果可能过期的情形。
 - 检查 `data/full_orbit_history.csv` 是否能支撑发射窗口、地影、跟踪弧段和图表结果；缺少轨道历史时必须明确说明哪些分析不能复核。
 - 检查 `config/maneuver_strategy.json`、`config/design_maneuver_strategy.json`、`config/design_import_maneuver_strategy.json`、`data/design_maneuver_results.json` 和 `data/design_continuous_thrust_results.json` 之间的来源关系和潜在漂移。
