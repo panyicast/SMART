@@ -706,6 +706,10 @@
 - 提交：`c9cb850`
 - 影响文件：`src/smart/ui/widgets/tracking_arc_page.py`、`tests/test_tracking_arc.py`、`HANDOFF.md`。
 
-## 2026-05-27T21:31:15+08:00 | Compact tracking arc settings dialog
+## 2026-05-27T21:31:21+08:00 | Compact tracking arc settings dialog
+- 提交：`3af83e3`
+- 影响文件：`src/smart/ui/widgets/tracking_arc_page.py`、`HANDOFF.md`。
+
+## 2026-05-27T21:35:07+08:00 | Move tracking arc timezone label
 - 提交：`本次提交`
 - 影响文件：`src/smart/ui/widgets/tracking_arc_page.py`、`HANDOFF.md`。

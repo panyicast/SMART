@@ -169,6 +169,13 @@ class TrackingArcGanttWidget(QtWidgets.QWidget):
         axis_y = top - 16.0
         self._segment_rects = []
 
+        painter.setPen(self._MUTED)
+        painter.drawText(
+            QtCore.QRectF(10, 8, left - 20, 18),
+            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter,
+            "北京时间",
+        )
+
         painter.setPen(QtGui.QPen(self._GRID, 1))
         painter.drawLine(QtCore.QPointF(left, axis_y), QtCore.QPointF(left + plot_width, axis_y))
         for index in range(6):
@@ -232,13 +239,6 @@ class TrackingArcGanttWidget(QtWidgets.QWidget):
                     QtCore.Qt.AlignmentFlag.AlignCenter,
                     f"{minutes:.0f} min",
                 )
-
-        painter.setPen(self._MUTED)
-        painter.drawText(
-            QtCore.QRectF(left, rect.height() - bottom + 4, plot_width, 20),
-            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter,
-            "北京时间",
-        )
 
     def _reset_view_range(self) -> None:
         if self._result is None:
