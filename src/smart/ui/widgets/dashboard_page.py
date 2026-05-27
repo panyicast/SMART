@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -56,6 +57,16 @@ def _fmt_float(value: object, decimals: int = 3, suffix: str = "") -> str:
 
 def _status_rank(status: str) -> int:
     return {"Ready": 3, "Loading": 2, "Planned": 1, "Disconnected": 0}.get(status, 0)
+
+
+def _file_hash(path: Path) -> str:
+    if not path.exists():
+        return ""
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _fmt_file_state(path: Path) -> str:
+    return "已生成" if path.exists() else "缺失"
 
 
 class _DashboardSurface(QtWidgets.QFrame):
@@ -174,7 +185,7 @@ class _TimelineWidget(QtWidgets.QWidget):
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self._items: list[tuple[str, str]] = []
-        self.setMinimumHeight(132)
+        self.setMinimumHeight(154)
 
     def set_items(self, items: list[tuple[str, str]]) -> None:
         self._items = items
@@ -186,26 +197,30 @@ class _TimelineWidget(QtWidgets.QWidget):
             return
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-        rect = self.rect().adjusted(18, 20, -18, -24)
-        y = rect.top() + 28
-        step = rect.width() / max(1, len(self._items) - 1)
-        painter.setPen(QtGui.QPen(QtGui.QColor("#234b59"), 2))
-        painter.drawLine(rect.left(), y, rect.right(), y)
+        rect = self.rect().adjusted(18, 16, -18, -18)
+        rows = [self._items[index : index + 5] for index in range(0, len(self._items), 5)]
+        for row_index, row_items in enumerate(rows):
+            if not row_items:
+                continue
+            y = rect.top() + 24 + row_index * 66
+            step = rect.width() / max(1, len(row_items) - 1)
+            painter.setPen(QtGui.QPen(QtGui.QColor("#234b59"), 2))
+            painter.drawLine(rect.left(), y, rect.right(), y)
 
-        for index, (label, status) in enumerate(self._items):
-            x = rect.left() + index * step
-            color = {
-                "Ready": "#55d18f",
-                "Loading": "#66d9ea",
-                "Planned": "#f2b84b",
-                "Disconnected": "#ff7a66",
-            }.get(status, "#78939e")
-            painter.setBrush(QtGui.QColor(color))
-            painter.setPen(QtGui.QPen(QtGui.QColor("#0b1a22"), 2))
-            painter.drawEllipse(QtCore.QPointF(x, y), 7, 7)
-            painter.setPen(QtGui.QPen(QtGui.QColor("#b8c9d2"), 1))
-            label_rect = QtCore.QRectF(x - 54, y + 16, 108, 44)
-            painter.drawText(label_rect, QtCore.Qt.AlignmentFlag.AlignHCenter | QtCore.Qt.TextFlag.TextWordWrap, label)
+            for index, (label, status) in enumerate(row_items):
+                x = rect.left() + index * step
+                color = {
+                    "Ready": "#55d18f",
+                    "Loading": "#66d9ea",
+                    "Planned": "#f2b84b",
+                    "Disconnected": "#ff7a66",
+                }.get(status, "#78939e")
+                painter.setBrush(QtGui.QColor(color))
+                painter.setPen(QtGui.QPen(QtGui.QColor("#0b1a22"), 2))
+                painter.drawEllipse(QtCore.QPointF(x, y), 7, 7)
+                painter.setPen(QtGui.QPen(QtGui.QColor("#b8c9d2"), 1))
+                label_rect = QtCore.QRectF(x - 34, y + 14, 68, 28)
+                painter.drawText(label_rect, QtCore.Qt.AlignmentFlag.AlignHCenter, label)
         painter.end()
 
 
@@ -410,7 +425,7 @@ class DashboardPage(QtWidgets.QWidget):
         metrics = QtWidgets.QHBoxLayout()
         metrics.setSpacing(14)
         self._metrics: dict[str, _MetricTile] = {}
-        for key in ("orbit_samples", "maneuver_count", "launch_windows", "tracking_assets"):
+        for key in ("data_chain", "maneuver_count", "launch_windows", "risk_items"):
             tile = _MetricTile()
             self._metrics[key] = tile
             metrics.addWidget(tile)
@@ -432,7 +447,18 @@ class DashboardPage(QtWidgets.QWidget):
         grid.setVerticalSpacing(16)
 
         self._cards: dict[str, _SummaryCard] = {}
-        card_keys = ["satellite", "maneuver", "launch_window", "tracking_arc", "spice", "ai_analysis"]
+        card_keys = [
+            "satellite",
+            "design_maneuver",
+            "maneuver",
+            "launch_window",
+            "tracking_arc",
+            "flight_program",
+            "data_visualization",
+            "stk_link",
+            "spice",
+            "ai_analysis",
+        ]
         for index, key in enumerate(card_keys):
             card = _SummaryCard()
             self._cards[key] = card
@@ -536,32 +562,96 @@ class DashboardPage(QtWidgets.QWidget):
         root = self._project.root_dir
         config_dir = root / "config"
         data_dir = root / "data"
-        maneuver = _read_json(config_dir / "maneuver_strategy.json") or {}
-        launch_config = _read_json(config_dir / "launch_window.json") or {}
-        tracking_config = _read_json(config_dir / "tracking_arc.json") or {}
+        satellite_config_path = config_dir / "satellite_3d_model.json"
+        design_config_path = config_dir / "design_maneuver_strategy.json"
+        design_result_path = data_dir / "design_maneuver_results.json"
+        continuous_result_path = data_dir / "design_continuous_thrust_results.json"
+        maneuver_config_path = config_dir / "maneuver_strategy.json"
+        orbit_history_path = data_dir / "full_orbit_history.csv"
+        launch_config_path = config_dir / "launch_window.json"
+        launch_samples_path = data_dir / "launch_window_samples.csv"
+        launch_meta_path = data_dir / "launch_window_samples.meta.json"
+        launch_results_path = data_dir / "launch_window_results.csv"
+        tracking_config_path = config_dir / "tracking_arc.json"
+        tracking_results_path = data_dir / "tracking_arc_results.json"
+        flight_config_path = config_dir / "flight_program.json"
+        flight_reference_path = data_dir / "flight_program_reference_results.json"
+        charts_dir = root / "charts"
+        stk_dir = data_dir / "stk"
+        stk_link_dir = data_dir / "stk_link"
         ai_report = data_dir / "ai_project_analysis.md"
 
-        orbit_rows = _count_csv_rows(data_dir / "full_orbit_history.csv")
-        final_orbit_row = self._last_csv_row(data_dir / "full_orbit_history.csv")
-        launch_rows = _count_csv_rows(data_dir / "launch_window_results.csv")
-        sample_rows = _count_csv_rows(data_dir / "launch_window_samples.csv")
-        tracking_assets = self._count_enabled_assets(tracking_config)
+        satellite_config = _read_json(satellite_config_path) or {}
+        design_config = _read_json(design_config_path) or {}
+        design_result = _read_json(design_result_path) or {}
+        continuous_result = _read_json(continuous_result_path) or {}
+        maneuver = _read_json(config_dir / "maneuver_strategy.json") or {}
+        launch_config = _read_json(launch_config_path) or {}
+        launch_meta = _read_json(launch_meta_path) or {}
+        tracking_config = _read_json(tracking_config_path) or {}
+        tracking_results = _read_json(tracking_results_path) or {}
+        flight_config = _read_json(flight_config_path) or {}
+        flight_reference = _read_json(flight_reference_path) or {}
 
-        satellite_status = "Planned"
-        maneuver_status = "Ready" if orbit_rows else ("Planned" if maneuver else "Disconnected")
-        launch_status = "Ready" if launch_rows else ("Loading" if sample_rows else "Planned")
-        tracking_status = "Ready" if tracking_config and launch_rows else ("Planned" if tracking_config else "Disconnected")
+        orbit_rows = _count_csv_rows(orbit_history_path)
+        final_orbit_row = self._last_csv_row(orbit_history_path)
+        launch_rows = _count_csv_rows(launch_results_path)
+        sample_rows = _count_csv_rows(launch_samples_path)
+        tracking_assets = self._count_enabled_assets(tracking_config)
+        launch_first = self._first_csv_row(launch_results_path)
+        tracking_entries = self._count_tracking_entries(tracking_results)
+        tracking_latest = self._format_tracking_window_key(str(tracking_results.get("latest_window_key") or ""))
+        flight_events = self._count_flight_events(flight_config)
+        flight_reference_segments = self._count_reference_segments(flight_reference)
+        chart_count = self._count_files(charts_dir, {".png", ".svg"})
+        stk_export_count = self._count_files(stk_dir, {".e", ".a"}) + self._count_files(stk_link_dir, {".e", ".a"})
+        constraints = self._count_enabled_constraints(launch_config)
+        chain_files = [
+            design_config_path,
+            design_result_path,
+            continuous_result_path,
+            maneuver_config_path,
+            orbit_history_path,
+            launch_samples_path,
+            launch_results_path,
+            tracking_results_path,
+            flight_config_path,
+            flight_reference_path,
+            charts_dir / "altitude_trend.png",
+            charts_dir / "velocity_trend.png",
+        ]
+        chain_ready = sum(1 for path in chain_files if path.exists())
+        launch_meta_ok = bool(launch_meta) and launch_meta.get("maneuver_strategy_hash") == _file_hash(maneuver_config_path)
+        orbit_history_hash_ok = bool(launch_meta) and launch_meta.get("orbit_history_hash") == _file_hash(orbit_history_path)
+
+        satellite_status = "Ready" if satellite_config else "Planned"
+        design_status = "Ready" if design_result and continuous_result else ("Loading" if design_result else ("Planned" if design_config else "Disconnected"))
+        maneuver_status = "Ready" if maneuver and orbit_rows else ("Planned" if maneuver else "Disconnected")
+        launch_status = "Ready" if launch_rows and sample_rows and launch_meta_ok and orbit_history_hash_ok else (
+            "Loading" if sample_rows or launch_rows else ("Planned" if launch_config else "Disconnected")
+        )
+        tracking_status = "Ready" if tracking_entries else ("Planned" if tracking_config and launch_rows else ("Loading" if launch_rows else "Disconnected"))
+        flight_status = "Ready" if flight_events and flight_reference_segments else ("Planned" if flight_config else "Disconnected")
+        visualization_status = "Ready" if chart_count else ("Planned" if orbit_rows else "Disconnected")
+        stk_status = "Ready" if stk_export_count else ("Planned" if maneuver and flight_events else "Disconnected")
         spice_status = self._spice_runtime_status
         ai_status = "Ready" if ai_report.exists() else "Planned"
+        risk_items = 0
+        risk_items += 0 if launch_meta_ok and orbit_history_hash_ok else 1
+        risk_items += 0 if tracking_entries else 1
+        risk_items += 0 if flight_reference_segments else 1
+        risk_items += 0 if chart_count else 1
+        risk_items += 0 if stk_export_count else 1
+        risk_items += 0 if spice_status == "Ready" else 1
 
         self._title_label.setText(self._project.name)
         self._project_path_label.setText(str(root))
         self._project_updated_label.setText(self._i18n.t("dashboard.project_updated", updated=self._project.updated_utc))
 
-        self._metrics["orbit_samples"].set_metric(
-            self._i18n.t("dashboard.kpi.orbit_samples"),
-            str(orbit_rows),
-            self._i18n.t("dashboard.kpi.orbit_samples.caption"),
+        self._metrics["data_chain"].set_metric(
+            self._i18n.t("dashboard.kpi.data_chain"),
+            f"{chain_ready}/{len(chain_files)}",
+            self._i18n.t("dashboard.kpi.data_chain.caption"),
         )
         self._metrics["maneuver_count"].set_metric(
             self._i18n.t("dashboard.kpi.maneuver_count"),
@@ -573,18 +663,42 @@ class DashboardPage(QtWidgets.QWidget):
             str(launch_rows),
             self._i18n.t("dashboard.kpi.launch_windows.caption", samples=sample_rows),
         )
-        self._metrics["tracking_assets"].set_metric(
-            self._i18n.t("dashboard.kpi.tracking_assets"),
-            str(tracking_assets),
-            self._i18n.t("dashboard.kpi.tracking_assets.caption"),
+        self._metrics["risk_items"].set_metric(
+            self._i18n.t("dashboard.kpi.risk_items"),
+            str(risk_items),
+            self._i18n.t("dashboard.kpi.risk_items.caption"),
         )
 
         self._set_card(
             "satellite",
             "dashboard.card.satellite",
             satellite_status,
-            self._i18n.t("dashboard.summary.satellite_body"),
-            [0.0, 0.0],
+            self._i18n.t(
+                "dashboard.summary.satellite_body",
+                config=_fmt_file_state(satellite_config_path),
+                model=str(satellite_config.get("model_path") or "参数化模型"),
+            ),
+            [1.0 if satellite_config else 0.0, 1.0],
+        )
+
+        burns = design_result.get("burns") if isinstance(design_result.get("burns"), list) else []
+        summary = design_result.get("summary") if isinstance(design_result.get("summary"), dict) else {}
+        continuous_params = (
+            continuous_result.get("parameters") if isinstance(continuous_result.get("parameters"), list) else []
+        )
+        self._set_card(
+            "design_maneuver",
+            "dashboard.card.design_maneuver",
+            design_status,
+            self._i18n.t(
+                "dashboard.summary.design_maneuver_body",
+                pulse="已归档" if design_result else "未生成",
+                continuous="已归档" if continuous_result else "未生成",
+                q=str(summary.get("q_sequence") or "--"),
+                burns=len(burns),
+                continuous_count=len(continuous_params),
+            ),
+            [float(len(burns)), float(len(continuous_params)), float(len(burns) + len(continuous_params))],
         )
 
         self._set_card(
@@ -603,7 +717,7 @@ class DashboardPage(QtWidgets.QWidget):
                 if final_orbit_row
                 else "--",
             ),
-            self._numeric_csv_series(data_dir / "full_orbit_history.csv", "mass_kg", limit=80),
+            self._numeric_csv_series(orbit_history_path, "mass_kg", limit=80),
         )
 
         self._set_card(
@@ -615,6 +729,10 @@ class DashboardPage(QtWidgets.QWidget):
                 windows=launch_rows,
                 samples=sample_rows,
                 step=_fmt_float(launch_config.get("sampling_step_min"), 3, " min"),
+                first=str(launch_first.get("窗口前沿 (北京时间)") or "--") if launch_first else "--",
+                limit=str(launch_first.get("窗口后沿限制条件") or "--") if launch_first else "--",
+                meta="匹配" if launch_meta_ok and orbit_history_hash_ok else "需刷新",
+                constraints=constraints,
             ),
             [float(sample_rows), float(launch_rows + 1)],
         )
@@ -627,9 +745,52 @@ class DashboardPage(QtWidgets.QWidget):
                 "dashboard.summary.tracking_arc_body",
                 assets=tracking_assets,
                 windows=launch_rows,
-                config="OK" if tracking_config else "--",
+                config="已配置" if tracking_config else "--",
+                entries=tracking_entries,
+                latest=tracking_latest or "--",
             ),
             [float(tracking_assets), float(launch_rows), float(max(tracking_assets, launch_rows))],
+        )
+
+        self._set_card(
+            "flight_program",
+            "dashboard.card.flight_program",
+            flight_status,
+            self._i18n.t(
+                "dashboard.summary.flight_program_body",
+                events=flight_events,
+                references=flight_reference_segments,
+                mode=str(flight_reference.get("launch_selection_mode") or "--") if flight_reference else "--",
+                t0=str(flight_reference.get("selected_t0_utc") or "--") if flight_reference else "--",
+            ),
+            [float(flight_events), float(flight_reference_segments), float(max(flight_events, flight_reference_segments))],
+        )
+
+        self._set_card(
+            "data_visualization",
+            "dashboard.card.data_visualization",
+            visualization_status,
+            self._i18n.t(
+                "dashboard.summary.data_visualization_body",
+                charts=chart_count,
+                orbit_rows=orbit_rows,
+                altitude=_fmt_file_state(charts_dir / "altitude_trend.png"),
+                velocity=_fmt_file_state(charts_dir / "velocity_trend.png"),
+            ),
+            [float(orbit_rows), float(chart_count), float(max(chart_count, 1))],
+        )
+
+        self._set_card(
+            "stk_link",
+            "dashboard.card.stk_link",
+            stk_status,
+            self._i18n.t(
+                "dashboard.summary.stk_link_body",
+                exports=stk_export_count,
+                ephemeris=_fmt_file_state(stk_dir / "maneuver_strategy_preview.e"),
+                assets=tracking_assets,
+            ),
+            [float(stk_export_count), float(tracking_assets), float(max(stk_export_count, tracking_assets))],
         )
 
         self._set_card(
@@ -653,6 +814,7 @@ class DashboardPage(QtWidgets.QWidget):
             self._i18n.t(
                 "dashboard.summary.ai_body",
                 report=str(ai_report) if ai_report.exists() else "--",
+                size=self._format_bytes(ai_report.stat().st_size) if ai_report.exists() else "--",
             ),
             [0.2, 0.35, 0.42, 0.55, 0.62, 0.8 if ai_report.exists() else 0.5],
         )
@@ -660,15 +822,30 @@ class DashboardPage(QtWidgets.QWidget):
         self._timeline.set_items(
             [
                 (self._i18n.t("dashboard.timeline.satellite"), satellite_status),
+                (self._i18n.t("dashboard.timeline.design"), design_status),
                 (self._i18n.t("dashboard.timeline.maneuver"), maneuver_status),
                 (self._i18n.t("dashboard.timeline.launch"), launch_status),
                 (self._i18n.t("dashboard.timeline.tracking"), tracking_status),
+                (self._i18n.t("dashboard.timeline.flight"), flight_status),
+                (self._i18n.t("dashboard.timeline.visualization"), visualization_status),
+                (self._i18n.t("dashboard.timeline.stk"), stk_status),
                 (self._i18n.t("dashboard.timeline.spice"), spice_status),
                 (self._i18n.t("dashboard.timeline.ai"), ai_status),
             ]
         )
 
-        statuses = [satellite_status, maneuver_status, launch_status, tracking_status, spice_status, ai_status]
+        statuses = [
+            satellite_status,
+            design_status,
+            maneuver_status,
+            launch_status,
+            tracking_status,
+            flight_status,
+            visualization_status,
+            stk_status,
+            spice_status,
+            ai_status,
+        ]
         readiness = sum(_status_rank(status) for status in statuses) / (len(statuses) * 3)
         self._quick_hint_label.setText(self._i18n.t("dashboard.quick_hint", readiness=f"{readiness * 100:.0f}%"))
 
@@ -678,6 +855,11 @@ class DashboardPage(QtWidgets.QWidget):
         for row in _read_csv_rows(path):
             last = row
         return last
+
+    @staticmethod
+    def _first_csv_row(path: Path) -> dict[str, str] | None:
+        rows = _read_csv_rows(path, limit=1)
+        return rows[0] if rows else None
 
     @staticmethod
     def _numeric_csv_series(path: Path, column: str, *, limit: int) -> list[float]:
@@ -703,6 +885,67 @@ class DashboardPage(QtWidgets.QWidget):
                 continue
             total += sum(1 for item in entries if isinstance(item, dict) and bool(item.get("enabled", True)))
         return total
+
+    @staticmethod
+    def _count_enabled_constraints(config: dict[str, Any]) -> int:
+        rows = config.get("constraint_rows")
+        if not isinstance(rows, list):
+            return 0
+        return sum(1 for item in rows if isinstance(item, dict) and bool(item.get("enabled", True)))
+
+    @staticmethod
+    def _count_tracking_entries(payload: dict[str, Any]) -> int:
+        entries = payload.get("entries")
+        if isinstance(entries, dict):
+            return len(entries)
+        raw_results = payload.get("results")
+        return 1 if isinstance(raw_results, list) and raw_results else 0
+
+    @staticmethod
+    def _count_flight_events(payload: dict[str, Any]) -> int:
+        for key in ("events", "timeline", "program"):
+            value = payload.get(key)
+            if isinstance(value, list):
+                return len(value)
+        phases = payload.get("phases")
+        return len(phases) if isinstance(phases, list) else 0
+
+    @staticmethod
+    def _count_reference_segments(payload: dict[str, Any]) -> int:
+        total = 0
+        results = payload.get("results")
+        if not isinstance(results, list):
+            return 0
+        for result in results:
+            if not isinstance(result, dict):
+                continue
+            segments = result.get("segments")
+            if isinstance(segments, list):
+                total += len(segments)
+        return total
+
+    @staticmethod
+    def _count_files(directory: Path, suffixes: set[str]) -> int:
+        if not directory.exists():
+            return 0
+        return sum(1 for path in directory.iterdir() if path.is_file() and path.suffix.lower() in suffixes)
+
+    @staticmethod
+    def _format_tracking_window_key(key: str) -> str:
+        if not key:
+            return ""
+        parts = key.split("|")
+        if len(parts) >= 3:
+            return f"{parts[0]} -> {parts[1]} ({parts[2]} min)"
+        return key
+
+    @staticmethod
+    def _format_bytes(size: int) -> str:
+        if size < 1024:
+            return f"{size} B"
+        if size < 1024 * 1024:
+            return f"{size / 1024:.1f} KB"
+        return f"{size / (1024 * 1024):.1f} MB"
 
     def _set_card(self, key: str, title_key: str, status: str, body: str, points: list[float]) -> None:
         card = self._cards[key]
