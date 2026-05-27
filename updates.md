@@ -702,6 +702,10 @@
 - 提交：`aef49df`
 - 影响文件：自动刷新记录，无额外文件。
 
-## 2026-05-27T21:26:46+08:00 | Refine tracking arc settings dialog
-- 提交：`本次提交`
+## 2026-05-27T21:26:52+08:00 | Refine tracking arc settings dialog
+- 提交：`c9cb850`
 - 影响文件：`src/smart/ui/widgets/tracking_arc_page.py`、`tests/test_tracking_arc.py`、`HANDOFF.md`。
+
+## 2026-05-27T21:31:15+08:00 | Compact tracking arc settings dialog
+- 提交：`本次提交`
+- 影响文件：`src/smart/ui/widgets/tracking_arc_page.py`、`HANDOFF.md`。

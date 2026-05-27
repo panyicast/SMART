@@ -416,8 +416,8 @@ class _TrackingArcSettingsDialog(QtWidgets.QDialog):
         self.setObjectName("trackingArcSettingsDialog")
         self.setWindowTitle("跟踪弧段主要设置")
         self.setWindowFlag(QtCore.Qt.WindowType.FramelessWindowHint, True)
-        self.resize(1080, 760)
-        self.setMinimumSize(940, 680)
+        self.resize(860, 760)
+        self.setMinimumSize(780, 680)
         self._drag_position: QtCore.QPoint | None = None
         self._apply_dialog_style()
 
@@ -1704,7 +1704,7 @@ class TrackingArcPage(QtWidgets.QWidget):
         font_metrics = table.fontMetrics()
         header_metrics = header.fontMetrics()
         minimums = [58, 150, 104, 104, 116]
-        maximums = [70, 260, 150, 150, 170]
+        maximums = [70, 190, 132, 132, 150]
         widths: list[int] = []
         for column in range(table.columnCount()):
             header_text = table.horizontalHeaderItem(column).text() if table.horizontalHeaderItem(column) is not None else ""
@@ -1718,9 +1718,9 @@ class TrackingArcPage(QtWidgets.QWidget):
         viewport_width = table.viewport().width()
         if viewport_width <= 0:
             viewport_width = table.width() - table.frameWidth() * 2
-        extra = max(0, viewport_width - sum(widths))
-        if extra:
-            widths[1] += extra
+        content_width = sum(widths)
+        table.setMinimumWidth(content_width + table.frameWidth() * 2 + 2)
+        table.setMaximumWidth(content_width + table.frameWidth() * 2 + 2)
         for column, width in enumerate(widths):
             header.setSectionResizeMode(column, QtWidgets.QHeaderView.ResizeMode.Fixed)
             table.setColumnWidth(column, width)
