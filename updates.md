@@ -734,6 +734,10 @@
 - 提交：`7d737f8`
 - 影响文件：`src/smart/ui/i18n.py`、`src/smart/ui/widgets/dashboard_page.py`、`HANDOFF.md`。
 
-## 2026-05-29T23:28:54+08:00 | Remove legacy F1 project
-- 提交：`本次提交`
+## 2026-05-29T23:29:02+08:00 | Remove legacy F1 project
+- 提交：`5267552`
 - 影响文件：`HANDOFF.md`、`projects/F1/config/maneuver_strategy.json`、`projects/F1/config/satellite_status.json`、`projects/F1/data/orbit_elements.json`、`projects/F1/smart_project.json`、`projects/F1/charts/altitude_trend.png`、`projects/F1/charts/velocity_trend.png`。
+
+## 2026-05-29T23:34:41+08:00 | Remove stale F4 generated artifacts
+- 提交：`本次提交`
+- 影响文件：`HANDOFF.md`、`projects/F4/charts/maneuver_transfer.png`、`projects/F4/data/launch_20260515_1640_bjt_first_maneuver_theta_s.csv`、`projects/F4/data/stk_link/20260512_114224/F4_attitude.a`、`projects/F4/data/stk_link/20260512_114224/F4_orbit.e`、`projects/F4/data/stk_link/20260512_114224/Tianlian_1_geo.e`、`projects/F4/data/stk_link/20260512_132638/F4_attitude.a`、`projects/F4/data/stk_link/20260512_132638/F4_orbit.e` 等 27 个文件。
