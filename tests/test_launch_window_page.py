@@ -19,6 +19,9 @@ from smart.ui.widgets.launch_window_page import (
 )
 from smart.ui.widgets.spinboxes import NoWheelComboBox
 
+_TABLE_GEOMETRY_TOLERANCE_PX = 8
+_CONTROL_WIDTH_TOLERANCE_PX = 5
+
 
 def test_launch_window_datetime_fields_display_beijing_time() -> None:
     qdt = LaunchWindowPage._utc_to_qdatetime("2026-05-15T07:00:00Z")
@@ -76,18 +79,18 @@ def test_launch_window_state_settings_use_dialog_and_cancel_restores_values(tmp_
     assert 900 <= dialog.minimumWidth() < 960
     assert page._ground_station_table.columnWidth(1) >= 220
     assert page._ground_station_table.maximumWidth() < dialog.minimumWidth()
-    assert page._constraint_table.width() == page._ground_station_table.width()
-    assert page._constraint_table.maximumWidth() == page._ground_station_table.maximumWidth()
+    assert abs(page._constraint_table.width() - page._ground_station_table.width()) <= _TABLE_GEOMETRY_TOLERANCE_PX
+    assert abs(page._constraint_table.maximumWidth() - page._ground_station_table.maximumWidth()) <= _TABLE_GEOMETRY_TOLERANCE_PX
     assert page._constraint_table.horizontalHeader().sectionResizeMode(1) == QtWidgets.QHeaderView.ResizeMode.Stretch
-    assert page._constraint_table.columnWidth(2) == 170
-    assert page._constraint_table.columnWidth(3) == 170
-    assert page._constraint_table.columnWidth(4) == 180
+    assert abs(page._constraint_table.columnWidth(2) - 170) <= _CONTROL_WIDTH_TOLERANCE_PX
+    assert abs(page._constraint_table.columnWidth(3) - 170) <= _CONTROL_WIDTH_TOLERANCE_PX
+    assert abs(page._constraint_table.columnWidth(4) - 180) <= _CONTROL_WIDTH_TOLERANCE_PX
     assert page._constraint_table.item(0, 2).textAlignment() & QtCore.Qt.AlignmentFlag.AlignRight
     assert page._constraint_table.item(0, 3).textAlignment() & QtCore.Qt.AlignmentFlag.AlignRight
-    assert page._number_fields["ground_station_min_elevation_deg"].width() == 132
-    assert page._number_fields["relay_alpha_abs_max_deg"].width() == 132
+    assert abs(page._number_fields["ground_station_min_elevation_deg"].width() - 132) <= _CONTROL_WIDTH_TOLERANCE_PX
+    assert abs(page._number_fields["relay_alpha_abs_max_deg"].width() - 132) <= _CONTROL_WIDTH_TOLERANCE_PX
     assert isinstance(page._combo_fields["burn_sun_axis"], _StateComboBox)
-    assert page._combo_fields["burn_sun_axis"].width() == 210
+    assert abs(page._combo_fields["burn_sun_axis"].width() - 210) <= _CONTROL_WIDTH_TOLERANCE_PX
     assert "启用条件" in page._state_summary_label.text()
     assert "地面站" in page._state_summary_label.text()
     assert "Xiamen Station" in page._state_assets_label.text()

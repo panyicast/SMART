@@ -25,8 +25,11 @@ except Exception:  # pragma: no cover - optional runtime fallback
     solve_ivp = None
 
 from smart.domain.models import OrbitalElements
+from smart.logging import get_logger
 from smart.services.earth_orientation import format_utc, greenwich_angle_at_utc, parse_utc, utc_now_iso_z
 from smart.services.thrust_direction import local_horizontal_yaw_direction
+
+_log = get_logger(__name__)
 
 BEIJING_OFFSET = timedelta(hours=8)
 G0_M_S2 = 9.80665
@@ -1878,7 +1881,8 @@ def _integrate_low_thrust_to_target_metric(
             elapsed_burn_s += step_s
             try:
                 current_value = _continuous_target_metric_value(config, state[:3], state[3:6], target_metric)
-            except Exception:
+            except Exception as exc:
+                _log.debug("Continuous thrust target metric evaluation failed at s=%.1f: %s", current_s, exc)
                 return None
             current_error = target_sign * (current_value - float(target_value_km))
             if current_error >= 0.0 and previous_error <= 0.0:
@@ -2385,7 +2389,8 @@ def _append_continuous_orbit_history_row(
             np.asarray(v_km_s, dtype=float),
             mu=float(config["earth"]["mu_km3_s2"]),
         )
-    except Exception:
+    except Exception as exc:
+        _log.debug("Orbital element conversion failed at elapsed_time_s=%.1f, using NaN: %s", elapsed_time_s, exc)
         a_km = e_val = inc_rad = raan_rad = argp_rad = true_rad = float("nan")
     lon_deg_e = _longitude_deg(config, np.asarray(r_km, dtype=float), elapsed_time_s)
     lat_deg, alt_km = _spherical_latitude_altitude(config, np.asarray(r_km, dtype=float), elapsed_time_s)
@@ -2985,6 +2990,7 @@ def _v51_template_points(
         try:
             rp_full = _v51_rp_from_x(config, front_count, fixed_rp, variable_indices, [full[index - 1] for index in variable_indices])
         except Exception:
+            # Candidate templates can fall outside hard bounds; skip them without per-candidate log spam.
             continue
         x = np.asarray([rp_full[index - 1] for index in variable_indices], dtype=float)
         key = tuple(round(float(value), 1) for value in x)
@@ -3883,6 +3889,7 @@ def _v51_hard_objective(
             apsis_cache=apsis_cache,
         )
     except Exception:
+        # Optimization probes invalid candidates often; return a high penalty instead of noisy logs.
         return 1.0e18
     violations = _v51_feasibility_violations(config, rec)
     violation_sum = sum(value * value for value in violations.values())
@@ -5614,8 +5621,8 @@ def _coast_numerical_step_s(config: dict[str, Any], r: np.ndarray | None = None,
         if math.isfinite(float(a_km)) and float(a_km) > 0.0:
             period_s = 2.0 * math.pi * math.sqrt(float(a_km) ** 3 / float(earth["mu_km3_s2"]))
             step_s = min(step_s, max(1.0, period_s / 300.0))
-    except Exception:
-        pass
+    except Exception as exc:
+        _log.debug("Coast step orbital element conversion failed, using default step_s: %s", exc)
     return step_s
 
 
@@ -5770,7 +5777,8 @@ def _next_apsis_numerical_j2(
     try:
         a_km, *_ = _rv_to_coe(state0[:3], state0[3:6], mu=float(config["earth"]["mu_km3_s2"]))
         period_s = 2.0 * math.pi * math.sqrt(float(a_km) ** 3 / float(config["earth"]["mu_km3_s2"]))
-    except Exception:
+    except Exception as exc:
+        _log.debug("Apsis period estimate failed, using coarse duration fallback: %s", exc)
         period_s = step_s * 1000.0
     max_duration_s = max(step_s * 10.0, period_s * (target_count + 1.5))
 
