@@ -730,6 +730,10 @@
 - 提交：`06ebfe5`
 - 影响文件：`src/smart/services/project_workspace.py`、`src/smart/ui/main_window.py`、`tests/test_project_workspace.py`、`README.md`、`HANDOFF.md`、`projects/F1/config/orbit_initialization.json`、`projects/F4/config/orbit_initialization.json`、`projects/F4/data/ai_project_analysis.md`。
 
-## 2026-05-27T23:30:36+08:00 | Redesign project dashboard overview
-- 提交：`本次提交`
+## 2026-05-27T23:30:42+08:00 | Redesign project dashboard overview
+- 提交：`7d737f8`
 - 影响文件：`src/smart/ui/i18n.py`、`src/smart/ui/widgets/dashboard_page.py`、`HANDOFF.md`。
+
+## 2026-05-29T23:28:54+08:00 | Remove legacy F1 project
+- 提交：`本次提交`
+- 影响文件：`HANDOFF.md`、`projects/F1/config/maneuver_strategy.json`、`projects/F1/config/satellite_status.json`、`projects/F1/data/orbit_elements.json`、`projects/F1/smart_project.json`、`projects/F1/charts/altitude_trend.png`、`projects/F1/charts/velocity_trend.png`。
