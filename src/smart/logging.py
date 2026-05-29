@@ -42,6 +42,7 @@ def _configure_root() -> None:
 
         root = logging.getLogger("smart")
         root.setLevel(level)
+        root.propagate = False
         if not root.handlers:
             root.addHandler(handler)
         _CONFIGURED = True
