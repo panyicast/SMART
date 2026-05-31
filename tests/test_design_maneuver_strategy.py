@@ -389,6 +389,8 @@ def test_design_maneuver_strategy_page_uses_independent_config(tmp_path, monkeyp
     assert page._parameter_config_button.text() == "参数配置"
     assert page._advanced_settings_button.text() == "高级设置"
     assert not hasattr(page, "_import_baseline_button")
+    assert not hasattr(page, "_reload_button")
+    assert not hasattr(page, "_save_button")
     assert page._plan_button.property("variant") == "primaryAction"
     assert page._find_feasible_q_button.text() == "查找全部可行q"
     assert page._find_feasible_q_button.property("variant") == "secondary"

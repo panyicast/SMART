@@ -254,8 +254,8 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         button_card = QtWidgets.QFrame()
         self._config_panel = button_card
         button_card.setProperty("role", "card")
-        button_card.setMinimumHeight(194)
-        button_card.setMaximumHeight(218)
+        button_card.setMinimumHeight(148)
+        button_card.setMaximumHeight(176)
         button_layout = QtWidgets.QVBoxLayout(button_card)
         self._config_panel_layout = button_layout
         button_layout.setContentsMargins(18, 14, 18, 14)
@@ -285,23 +285,13 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._plan_button.setProperty("variant", "primaryAction")
         self._prepare_action_button(self._plan_button, min_width=190, height=44)
         self._plan_button.clicked.connect(self.run_planner)
-        button_grid.addWidget(self._plan_button, 0, 2)
-        self._reload_button = QtWidgets.QPushButton()
-        self._reload_button.setProperty("variant", "secondary")
-        self._prepare_action_button(self._reload_button, min_width=170, height=42)
-        self._reload_button.clicked.connect(self.refresh_from_workspace)
-        button_grid.addWidget(self._reload_button, 1, 0)
-        self._save_button = QtWidgets.QPushButton()
-        self._save_button.setProperty("variant", "secondary")
-        self._prepare_action_button(self._save_button, min_width=170, height=42)
-        self._save_button.clicked.connect(self.save_config)
-        button_grid.addWidget(self._save_button, 1, 1)
+        button_grid.addWidget(self._plan_button, 1, 0)
         self._find_feasible_q_button = QtWidgets.QPushButton()
         self._find_feasible_q_button.setProperty("variant", "secondary")
         self._prepare_action_button(self._find_feasible_q_button, min_width=190, height=42)
         self._find_feasible_q_button.clicked.connect(self.find_feasible_q_sequences)
-        button_grid.addWidget(self._find_feasible_q_button, 1, 2)
-        for column in range(3):
+        button_grid.addWidget(self._find_feasible_q_button, 1, 1)
+        for column in range(2):
             button_grid.setColumnStretch(column, 1)
             button_grid.setColumnMinimumWidth(column, 170)
         button_layout.addLayout(button_grid)
@@ -1147,8 +1137,6 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         for widget in (
             self._parameter_config_button,
             self._advanced_settings_button,
-            self._reload_button,
-            self._save_button,
             self._plan_button,
             self._find_feasible_q_button,
             self._continuous_thrust_button,
@@ -1236,8 +1224,6 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         for widget in (
             self._parameter_config_button,
             self._advanced_settings_button,
-            self._reload_button,
-            self._save_button,
             self._plan_button,
             self._find_feasible_q_button,
             self._continuous_thrust_button,
@@ -1273,8 +1259,6 @@ class DesignManeuverStrategyPage(QtWidgets.QWidget):
         self._config_overview_header_label.setText(t("design_maneuver.config_overview_header"))
         self._parameter_config_button.setText(t("design_maneuver.parameter_config_button"))
         self._advanced_settings_button.setText(t("design_maneuver.advanced_settings_button"))
-        self._reload_button.setText(f"+  {t('design_maneuver.reload_button')}")
-        self._save_button.setText(t("design_maneuver.save_button"))
         self._plan_button.setText(t("design_maneuver.plan_button"))
         self._find_feasible_q_button.setText("查找全部可行q")
         self._continuous_thrust_header_label.setText("连续推力模型参数")
