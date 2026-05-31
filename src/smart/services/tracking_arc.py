@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
+import zipfile
+import xml.etree.ElementTree as ET
 
 import numpy as np
 
@@ -28,6 +30,10 @@ from smart.services.launch_window import (
 TRACKING_ARC_POINT_LEADING = "leading"
 TRACKING_ARC_POINT_MIDPOINT = "midpoint"
 TRACKING_ARC_POINT_TRAILING = "trailing"
+_BEIJING_TZ_OFFSET = timedelta(hours=8)
+_XLSX_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+_XLSX_REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +67,18 @@ class TrackingArcOrbitResult:
     asset_summaries: list[TrackingArcAssetSummary]
     shadow_total_min: float
     maneuver_count: int
+
+
+def export_tracking_arc_results_xlsx(results: list[TrackingArcOrbitResult], path: str | Path) -> Path:
+    if not results:
+        raise ValueError("No tracking arc results to export.")
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    if output_path.suffix.lower() != ".xlsx":
+        output_path = output_path.with_suffix(".xlsx")
+    rows = _tracking_arc_export_rows(results)
+    _write_tracking_arc_xlsx(output_path, "跟踪弧段结果", rows)
+    return output_path
 
 
 def compute_tracking_arcs_for_window(
@@ -367,6 +385,203 @@ def _segment_duration_min(segment: TrackingArcSegment) -> float:
     start_utc = parse_utc(segment.start_utc)
     end_utc = parse_utc(segment.end_utc)
     return max(0.0, (end_utc - start_utc).total_seconds() / 60.0)
+
+
+def _tracking_arc_export_rows(results: list[TrackingArcOrbitResult]) -> list[list[Any]]:
+    rows: list[list[Any]] = [
+        ["轨道汇总"],
+        [
+            "轨道",
+            "发射时刻(UTC)",
+            "发射时刻(北京时间)",
+            "入轨T0(UTC)",
+            "入轨T0(北京时间)",
+            "时间线开始(北京时间)",
+            "时间线结束(北京时间)",
+            "地影总时长/min",
+            "点火次数",
+        ],
+    ]
+    for result in results:
+        rows.append(
+            [
+                result.point_label,
+                result.launch_utc,
+                _format_beijing_export(result.launch_utc),
+                result.t0_utc,
+                _format_beijing_export(result.t0_utc),
+                _format_beijing_export(result.timeline_start_utc),
+                _format_beijing_export(result.timeline_end_utc),
+                round(result.shadow_total_min, 6),
+                result.maneuver_count,
+            ]
+        )
+
+    rows.extend(
+        [
+            [],
+            ["资源汇总"],
+            ["轨道", "类型", "资源", "跟踪段数", "总时长/min", "最长连续/min"],
+        ]
+    )
+    for result in results:
+        for summary in result.asset_summaries:
+            rows.append(
+                [
+                    result.point_label,
+                    "地面站" if summary.asset_type == "ground" else "中继星",
+                    summary.name,
+                    summary.interval_count,
+                    round(summary.total_duration_min, 6),
+                    round(summary.longest_duration_min, 6),
+                ]
+            )
+
+    rows.extend(
+        [
+            [],
+            ["弧段明细"],
+            [
+                "轨道",
+                "行",
+                "类型",
+                "开始(UTC)",
+                "开始(北京时间)",
+                "结束(UTC)",
+                "结束(北京时间)",
+                "时长/min",
+                "提示",
+            ],
+        ]
+    )
+    for result in results:
+        for segment in result.segments:
+            rows.append(
+                [
+                    result.point_label,
+                    segment.row_label,
+                    _segment_kind_label(segment.kind),
+                    segment.start_utc,
+                    _format_beijing_export(segment.start_utc),
+                    segment.end_utc,
+                    _format_beijing_export(segment.end_utc),
+                    round(_segment_duration_min(segment), 6),
+                    segment.tooltip,
+                ]
+            )
+    return rows
+
+
+def _segment_kind_label(kind: str) -> str:
+    return {
+        "burn": "点火",
+        "ground": "地面站",
+        "relay": "中继星",
+        "shadow": "地影",
+    }.get(kind, kind)
+
+
+def _format_beijing_export(value: str | datetime) -> str:
+    utc_value = parse_utc(value)
+    return (utc_value + _BEIJING_TZ_OFFSET).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _write_tracking_arc_xlsx(path: Path, sheet_name: str, rows: list[list[Any]]) -> None:
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", _xlsx_content_types_xml())
+        archive.writestr("_rels/.rels", _xlsx_root_rels_xml())
+        archive.writestr("xl/workbook.xml", _xlsx_workbook_xml(sheet_name))
+        archive.writestr("xl/_rels/workbook.xml.rels", _xlsx_workbook_rels_xml())
+        archive.writestr("xl/styles.xml", _xlsx_styles_xml())
+        archive.writestr("xl/worksheets/sheet1.xml", _xlsx_sheet_xml(rows))
+
+
+def _xlsx_sheet_xml(rows: list[list[Any]]) -> str:
+    ET.register_namespace("", _XLSX_NS)
+    worksheet = ET.Element(f"{{{_XLSX_NS}}}worksheet")
+    max_columns = max((len(row) for row in rows), default=1)
+    ET.SubElement(worksheet, f"{{{_XLSX_NS}}}dimension", {"ref": f"A1:{_xlsx_col_name(max_columns)}{max(len(rows), 1)}"})
+    sheet_views = ET.SubElement(worksheet, f"{{{_XLSX_NS}}}sheetViews")
+    ET.SubElement(sheet_views, f"{{{_XLSX_NS}}}sheetView", {"workbookViewId": "0"})
+    cols = ET.SubElement(worksheet, f"{{{_XLSX_NS}}}cols")
+    ET.SubElement(cols, f"{{{_XLSX_NS}}}col", {"min": "1", "max": "2", "width": "24", "customWidth": "1"})
+    ET.SubElement(cols, f"{{{_XLSX_NS}}}col", {"min": "3", "max": str(max_columns), "width": "20", "customWidth": "1"})
+    sheet_data = ET.SubElement(worksheet, f"{{{_XLSX_NS}}}sheetData")
+    for row_index, values in enumerate(rows, start=1):
+        row = ET.SubElement(sheet_data, f"{{{_XLSX_NS}}}row", {"r": str(row_index)})
+        section_row = len(values) == 1 and bool(values[0])
+        for col_index, value in enumerate(values, start=1):
+            style_id = 1 if section_row or row_index in {2, 6} or (row_index > 6 and values and values[0] == "轨道") else 2
+            _append_xlsx_cell(row, row_index, col_index, value, style_id=style_id)
+    return ET.tostring(worksheet, encoding="utf-8", xml_declaration=True).decode("utf-8")
+
+
+def _append_xlsx_cell(row: ET.Element, row_index: int, col_index: int, value: Any, *, style_id: int) -> None:
+    cell = ET.SubElement(row, f"{{{_XLSX_NS}}}c", {"r": f"{_xlsx_col_name(col_index)}{row_index}", "s": str(style_id)})
+    if value is None or value == "":
+        return
+    if isinstance(value, str):
+        cell.set("t", "inlineStr")
+        inline = ET.SubElement(cell, f"{{{_XLSX_NS}}}is")
+        text = ET.SubElement(inline, f"{{{_XLSX_NS}}}t")
+        text.text = value
+        return
+    value_node = ET.SubElement(cell, f"{{{_XLSX_NS}}}v")
+    value_node.text = f"{float(value):.12g}"
+
+
+def _xlsx_col_name(index: int) -> str:
+    name = ""
+    while index > 0:
+        index, remainder = divmod(index - 1, 26)
+        name = chr(65 + remainder) + name
+    return name
+
+
+def _xlsx_content_types_xml() -> str:
+    return """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+</Types>"""
+
+
+def _xlsx_root_rels_xml() -> str:
+    return f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="{_REL_NS}">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>"""
+
+
+def _xlsx_workbook_rels_xml() -> str:
+    return f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="{_REL_NS}">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>"""
+
+
+def _xlsx_workbook_xml(sheet_name: str) -> str:
+    escaped_name = sheet_name.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+    return f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="{_XLSX_NS}" xmlns:r="{_XLSX_REL_NS}">
+  <sheets><sheet name="{escaped_name}" sheetId="1" r:id="rId1"/></sheets>
+</workbook>"""
+
+
+def _xlsx_styles_xml() -> str:
+    return f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="{_XLSX_NS}">
+  <fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>
+  <fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFD9EAF7"/><bgColor indexed="64"/></patternFill></fill></fills>
+  <borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color auto="1"/></left><right style="thin"><color auto="1"/></right><top style="thin"><color auto="1"/></top><bottom style="thin"><color auto="1"/></bottom><diagonal/></border></borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf></cellXfs>
+  <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>"""
 
 
 def _epoch_from_elapsed(t0_utc: datetime, elapsed_min: float) -> datetime:

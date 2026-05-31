@@ -3,6 +3,8 @@ from __future__ import annotations
 import csv
 from dataclasses import asdict
 from pathlib import Path
+import zipfile
+import xml.etree.ElementTree as ET
 
 import pytest
 from PySide6 import QtCore, QtWidgets
@@ -15,9 +17,11 @@ from smart.services.tracking_arc import (
     TRACKING_ARC_POINT_LEADING,
     TRACKING_ARC_POINT_MIDPOINT,
     TRACKING_ARC_POINT_TRAILING,
+    TrackingArcAssetSummary,
     TrackingArcOrbitResult,
     TrackingArcSegment,
     compute_tracking_arcs_for_window,
+    export_tracking_arc_results_xlsx,
     tracking_arc_launch_points,
 )
 from smart.ui.widgets.tracking_arc_page import (
@@ -254,6 +258,48 @@ def test_tracking_arc_page_loads_archived_results_on_open(tmp_path: Path) -> Non
     assert "已加载跟踪弧段存档" in page._status_label.text()
 
 
+def test_tracking_arc_page_exports_results_to_user_selected_xlsx(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    workspace = _page_workspace(tmp_path)
+    result = TrackingArcOrbitResult(
+        point_key="leading",
+        point_label="窗口前沿轨道",
+        launch_utc="2026-05-15T00:00:00Z",
+        t0_utc="2026-05-15T00:10:00Z",
+        timeline_start_utc="2026-05-15T00:00:00Z",
+        timeline_end_utc="2026-05-15T01:00:00Z",
+        row_labels=["变轨点火时段", "地面站 测试站"],
+        segments=[TrackingArcSegment("地面站 测试站", "2026-05-15T00:20:00Z", "2026-05-15T00:35:00Z", "ground", "")],
+        asset_summaries=[TrackingArcAssetSummary("测试站", "ground", 1, 15.0, 15.0)],
+        shadow_total_min=5.0,
+        maneuver_count=1,
+    )
+    page = TrackingArcPage(I18nManager("zh"), workspace)
+    page._window_check_timer.stop()
+    page._orbit_results = {result.point_key: result}
+    page._set_orbit_point_options([result])
+    page._show_orbit_result(result)
+    page._export_results_button.setEnabled(True)
+
+    export_path = tmp_path / "selected_tracking_arc"
+    monkeypatch.setattr(
+        QtWidgets.QFileDialog,
+        "getSaveFileName",
+        lambda *_args, **_kwargs: (str(export_path), "Excel 文件 (*.xlsx)"),
+    )
+
+    output_path = page.export_tracking_arc_results()
+
+    assert output_path == export_path.with_suffix(".xlsx")
+    assert output_path.exists()
+    assert "已导出跟踪弧段结果" in page._status_label.text()
+    values = _read_xlsx_sheet_values(output_path)
+    assert values["A1"] == "轨道汇总"
+    assert values["A3"] == "窗口前沿轨道"
+    assert values["C3"] == "2026-05-15 08:00:00"
+    assert "弧段明细" in values.values()
+
+
 def test_tracking_arc_page_archives_results_per_launch_window(tmp_path: Path) -> None:
     _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     workspace = _page_workspace(tmp_path)
@@ -310,6 +356,34 @@ def test_tracking_arc_page_archives_results_per_launch_window(tmp_path: Path) ->
 
     page._window_combo.setCurrentIndex(0)
     assert page._summary_values["orbit"].text() == "第一窗口结果"
+
+
+def test_export_tracking_arc_results_xlsx_writes_summary_and_segments(tmp_path: Path) -> None:
+    result = TrackingArcOrbitResult(
+        point_key="leading",
+        point_label="窗口前沿轨道",
+        launch_utc="2026-05-15T00:00:00Z",
+        t0_utc="2026-05-15T00:10:00Z",
+        timeline_start_utc="2026-05-15T00:00:00Z",
+        timeline_end_utc="2026-05-15T01:00:00Z",
+        row_labels=["变轨点火时段", "中继星 TL2-2"],
+        segments=[TrackingArcSegment("中继星 TL2-2", "2026-05-15T00:20:00Z", "2026-05-15T00:50:00Z", "relay", "test")],
+        asset_summaries=[TrackingArcAssetSummary("TL2-2", "relay", 1, 30.0, 30.0)],
+        shadow_total_min=0.0,
+        maneuver_count=1,
+    )
+
+    output_path = export_tracking_arc_results_xlsx([result], tmp_path / "tracking")
+
+    assert output_path == tmp_path / "tracking.xlsx"
+    assert output_path.exists()
+    values = _read_xlsx_sheet_values(output_path)
+    assert values["A1"] == "轨道汇总"
+    assert values["A3"] == "窗口前沿轨道"
+    assert values["C3"] == "2026-05-15 08:00:00"
+    assert "资源汇总" in values.values()
+    assert "弧段明细" in values.values()
+    assert "中继星 TL2-2" in values.values()
 
 
 def test_tracking_arc_launch_points_use_window_edges_and_midpoint() -> None:
@@ -462,3 +536,19 @@ def test_tracking_arc_gantt_scroll_area_forwards_wheel_to_zoom() -> None:
     zoomed_start, zoomed_end = chart._visible_range()
     assert forwarded is True
     assert (zoomed_end - zoomed_start) < (original_end - original_start)
+
+
+def _read_xlsx_sheet_values(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    with zipfile.ZipFile(path) as archive:
+        root = ET.fromstring(archive.read("xl/worksheets/sheet1.xml"))
+    namespace = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+    for cell in root.findall(".//x:c", namespace):
+        ref = cell.attrib["r"]
+        inline_text = cell.find("x:is/x:t", namespace)
+        value = cell.find("x:v", namespace)
+        if inline_text is not None and inline_text.text is not None:
+            values[ref] = inline_text.text
+        elif value is not None and value.text is not None:
+            values[ref] = value.text
+    return values

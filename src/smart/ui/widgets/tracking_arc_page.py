@@ -26,6 +26,7 @@ from smart.services.tracking_arc import (
     TrackingArcOrbitResult,
     TrackingArcSegment,
     compute_tracking_arcs_for_window,
+    export_tracking_arc_results_xlsx,
 )
 from smart.ui.i18n import I18nManager
 from smart.ui.widgets.spinboxes import NoWheelComboBox, NoWheelDoubleSpinBox
@@ -983,6 +984,10 @@ class TrackingArcPage(QtWidgets.QWidget):
         self._calculate_button = QtWidgets.QPushButton("计算跟踪弧段")
         self._calculate_button.setProperty("variant", "primaryAction")
         self._calculate_button.clicked.connect(self.calculate_tracking_arcs)
+        self._export_results_button = QtWidgets.QPushButton("导出结果")
+        self._export_results_button.setProperty("variant", "secondary")
+        self._export_results_button.clicked.connect(self.export_tracking_arc_results)
+        self._export_results_button.setEnabled(False)
         self._reload_windows_button = QtWidgets.QPushButton("刷新窗口")
         self._reload_windows_button.clicked.connect(lambda: self._reload_windows(show_status=True))
         for button in (
@@ -990,6 +995,7 @@ class TrackingArcPage(QtWidgets.QWidget):
             self._save_button,
             self._reload_windows_button,
             self._calculate_button,
+            self._export_results_button,
         ):
             row.addWidget(button)
         row.addStretch(1)
@@ -1122,11 +1128,51 @@ class TrackingArcPage(QtWidgets.QWidget):
         self._orbit_results = {result.point_key: result for result in results}
         self._set_orbit_point_options(results)
         self._show_orbit_result(self._orbit_results.get(TRACKING_ARC_POINT_LEADING, results[0]))
+        self._export_results_button.setEnabled(True)
         archive_path = self._archive_results(results, selected_window, config)
         if archive_path is not None:
             self._set_status("statusReady", f"跟踪弧段计算完成并已存档：{archive_path}")
         else:
             self._set_status("statusReady", f"跟踪弧段计算完成：{len(results)} 条轨道。")
+
+    def export_tracking_arc_results(self) -> Path | None:
+        if self._workspace.current_project is None:
+            self._set_status("statusDisconnected", "没有活动项目。")
+            return None
+        if not self._orbit_results:
+            self._set_status("statusDisconnected", "没有可导出的跟踪弧段计算结果。")
+            return None
+        default_path = self._workspace.data_dir() / "tracking_arc_results.xlsx"
+        selected, _filter = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "导出跟踪弧段结果 Excel",
+            str(default_path),
+            "Excel 文件 (*.xlsx);;所有文件 (*)",
+        )
+        if not selected:
+            return None
+        path = Path(selected)
+        if path.suffix.lower() != ".xlsx":
+            path = path.with_suffix(".xlsx")
+        try:
+            ordered_results = [
+                result
+                for result in (
+                    self._orbit_results.get(TRACKING_ARC_POINT_LEADING),
+                    *[
+                        item
+                        for key, item in self._orbit_results.items()
+                        if key != TRACKING_ARC_POINT_LEADING
+                    ],
+                )
+                if result is not None
+            ]
+            output_path = export_tracking_arc_results_xlsx(ordered_results, path)
+        except Exception as exc:
+            self._set_status("statusDisconnected", f"导出跟踪弧段结果失败：{exc}")
+            return None
+        self._set_status("statusReady", f"已导出跟踪弧段结果：{output_path}")
+        return output_path
 
     def config_payload(self) -> dict[str, Any]:
         try:
@@ -1311,6 +1357,8 @@ class TrackingArcPage(QtWidgets.QWidget):
         self._orbit_results = {result.point_key: result for result in results}
         self._set_orbit_point_options(results)
         self._show_orbit_result(self._orbit_results.get(TRACKING_ARC_POINT_LEADING, results[0]))
+        if hasattr(self, "_export_results_button"):
+            self._export_results_button.setEnabled(True)
         return True
 
     def _tracking_archive_entry(self, window: LaunchWindowResult) -> dict[str, Any] | None:
@@ -1520,6 +1568,8 @@ class TrackingArcPage(QtWidgets.QWidget):
 
     def _clear_results(self) -> None:
         self._orbit_results = {}
+        if hasattr(self, "_export_results_button"):
+            self._export_results_button.setEnabled(False)
         self._orbit_point_combo.blockSignals(True)
         self._orbit_point_combo.clear()
         self._orbit_point_combo.blockSignals(False)
@@ -1590,9 +1640,12 @@ class TrackingArcPage(QtWidgets.QWidget):
             self._reload_windows_button,
             self._sync_windows_button,
             self._calculate_button,
+            self._export_results_button,
         ):
             if widget is not None:
                 widget.setEnabled(enabled)
+        if enabled and hasattr(self, "_export_results_button"):
+            self._export_results_button.setEnabled(bool(self._orbit_results))
 
     def _refresh_source_labels(self) -> None:
         if self._workspace.current_project is None:
