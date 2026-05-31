@@ -118,6 +118,9 @@ def test_launch_window_calculate_button_is_primary_and_exports_csv(tmp_path, mon
     page = LaunchWindowPage(I18nManager("zh"), workspace)
 
     assert page._calculate_button.property("variant") == "primaryAction"
+    assert not hasattr(page, "_reload_button")
+    assert not hasattr(page, "_save_button")
+    assert page._calculate_button.text() == "计算发射窗口"
     assert page._save_results_button.text() == "导出结果"
 
     def fake_compute_launch_windows(**_kwargs):

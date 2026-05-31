@@ -107,7 +107,7 @@ class _LaunchWindowStateDialog(QtWidgets.QDialog):
             drag_widget.installEventFilter(self)
         root.addWidget(self._title_bar)
 
-        caption = QtWidgets.QLabel("设置测控资源、可见性阈值、点火姿态约束及分阶段限制条件。应用后仍需保存参数或重新计算。")
+        caption = QtWidgets.QLabel("设置测控资源、可见性阈值、点火姿态约束及分阶段限制条件。计算时会自动保存参数。")
         caption.setProperty("role", "cardCaption")
         caption.setWordWrap(True)
         root.addWidget(caption)
@@ -694,10 +694,6 @@ class LaunchWindowPage(QtWidgets.QWidget):
         layout.addWidget(self._action_title_label)
         row = QtWidgets.QHBoxLayout()
         row.setSpacing(10)
-        self._reload_button = QtWidgets.QPushButton("重新加载")
-        self._reload_button.clicked.connect(self.refresh_from_workspace)
-        self._save_button = QtWidgets.QPushButton("保存参数")
-        self._save_button.clicked.connect(self.save_config)
         self._calculate_button = QtWidgets.QPushButton("计算发射窗口")
         self._calculate_button.setProperty("variant", "primaryAction")
         self._calculate_button.clicked.connect(self.calculate_windows)
@@ -705,8 +701,6 @@ class LaunchWindowPage(QtWidgets.QWidget):
         self._save_results_button.clicked.connect(self._export_result_csv)
         self._save_results_button.setEnabled(False)
         for button in (
-            self._reload_button,
-            self._save_button,
             self._calculate_button,
             self._save_results_button,
         ):
@@ -791,7 +785,7 @@ class LaunchWindowPage(QtWidgets.QWidget):
             self._set_config(original_payload)
             return
         self._refresh_state_summary()
-        self._set_status("statusReady", "状态设置已应用；保存参数或计算后写入项目。")
+        self._set_status("statusReady", "状态设置已应用；计算时会自动保存参数。")
 
     def calculate_windows(self) -> None:
         if self._workspace.current_project is None:
@@ -1270,8 +1264,6 @@ class LaunchWindowPage(QtWidgets.QWidget):
             self._add_custom_relay_button,
             self._delete_custom_relay_button,
             self._edit_state_button,
-            self._reload_button,
-            self._save_button,
             self._calculate_button,
             self._save_results_button,
             self._progress_bar,
