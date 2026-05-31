@@ -12,8 +12,11 @@ from smart.domain.models import (
     OrbitInitializationSettings,
     OrbitalElements,
 )
+from smart.logging import get_logger
 from smart.services.orbital_mechanics import orbital_elements_from_state_vector
 from smart.services.spice_service import SpiceKernelManager, default_local_kernel_roots
+
+_log = get_logger(__name__)
 
 _STK_EPOCH_FORMATS = (
     "%d %b %Y %H:%M:%S.%f",
@@ -53,8 +56,8 @@ def normalize_utc_epoch(value: str) -> str:
         if normalized_utc.endswith(".000"):
             normalized_utc = normalized_utc[:-4]
         return normalized_utc + "Z"
-    except Exception:
-        pass
+    except Exception as exc:
+        _log.debug("SPICE UTC/ET conversion unavailable, falling back to ISO parsing: %s", exc)
 
     normalized = text.replace("Z", "+00:00") if text.endswith("Z") else text
     try:

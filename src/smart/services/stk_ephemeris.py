@@ -9,6 +9,7 @@ from typing import Any
 
 import numpy as np
 
+from smart.logging import get_logger
 from smart.services.earth_orientation import (
     build_spice_manager_for_earth_orientation,
     ecef_state_from_eci,
@@ -16,6 +17,8 @@ from smart.services.earth_orientation import (
     parse_utc,
 )
 from smart.services.spice_service import SpiceKernelManager, default_local_kernel_roots
+
+_log = get_logger(__name__)
 
 _EARTH_ROTATION_RATE_RAD_S = 7.2921150e-5
 _DEFAULT_SCENARIO_EPOCH_UTC = "2024-01-01T00:00:00Z"
@@ -190,7 +193,8 @@ def _solve_epoch_for_greenwich_angle(target_angle_rad: float) -> datetime:
         candidate = base_epoch
         manager = SpiceKernelManager(local_kernel_roots=default_local_kernel_roots())
         manager.ensure_local_kernels_loaded()
-    except Exception:
+    except Exception as exc:
+        _log.debug("SPICE kernel manager unavailable for epoch solving, using GMST fallback: %s", exc)
         candidate = base_epoch
         manager = None
 
@@ -212,8 +216,8 @@ def _greenwich_angle_at(epoch_utc: datetime, *, manager: SpiceKernelManager | No
                 utc=_format_utc(epoch_utc),
             )
             return math.atan2(float(position[1]), float(position[0]))
-        except Exception:
-            pass
+        except Exception as exc:
+            _log.debug("SPICE ITRF93->J2000 position transform failed, falling back to GMST: %s", exc)
     return _greenwich_angle_gmst(epoch_utc)
 
 

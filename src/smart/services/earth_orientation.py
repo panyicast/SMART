@@ -8,7 +8,10 @@ from typing import SupportsFloat
 
 import numpy as np
 
+from smart.logging import get_logger
 from smart.services.spice_service import SpiceKernelManager, default_local_kernel_roots
+
+_log = get_logger(__name__)
 
 _EARTH_RADIUS_M = 6_378_140.0
 _EARTH_FLATTENING = 1.0 / 298.257223563
@@ -120,8 +123,8 @@ def ecef_state_from_eci(
                 np.asarray(position, dtype=np.float64),
                 np.asarray(velocity, dtype=np.float64),
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            _log.debug("SPICE J2000->ITRF93 transform unavailable, falling back to GMST rotation: %s", exc)
 
     theta = greenwich_angle_at_utc(epoch)
     cos_theta = math.cos(theta)
@@ -187,8 +190,8 @@ def _greenwich_angle_at(epoch_utc: datetime, *, manager: SpiceKernelManager | No
                 utc=format_utc(epoch_utc),
             )
             return math.atan2(float(position[1]), float(position[0]))
-        except Exception:
-            pass
+        except Exception as exc:
+            _log.debug("SPICE ITRF93->J2000 position transform failed, falling back to GMST: %s", exc)
     return _greenwich_angle_gmst(epoch_utc)
 
 
@@ -235,5 +238,6 @@ def _cached_spice_manager() -> SpiceKernelManager | None:
         manager = SpiceKernelManager(local_kernel_roots=default_local_kernel_roots())
         manager.ensure_local_kernels_loaded()
         return manager
-    except Exception:
+    except Exception as exc:
+        _log.warning("SPICE kernel manager initialization failed, services will use analytical fallbacks: %s", exc)
         return None

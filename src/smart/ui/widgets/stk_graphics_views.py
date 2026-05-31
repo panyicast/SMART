@@ -12,8 +12,11 @@ from typing import Any
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from smart.logging import get_logger
 from smart.services.stk_ephemeris import derive_stk_time_bounds, write_stk_ephemeris
 from smart.ui.i18n import I18nManager
+
+_log = get_logger(__name__)
 
 _HIDDEN_3D_OVERLAY_BASENAMES = {
     "agi_logo.png",
@@ -133,8 +136,8 @@ class _StkWinFormsRuntime:
             control = cls._AxAgUiAx2DCntrl()
             try:
                 control.PanModeEnabled = True
-            except Exception:
-                pass
+            except Exception as exc:
+                _log.debug("STKX 2D PanModeEnabled set failed: %s", exc)
         else:
             if cls._AxAgUiAxVOCntrl is None:
                 raise RuntimeError("STKX 3D control is unavailable.")
@@ -152,8 +155,8 @@ class _StkWinFormsRuntime:
     def _disable_control_logo(control: object) -> None:
         try:
             setattr(control, "NoLogo", True)
-        except Exception:
-            pass
+        except Exception as exc:
+            _log.debug("STKX NoLogo property set failed: %s", exc)
 
     @classmethod
     def pump_messages(cls, cycles: int = 1, delay_s: float = 0.0) -> None:
@@ -231,13 +234,13 @@ class _WinFormsHostWidget(QtWidgets.QWidget):
         try:
             if self._control is not None:
                 self._control.Dispose()
-        except Exception:
-            pass
+        except Exception as exc:
+            _log.debug("STKX control Dispose failed during close: %s", exc)
         try:
             if self._panel is not None:
                 self._panel.Dispose()
-        except Exception:
-            pass
+        except Exception as exc:
+            _log.debug("STKX panel Dispose failed during close: %s", exc)
         super().closeEvent(event)
 
     def _sync_native_size(self) -> None:
@@ -248,8 +251,8 @@ class _WinFormsHostWidget(QtWidgets.QWidget):
         try:
             self._panel.Width = width
             self._panel.Height = height
-        except Exception:
-            pass
+        except Exception as exc:
+            _log.debug("STKX panel resize failed (%dx%d): %s", width, height, exc)
         _StkWinFormsRuntime.pump_messages()
 
 
@@ -675,8 +678,8 @@ class StkManeuverGraphicsWidget(QtWidgets.QWidget):
         try:
             self._root.CloseScenario()
             _StkWinFormsRuntime.pump_messages(cycles=2)
-        except Exception:
-            pass
+        except Exception as exc:
+            _log.debug("STKX CloseScenario failed: %s", exc)
 
     def _ensure_scenario_loaded(self) -> None:
         if self._root is None:
@@ -745,7 +748,8 @@ class StkManeuverGraphicsWidget(QtWidgets.QWidget):
 
         try:
             count = int(result.Count)
-        except Exception:
+        except Exception as exc:
+            _log.debug("STKX result Count parse failed: %s", exc)
             count = 0
         values: list[str] = []
         for index in range(count):
@@ -754,7 +758,8 @@ class StkManeuverGraphicsWidget(QtWidgets.QWidget):
             except Exception:
                 try:
                     item = result.get_Item(index)
-                except Exception:
+                except Exception as exc:
+                    _log.debug("STKX result item [%d] access failed: %s", index, exc)
                     item = ""
             values.append(str(item).strip())
         return values

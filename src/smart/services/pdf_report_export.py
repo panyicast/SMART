@@ -42,7 +42,10 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+from smart.logging import get_logger
 from smart.services.report_export import _MarkdownBlock, _normalize_export_symbols, _parse_markdown
+
+_log = get_logger(__name__)
 
 
 _FONT_DIR = Path(__file__).resolve().parents[1] / "assets" / "fonts" / "Noto_Sans_SC"
@@ -161,7 +164,8 @@ def _validate_accent(value: str) -> str:
         return _DEFAULT_ACCENT
     try:
         HexColor(candidate)
-    except Exception:
+    except Exception as exc:
+        _log.debug("Invalid hex color '%s', using default accent: %s", candidate, exc)
         return _DEFAULT_ACCENT
     return candidate
 
@@ -175,9 +179,9 @@ def _ensure_fonts_registered() -> None:
             pdfmetrics.registerFont(TTFont(_FONT_REGULAR, str(_NOTO_FONT_PATH)))
             # Variable TTF reused as bold; ParagraphStyle uses bold font name selectively.
             pdfmetrics.registerFont(TTFont(_FONT_BOLD, str(_NOTO_FONT_PATH)))
-        except Exception:
+        except Exception as exc:
             # 保底：保持 reportlab 默认 Helvetica（中文会乱码，但不会抛错）。
-            pass
+            _log.warning("Noto Sans SC font registration failed, PDF will use Helvetica fallback: %s", exc)
     _FONTS_REGISTERED = True
 
 

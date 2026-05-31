@@ -746,6 +746,10 @@
 - 提交：`141911c`
 - 影响文件：`src/smart/logging.py`、`src/smart/services/design_maneuver_strategy.py`、`tests/test_launch_window_page.py`、`HANDOFF.md`。
 
-## 2026-05-29T23:43:23+08:00 | Prevent duplicate smart log propagation
-- 提交：`本次提交`
+## 2026-05-29T23:43:31+08:00 | Prevent duplicate smart log propagation
+- 提交：`f079e7f`
 - 影响文件：`src/smart/logging.py`、`tests/test_logging.py`、`HANDOFF.md`。
+
+## 2026-05-31T17:04:31+08:00 | Checkpoint qwen workspace changes
+- 提交：`本次提交`
+- 影响文件：`src/smart/services/earth_orientation.py`、`src/smart/services/orbit_initialization.py`、`src/smart/services/pdf_report_export.py`、`src/smart/services/stk_ephemeris.py`、`src/smart/ui/widgets/stk_graphics_views.py`、`.qoder/commands/run.md`、`.qoder/repowiki/zh/meta/repowiki-metadata.json`、`projects/F4/config/design_import_maneuver_strategy.json` 等 84 个文件。
