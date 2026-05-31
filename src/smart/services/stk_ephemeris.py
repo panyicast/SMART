@@ -22,6 +22,8 @@ _log = get_logger(__name__)
 
 _EARTH_ROTATION_RATE_RAD_S = 7.2921150e-5
 _DEFAULT_SCENARIO_EPOCH_UTC = "2024-01-01T00:00:00Z"
+_EARTH_RADIUS_M = 6_378_140.0
+_EARTH_FLATTENING = 1.0 / 298.257223563
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,31 +68,8 @@ def write_stk_ephemeris(
         "",
     ]
 
-    for row in normalized_rows:
-        sample_epoch_utc = format_utc(
-            scenario_epoch + timedelta(seconds=row["elapsed_time_s"]),
-            timespec="microseconds",
-        )
-        position_ecef_m, velocity_ecef_m_s = ecef_state_from_eci(
-            np.asarray(
-                [
-                    row["position_x_m"],
-                    row["position_y_m"],
-                    row["position_z_m"],
-                ],
-                dtype=np.float64,
-            ),
-            np.asarray(
-                [
-                    row["velocity_x_m_s"],
-                    row["velocity_y_m_s"],
-                    row["velocity_z_m_s"],
-                ],
-                dtype=np.float64,
-            ),
-            epoch_utc=sample_epoch_utc,
-            manager=spice_manager,
-        )
+    fixed_points = _fixed_ephemeris_points(normalized_rows, scenario_epoch, spice_manager)
+    for row, (position_ecef_m, velocity_ecef_m_s) in zip(normalized_rows, fixed_points, strict=False):
         lines.append(
             " ".join(
                 [
@@ -166,7 +145,111 @@ def _normalize_ephemeris_row(row: Mapping[str, Any]) -> dict[str, float]:
     }
     if "subsatellite_longitude_deg" in row:
         payload["subsatellite_longitude_deg"] = float(row["subsatellite_longitude_deg"])
+    if "subsatellite_latitude_deg" in row:
+        payload["subsatellite_latitude_deg"] = float(row["subsatellite_latitude_deg"])
+    if "subsatellite_altitude_m" in row:
+        payload["subsatellite_altitude_m"] = float(row["subsatellite_altitude_m"])
     return payload
+
+
+def _fixed_ephemeris_points(
+    rows: Sequence[Mapping[str, float]],
+    scenario_epoch: datetime,
+    spice_manager: SpiceKernelManager | None,
+) -> list[tuple[np.ndarray, np.ndarray]]:
+    if _rows_have_complete_subsatellite_points(rows):
+        positions = np.asarray(
+            [
+                _ecef_from_geodetic(
+                    float(row["subsatellite_longitude_deg"]),
+                    float(row["subsatellite_latitude_deg"]),
+                    float(row["subsatellite_altitude_m"]),
+                )
+                for row in rows
+            ],
+            dtype=np.float64,
+        )
+        times = np.asarray([float(row["elapsed_time_s"]) for row in rows], dtype=np.float64)
+        velocities = _finite_difference_velocities(times, positions)
+        return [(positions[index], velocities[index]) for index in range(len(rows))]
+
+    points: list[tuple[np.ndarray, np.ndarray]] = []
+    for row in rows:
+        sample_epoch_utc = format_utc(
+            scenario_epoch + timedelta(seconds=float(row["elapsed_time_s"])),
+            timespec="microseconds",
+        )
+        position_ecef_m, velocity_ecef_m_s = ecef_state_from_eci(
+            np.asarray(
+                [
+                    row["position_x_m"],
+                    row["position_y_m"],
+                    row["position_z_m"],
+                ],
+                dtype=np.float64,
+            ),
+            np.asarray(
+                [
+                    row["velocity_x_m_s"],
+                    row["velocity_y_m_s"],
+                    row["velocity_z_m_s"],
+                ],
+                dtype=np.float64,
+            ),
+            epoch_utc=sample_epoch_utc,
+            manager=spice_manager,
+        )
+        points.append((position_ecef_m, velocity_ecef_m_s))
+    return points
+
+
+def _rows_have_complete_subsatellite_points(rows: Sequence[Mapping[str, float]]) -> bool:
+    required = ("subsatellite_longitude_deg", "subsatellite_latitude_deg", "subsatellite_altitude_m")
+    for row in rows:
+        if not all(key in row for key in required):
+            return False
+        if not all(math.isfinite(float(row[key])) for key in required):
+            return False
+    return bool(rows)
+
+
+def _ecef_from_geodetic(longitude_deg: float, latitude_deg: float, altitude_m: float) -> np.ndarray:
+    lon = math.radians(float(longitude_deg))
+    lat = math.radians(float(latitude_deg))
+    altitude = float(altitude_m)
+    e2 = _EARTH_FLATTENING * (2.0 - _EARTH_FLATTENING)
+    sin_lat = math.sin(lat)
+    cos_lat = math.cos(lat)
+    n = _EARTH_RADIUS_M / math.sqrt(1.0 - e2 * sin_lat * sin_lat)
+    return np.asarray(
+        [
+            (n + altitude) * cos_lat * math.cos(lon),
+            (n + altitude) * cos_lat * math.sin(lon),
+            (n * (1.0 - e2) + altitude) * sin_lat,
+        ],
+        dtype=np.float64,
+    )
+
+
+def _finite_difference_velocities(times_s: np.ndarray, positions_m: np.ndarray) -> np.ndarray:
+    velocities = np.zeros_like(positions_m, dtype=np.float64)
+    count = len(positions_m)
+    if count < 2:
+        return velocities
+    for index in range(count):
+        if index == 0:
+            left = 0
+            right = 1
+        elif index == count - 1:
+            left = count - 2
+            right = count - 1
+        else:
+            left = index - 1
+            right = index + 1
+        dt = float(times_s[right] - times_s[left])
+        if dt > 1.0e-9 and math.isfinite(dt):
+            velocities[index] = (positions_m[right] - positions_m[left]) / dt
+    return velocities
 
 
 def _coerce_float(row: Mapping[str, Any], key: str) -> float:

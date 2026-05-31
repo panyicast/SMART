@@ -782,6 +782,10 @@
 - 提交：`b18d9ea`
 - 影响文件：`scripts/verify_f5_from_f4.py`、`HANDOFF.md`、`projects/F5/config/design_import_maneuver_strategy.json`、`projects/F5/config/design_maneuver_strategy.json`、`projects/F5/config/flight_program.json`、`projects/F5/config/launch_window.json`、`projects/F5/config/maneuver_strategy.json`、`projects/F5/config/satellite_3d_model.json` 等 27 个文件。
 
-## 2026-05-31T22:15:05+08:00 | Smooth flight program transition attitude
-- 提交：`本次提交`
+## 2026-05-31T22:15:11+08:00 | Smooth flight program transition attitude
+- 提交：`dcbaf85`
 - 影响文件：`src/smart/services/flight_program.py`、`tests/test_flight_program.py`、`HANDOFF.md`。
+
+## 2026-05-31T22:36:09+08:00 | Preserve subpoint track in STK ephemeris export
+- 提交：`本次提交`
+- 影响文件：`src/smart/services/stk_ephemeris.py`、`tests/test_stk_ephemeris.py`、`HANDOFF.md`。
