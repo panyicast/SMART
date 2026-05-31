@@ -754,6 +754,10 @@
 - 提交：`3263cdd`
 - 影响文件：`src/smart/services/earth_orientation.py`、`src/smart/services/orbit_initialization.py`、`src/smart/services/pdf_report_export.py`、`src/smart/services/stk_ephemeris.py`、`src/smart/ui/widgets/stk_graphics_views.py`、`.qoder/commands/run.md`、`.qoder/repowiki/zh/meta/repowiki-metadata.json`、`projects/F4/config/design_import_maneuver_strategy.json` 等 84 个文件。
 
-## 2026-05-31T17:24:20+08:00 | Export tracking arc results to Excel
-- 提交：`本次提交`
+## 2026-05-31T17:24:28+08:00 | Export tracking arc results to Excel
+- 提交：`b415fe0`
 - 影响文件：`src/smart/services/tracking_arc.py`、`src/smart/ui/widgets/tracking_arc_page.py`、`tests/test_tracking_arc.py`、`HANDOFF.md`。
+
+## 2026-05-31T17:36:51+08:00 | Add elapsed time columns to tracking arc export
+- 提交：`本次提交`
+- 影响文件：`src/smart/services/tracking_arc.py`、`tests/test_tracking_arc.py`、`HANDOFF.md`。

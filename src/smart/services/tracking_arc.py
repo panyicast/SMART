@@ -447,15 +447,20 @@ def _tracking_arc_export_rows(results: list[TrackingArcOrbitResult]) -> list[lis
                 "类型",
                 "开始(UTC)",
                 "开始(北京时间)",
+                "开始航时(min)",
                 "结束(UTC)",
                 "结束(北京时间)",
+                "结束航时(min)",
                 "时长/min",
                 "提示",
             ],
         ]
     )
     for result in results:
+        t0_utc = parse_utc(result.t0_utc)
         for segment in result.segments:
+            start_elapsed_min = (parse_utc(segment.start_utc) - t0_utc).total_seconds() / 60.0
+            end_elapsed_min = (parse_utc(segment.end_utc) - t0_utc).total_seconds() / 60.0
             rows.append(
                 [
                     result.point_label,
@@ -463,8 +468,10 @@ def _tracking_arc_export_rows(results: list[TrackingArcOrbitResult]) -> list[lis
                     _segment_kind_label(segment.kind),
                     segment.start_utc,
                     _format_beijing_export(segment.start_utc),
+                    round(start_elapsed_min, 6),
                     segment.end_utc,
                     _format_beijing_export(segment.end_utc),
+                    round(end_elapsed_min, 6),
                     round(_segment_duration_min(segment), 6),
                     segment.tooltip,
                 ]

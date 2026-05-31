@@ -298,6 +298,8 @@ def test_tracking_arc_page_exports_results_to_user_selected_xlsx(tmp_path: Path,
     assert values["A3"] == "窗口前沿轨道"
     assert values["C3"] == "2026-05-15 08:00:00"
     assert "弧段明细" in values.values()
+    assert "开始航时(min)" in values.values()
+    assert "结束航时(min)" in values.values()
 
 
 def test_tracking_arc_page_archives_results_per_launch_window(tmp_path: Path) -> None:
@@ -384,6 +386,8 @@ def test_export_tracking_arc_results_xlsx_writes_summary_and_segments(tmp_path: 
     assert "资源汇总" in values.values()
     assert "弧段明细" in values.values()
     assert "中继星 TL2-2" in values.values()
+    assert values["F11"] == "10"
+    assert values["I11"] == "40"
 
 
 def test_tracking_arc_launch_points_use_window_edges_and_midpoint() -> None:
