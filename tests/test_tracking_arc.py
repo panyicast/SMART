@@ -162,6 +162,11 @@ def test_tracking_arc_page_reads_rocket_flight_time_from_launch_window_config(tm
     assert "rocket_flight_time_s" not in page._number_fields
     assert page._rocket_flight_time_label.text() == "1234.500"
     assert page.config_payload()["rocket_flight_time_s"] == pytest.approx(1234.5)
+    assert not hasattr(page, "_reload_button")
+    assert not hasattr(page, "_save_button")
+    assert not hasattr(page, "_reload_windows_button")
+    assert page._calculate_button.text() == "计算跟踪弧段"
+    assert page._export_results_button.text() == "导出结果"
 
 
 def test_tracking_arc_page_warns_and_syncs_when_launch_windows_change(tmp_path: Path) -> None:

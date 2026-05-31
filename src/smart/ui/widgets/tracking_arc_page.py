@@ -977,10 +977,6 @@ class TrackingArcPage(QtWidgets.QWidget):
         layout.addWidget(self._action_title_label)
         row = QtWidgets.QHBoxLayout()
         row.setSpacing(10)
-        self._reload_button = QtWidgets.QPushButton("重新加载")
-        self._reload_button.clicked.connect(self.refresh_from_workspace)
-        self._save_button = QtWidgets.QPushButton("保存参数")
-        self._save_button.clicked.connect(self.save_config)
         self._calculate_button = QtWidgets.QPushButton("计算跟踪弧段")
         self._calculate_button.setProperty("variant", "primaryAction")
         self._calculate_button.clicked.connect(self.calculate_tracking_arcs)
@@ -988,12 +984,7 @@ class TrackingArcPage(QtWidgets.QWidget):
         self._export_results_button.setProperty("variant", "secondary")
         self._export_results_button.clicked.connect(self.export_tracking_arc_results)
         self._export_results_button.setEnabled(False)
-        self._reload_windows_button = QtWidgets.QPushButton("刷新窗口")
-        self._reload_windows_button.clicked.connect(lambda: self._reload_windows(show_status=True))
         for button in (
-            self._reload_button,
-            self._save_button,
-            self._reload_windows_button,
             self._calculate_button,
             self._export_results_button,
         ):
@@ -1086,7 +1077,7 @@ class TrackingArcPage(QtWidgets.QWidget):
             self._set_config(snapshot)
             return
         self._refresh_settings_overview()
-        self._set_status("statusReady", "主要设置已应用；保存参数或计算后写入项目。")
+        self._set_status("statusReady", "主要设置已应用；计算时会自动保存参数并刷新窗口。")
 
     def calculate_tracking_arcs(self) -> None:
         if self._workspace.current_project is None:
@@ -1094,6 +1085,7 @@ class TrackingArcPage(QtWidgets.QWidget):
             return
         if self.save_config() is None:
             return
+        self._reload_windows(show_status=False)
         selected_window = self._selected_window()
         if selected_window is None:
             self._set_status("statusDisconnected", "没有可用发射窗口。请先在发射窗口页面完成计算。")
@@ -1635,9 +1627,6 @@ class TrackingArcPage(QtWidgets.QWidget):
             self._delete_custom_ground_button,
             self._add_custom_relay_button,
             self._delete_custom_relay_button,
-            self._reload_button,
-            self._save_button,
-            self._reload_windows_button,
             self._sync_windows_button,
             self._calculate_button,
             self._export_results_button,

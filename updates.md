@@ -758,6 +758,10 @@
 - 提交：`b415fe0`
 - 影响文件：`src/smart/services/tracking_arc.py`、`src/smart/ui/widgets/tracking_arc_page.py`、`tests/test_tracking_arc.py`、`HANDOFF.md`。
 
-## 2026-05-31T17:36:51+08:00 | Add elapsed time columns to tracking arc export
-- 提交：`本次提交`
+## 2026-05-31T17:36:59+08:00 | Add elapsed time columns to tracking arc export
+- 提交：`15915df`
 - 影响文件：`src/smart/services/tracking_arc.py`、`tests/test_tracking_arc.py`、`HANDOFF.md`。
+
+## 2026-05-31T17:39:27+08:00 | Simplify tracking arc actions
+- 提交：`本次提交`
+- 影响文件：`src/smart/ui/widgets/tracking_arc_page.py`、`tests/test_tracking_arc.py`、`HANDOFF.md`。
