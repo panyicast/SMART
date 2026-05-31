@@ -390,9 +390,12 @@ def _sample_from_context_index(
         timeline=timeline,
         sun_vectors=sampling.sun_vectors,
         index=index,
+        elapsed_min=sampling.elapsed_min,
         t0_utc=sampling.t0_utc,
         maneuvers=sampling.maneuvers,
         afm_plus_z_ecef=sampling.afm_plus_z_ecef,
+        event=event,
+        attitude_events=attitude_events,
     )
     position = np.asarray(timeline["positions"][index], dtype=np.float64)
     row = rows[index]
@@ -581,6 +584,58 @@ def _plus_z_for_mode(
     timeline: dict[str, Any],
     sun_vectors: np.ndarray,
     index: int,
+    elapsed_min: np.ndarray,
+    t0_utc: datetime,
+    maneuvers: list[ManeuverInterval],
+    afm_plus_z_ecef: np.ndarray | None = None,
+    event: dict[str, Any] | None = None,
+    attitude_events: list[dict[str, Any]] | None = None,
+) -> np.ndarray:
+    afm_reference = afm_plus_z_ecef
+    if mode == MODE_TRANSITION and event is not None:
+        from_mode, to_mode = _transition_endpoint_modes(event, attitude_events or [])
+        start_min = float(event.get("start_min", float(elapsed_min[index])))
+        end_min = float(event.get("end_min", start_min))
+        start_index = _nearest_elapsed_index(elapsed_min, start_min)
+        end_index = _nearest_elapsed_index(elapsed_min, end_min)
+        start_plus_z = _plus_z_for_basic_mode(
+            mode=from_mode,
+            timeline=timeline,
+            sun_vectors=sun_vectors,
+            index=start_index,
+            t0_utc=t0_utc,
+            maneuvers=maneuvers,
+            afm_plus_z_ecef=afm_reference,
+        )
+        end_plus_z = _plus_z_for_basic_mode(
+            mode=to_mode,
+            timeline=timeline,
+            sun_vectors=sun_vectors,
+            index=end_index,
+            t0_utc=t0_utc,
+            maneuvers=maneuvers,
+            afm_plus_z_ecef=afm_reference,
+        )
+        span = max(1e-9, end_min - start_min)
+        fraction = max(0.0, min(1.0, (float(elapsed_min[index]) - start_min) / span))
+        return _slerp_unit(start_plus_z, end_plus_z, fraction)
+    return _plus_z_for_basic_mode(
+        mode=mode,
+        timeline=timeline,
+        sun_vectors=sun_vectors,
+        index=index,
+        t0_utc=t0_utc,
+        maneuvers=maneuvers,
+        afm_plus_z_ecef=afm_reference,
+    )
+
+
+def _plus_z_for_basic_mode(
+    *,
+    mode: str,
+    timeline: dict[str, Any],
+    sun_vectors: np.ndarray,
+    index: int,
     t0_utc: datetime,
     maneuvers: list[ManeuverInterval],
     afm_plus_z_ecef: np.ndarray | None = None,
@@ -592,13 +647,72 @@ def _plus_z_for_mode(
         if afm_reference is None:
             afm_reference = _body_plus_z_ecef_for_attitude(t0_utc, timeline, maneuvers, sun_vectors)
         return _normalize_vector(afm_reference[index])
-    if mode == MODE_TRANSITION:
-        spm = _normalize_vector(-sun_vectors[index])
-        if afm_reference is None:
-            afm_reference = _body_plus_z_ecef_for_attitude(t0_utc, timeline, maneuvers, sun_vectors)
-        afm = afm_reference[index]
-        return _normalize_vector(spm + afm)
     return _normalize_vector(-sun_vectors[index])
+
+
+def _transition_endpoint_modes(
+    event: dict[str, Any],
+    attitude_events: list[dict[str, Any]],
+) -> tuple[str, str]:
+    properties = event.get("properties")
+    if not isinstance(properties, dict):
+        properties = {}
+    from_mode = _valid_attitude_mode(properties.get("from"))
+    to_mode = _valid_attitude_mode(properties.get("to"))
+    if from_mode is not None and to_mode is not None:
+        return from_mode, to_mode
+
+    start_min = float(event.get("start_min", 0.0))
+    end_min = float(event.get("end_min", start_min))
+    previous = [
+        item
+        for item in attitude_events
+        if item is not event
+        and str(item.get("mode")) != MODE_TRANSITION
+        and float(item.get("end_min", item.get("start_min", 0.0))) <= start_min + 1e-6
+    ]
+    following = [
+        item
+        for item in attitude_events
+        if item is not event
+        and str(item.get("mode")) != MODE_TRANSITION
+        and float(item.get("start_min", item.get("end_min", 0.0))) >= end_min - 1e-6
+    ]
+    if from_mode is None and previous:
+        from_mode = _valid_attitude_mode(previous[-1].get("mode"))
+    if to_mode is None and following:
+        to_mode = _valid_attitude_mode(following[0].get("mode"))
+    return from_mode or MODE_SPM, to_mode or from_mode or MODE_SPM
+
+
+def _valid_attitude_mode(value: object) -> str | None:
+    mode = str(value or "").strip()
+    return mode if mode in {MODE_SPM, MODE_EPM, MODE_AFM} else None
+
+
+def _nearest_elapsed_index(elapsed_min: np.ndarray, value: float) -> int:
+    return int(np.argmin(np.abs(elapsed_min - float(value))))
+
+
+def _slerp_unit(start: np.ndarray, end: np.ndarray, fraction: float) -> np.ndarray:
+    left = _normalize_vector(start)
+    right = _normalize_vector(end)
+    dot = float(np.clip(np.dot(left, right), -1.0, 1.0))
+    if dot > 0.9995:
+        return _normalize_vector((1.0 - fraction) * left + fraction * right)
+    if dot < -0.9995:
+        seed = np.asarray([1.0, 0.0, 0.0], dtype=np.float64)
+        if abs(float(np.dot(seed, left))) > 0.92:
+            seed = np.asarray([0.0, 1.0, 0.0], dtype=np.float64)
+        axis = _normalize_vector(np.cross(left, seed))
+        angle = math.pi * fraction
+        return _normalize_vector(left * math.cos(angle) + axis * math.sin(angle))
+    theta = math.acos(dot)
+    sin_theta = math.sin(theta)
+    return _normalize_vector(
+        (math.sin((1.0 - fraction) * theta) / sin_theta) * left
+        + (math.sin(fraction * theta) / sin_theta) * right
+    )
 
 
 def _resolve_t0_utc(

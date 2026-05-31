@@ -24,7 +24,7 @@ from smart.services.flight_program import (
 from smart.services.tracking_arc import TrackingArcOrbitResult, TrackingArcSegment
 
 
-def _write_history(path: Path) -> None:
+def _write_history(path: Path, minutes: list[int] | None = None) -> None:
     columns = [
         "elapsed_time_s",
         "elapsed_time_min",
@@ -53,7 +53,7 @@ def _write_history(path: Path) -> None:
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=columns)
         writer.writeheader()
-        for minute in range(0, 121, 10):
+        for minute in (minutes or list(range(0, 121, 10))):
             writer.writerow(
                 {
                     "elapsed_time_s": minute * 60,
@@ -311,3 +311,71 @@ def test_sample_states_builds_full_attitude_pointing_series(tmp_path: Path, monk
     assert samples[5].plus_z_ecef == pytest.approx((0.0, 1.0, 0.0))
     assert np.linalg.norm(np.asarray(samples[8].plus_z_ecef, dtype=float)) == pytest.approx(1.0)
     assert samples[8].plus_z_ecef[1] > 0.0
+
+
+def test_transition_slerps_from_previous_tail_to_next_head(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    history = tmp_path / "full_orbit_history.csv"
+    _write_history(history, minutes=[0, 10, 15, 20, 30])
+    monkeypatch.setattr(
+        "smart.services.flight_program._sun_unit_ecef_for_elapsed",
+        lambda _epoch, elapsed: np.tile(np.asarray([[-1.0, 0.0, 0.0]], dtype=float), (len(elapsed), 1)),
+    )
+    monkeypatch.setattr(
+        "smart.services.flight_program._body_plus_z_ecef_for_attitude",
+        lambda *_args, **_kwargs: np.tile(np.asarray([[0.0, 1.0, 0.0]], dtype=float), (5, 1)),
+    )
+    program = normalize_flight_program_payload(
+        {
+            "selected_t0_utc": "2026-05-15T00:00:00Z",
+            "events": [
+                {
+                    "name": "太阳巡航",
+                    "kind": ATTITUDE_KIND,
+                    "mode": MODE_SPM,
+                    "start_min": 0.0,
+                    "end_min": 10.0,
+                },
+                {
+                    "name": "点火前过渡",
+                    "kind": ATTITUDE_KIND,
+                    "mode": MODE_TRANSITION,
+                    "start_min": 10.0,
+                    "end_min": 20.0,
+                    "properties": {"from": MODE_SPM, "to": MODE_AFM},
+                },
+                {
+                    "name": "点火姿态",
+                    "kind": ATTITUDE_KIND,
+                    "mode": MODE_AFM,
+                    "start_min": 20.0,
+                    "end_min": 30.0,
+                },
+            ],
+        }
+    )
+
+    start = sample_flight_program_state(
+        orbit_history_csv=history,
+        maneuver_strategy=_strategy(),
+        payload=program,
+        elapsed_min=10.0,
+    )
+    middle = sample_flight_program_state(
+        orbit_history_csv=history,
+        maneuver_strategy=_strategy(),
+        payload=program,
+        elapsed_min=15.0,
+    )
+    end = sample_flight_program_state(
+        orbit_history_csv=history,
+        maneuver_strategy=_strategy(),
+        payload=program,
+        elapsed_min=20.0,
+    )
+
+    assert start.mode == MODE_TRANSITION
+    assert start.plus_z_ecef == pytest.approx((1.0, 0.0, 0.0))
+    assert middle.mode == MODE_TRANSITION
+    assert middle.plus_z_ecef == pytest.approx((2**-0.5, 2**-0.5, 0.0))
+    assert end.mode == MODE_AFM
+    assert end.plus_z_ecef == pytest.approx((0.0, 1.0, 0.0))
