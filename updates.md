@@ -770,6 +770,10 @@
 - 提交：`8a2dcd3`
 - 影响文件：`src/smart/ui/widgets/launch_window_page.py`、`tests/test_launch_window_page.py`、`HANDOFF.md`。
 
-## 2026-05-31T17:48:30+08:00 | Simplify design maneuver actions
-- 提交：`本次提交`
+## 2026-05-31T17:48:38+08:00 | Simplify design maneuver actions
+- 提交：`cb3d1d6`
 - 影响文件：`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
+
+## 2026-05-31T17:57:09+08:00 | Export flight program to Excel
+- 提交：`本次提交`
+- 影响文件：`src/smart/ui/widgets/flight_program_page.py`、`tests/test_flight_program_page.py`、`HANDOFF.md`。

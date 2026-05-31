@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import zipfile
+import xml.etree.ElementTree as ET
+
 import numpy as np
 
 from PySide6 import QtWidgets
@@ -232,6 +235,39 @@ def test_event_changes_autosave_flight_program_config(tmp_path) -> None:
     assert len(restored["events"]) == 1
     assert restored["events"][0]["name"] == "SPM 姿态"
     assert restored["events"][0]["start_min"] == 12.0
+
+
+def test_save_button_exports_excel_and_keeps_json_autosave(tmp_path, monkeypatch) -> None:
+    _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    workspace = ProjectWorkspace()
+    workspace.create_project("flight-export-xlsx", parent_dir=tmp_path)
+    page = FlightProgramPage(I18nManager("zh"), workspace)
+    assert not hasattr(page, "_reload_windows_button")
+    assert page._save_button.text() == "导出Excel"
+    page._add_event("SPM", 12.0)
+    page._reference_segments = [{"id": "ref-1", "start_min": 8.0, "end_min": 9.5, "kind": "ground", "name": "测试参考"}]
+
+    export_path = tmp_path / "flight_program_export"
+    monkeypatch.setattr(
+        QtWidgets.QFileDialog,
+        "getSaveFileName",
+        lambda *_args, **_kwargs: (str(export_path), "Excel 文件 (*.xlsx)"),
+    )
+
+    page.save_program()
+
+    xlsx_path = export_path.with_suffix(".xlsx")
+    assert xlsx_path.exists()
+    assert "已导出飞行程序 Excel" in page._status_label.text()
+    assert workspace.flight_program_path().exists()
+    assert workspace.load_flight_program_config() is not None
+    summary = _read_xlsx_sheet_values(xlsx_path, 1)
+    references = _read_xlsx_sheet_values(xlsx_path, 2)
+    attitude = _read_xlsx_sheet_values(xlsx_path, 3)
+    assert summary["A1"] == "字段"
+    assert references["C2"] == "测试参考"
+    assert attitude["C2"] == "SPM"
 
 
 def test_saved_reference_results_load_on_refresh(tmp_path) -> None:
@@ -1134,3 +1170,19 @@ def _tracking_result() -> TrackingArcOrbitResult:
         shadow_total_min=0.0,
         maneuver_count=0,
     )
+
+
+def _read_xlsx_sheet_values(path, sheet_index: int) -> dict[str, str]:
+    values: dict[str, str] = {}
+    with zipfile.ZipFile(path) as archive:
+        root = ET.fromstring(archive.read(f"xl/worksheets/sheet{sheet_index}.xml"))
+    namespace = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+    for cell in root.findall(".//x:c", namespace):
+        ref = cell.attrib["r"]
+        inline_text = cell.find("x:is/x:t", namespace)
+        value = cell.find("x:v", namespace)
+        if inline_text is not None and inline_text.text is not None:
+            values[ref] = inline_text.text
+        elif value is not None and value.text is not None:
+            values[ref] = value.text
+    return values

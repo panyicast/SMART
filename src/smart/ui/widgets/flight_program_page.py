@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import csv
 import json
+import zipfile
 from dataclasses import asdict
 from datetime import timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
+import xml.etree.ElementTree as ET
 
 import numpy as np
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -61,6 +63,9 @@ from smart.ui.widgets.table_editing import install_combo_table_edit_delegate, in
 BEIJING_TZ = timezone(timedelta(hours=8))
 BEIJING_QT_TIMEZONE_ID = b"Asia/Shanghai"
 _MANEUVER_PHASES = {"settle", "orbit_control"}
+_XLSX_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+_XLSX_REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 
 
 def _beijing_qtimezone() -> QtCore.QTimeZone:
@@ -258,10 +263,6 @@ class FlightProgramPage(QtWidgets.QWidget):
             self._orbit_point_combo.addItem(label, key)
         self._orbit_point_combo.currentIndexChanged.connect(lambda _index: self._on_orbit_point_changed())
         layout.addWidget(self._orbit_point_combo)
-        self._reload_windows_button = QtWidgets.QPushButton("刷新窗口")
-        self._reload_windows_button.setProperty("variant", "secondary")
-        self._reload_windows_button.clicked.connect(lambda: self._reload_windows(show_status=True))
-        layout.addWidget(self._reload_windows_button)
         self._calculate_refs_button = QtWidgets.QPushButton("计算参考轨")
         self._calculate_refs_button.setProperty("variant", "secondary")
         self._calculate_refs_button.clicked.connect(self.calculate_reference_arcs)
@@ -269,7 +270,7 @@ class FlightProgramPage(QtWidgets.QWidget):
         self._generate_button = QtWidgets.QPushButton("生成草案")
         self._generate_button.clicked.connect(self.generate_draft)
         layout.addWidget(self._generate_button)
-        self._save_button = QtWidgets.QPushButton("保存")
+        self._save_button = QtWidgets.QPushButton("导出Excel")
         self._save_button.clicked.connect(self.save_program)
         layout.addWidget(self._save_button)
         layout.addStretch(1)
@@ -425,6 +426,7 @@ class FlightProgramPage(QtWidgets.QWidget):
         if self._workspace.current_project is None:
             self._set_status("statusDisconnected", "没有活动项目。")
             return
+        self._reload_windows(show_status=False)
         try:
             strategy = self._workspace.load_maneuver_strategy()
             if strategy is None:
@@ -509,12 +511,111 @@ class FlightProgramPage(QtWidgets.QWidget):
         if self._workspace.current_project is None:
             self._set_status("statusDisconnected", "没有活动项目。")
             return
-        try:
-            path = self._workspace.save_flight_program_config(self._program)
-        except Exception as exc:
-            self._set_status("statusDisconnected", f"保存飞行程序失败：{exc}")
+        default_path = self._workspace.data_dir() / "flight_program.xlsx"
+        selected, _filter = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "导出飞行程序 Excel",
+            str(default_path),
+            "Excel 文件 (*.xlsx);;所有文件 (*)",
+        )
+        if not selected:
             return
-        self._set_status("statusReady", f"已保存飞行程序：{path}")
+        path = Path(selected)
+        if path.suffix.lower() != ".xlsx":
+            path = path.with_suffix(".xlsx")
+        try:
+            self._autosave_program()
+            self._export_program_xlsx(path)
+        except Exception as exc:
+            self._set_status("statusDisconnected", f"导出飞行程序 Excel 失败：{exc}")
+            return
+        self._set_status("statusReady", f"已导出飞行程序 Excel：{path}")
+
+    def _export_program_xlsx(self, path: Path) -> Path:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        sheets = [
+            ("飞行程序概览", self._program_summary_xlsx_rows()),
+            ("参考时段", self._reference_xlsx_rows()),
+            ("姿态设置", self._event_xlsx_rows(attitude=True)),
+            ("主要事件", self._event_xlsx_rows(attitude=False)),
+        ]
+        _write_flight_program_xlsx(path, sheets)
+        return path
+
+    def _program_summary_xlsx_rows(self) -> list[list[Any]]:
+        return [
+            ["字段", "值"],
+            ["发射选择模式", self._launch_selection_mode()],
+            ["选中发射时刻 UTC", str(self._program.get("selected_launch_utc", ""))],
+            ["选中 T0 UTC", str(self._program.get("selected_t0_utc", ""))],
+            ["选中轨道点", str(self._program.get("selected_orbit_point", ""))],
+            ["事件数量", len(self._program.get("events", []))],
+            ["参考时段数量", len(self._visible_reference_segments())],
+        ]
+
+    def _reference_xlsx_rows(self) -> list[list[Any]]:
+        rows: list[list[Any]] = [list(self._REFERENCE_COLUMNS)]
+        references = sorted(
+            self._visible_reference_segments(),
+            key=lambda item: (float(item.get("start_min", 0.0)), str(item.get("kind", "")), str(item.get("name", ""))),
+        )
+        for row_index, segment in enumerate(references, start=1):
+            start_min = float(segment.get("start_min", 0.0))
+            end_min = float(segment.get("end_min", start_min))
+            rows.append(
+                [
+                    row_index,
+                    self._reference_kind_label(str(segment.get("kind", ""))),
+                    str(segment.get("name", segment.get("label", ""))),
+                    round(start_min, 6),
+                    round(end_min, 6),
+                    round(max(0.0, end_min - start_min), 6),
+                ]
+            )
+        return rows
+
+    def _event_xlsx_rows(self, *, attitude: bool) -> list[list[Any]]:
+        columns = self._ATTITUDE_COLUMNS if attitude else self._MAJOR_EVENT_COLUMNS
+        rows: list[list[Any]] = [list(columns)]
+        events = sorted(
+            [
+                dict(item)
+                for item in self._program.get("events", [])
+                if (item.get("kind") == ATTITUDE_KIND) is attitude
+            ],
+            key=lambda item: (float(item.get("start_min", 0.0)), float(item.get("end_min", 0.0)), str(item.get("name", ""))),
+        )
+        for row_index, event in enumerate(events, start=1):
+            start_min = float(event.get("start_min", 0.0))
+            end_min = float(event.get("end_min", start_min))
+            instant = bool(event.get("instant"))
+            duration = 0.0 if instant else max(0.0, end_min - start_min)
+            locked = "是" if bool(event.get("locked")) else "否"
+            if attitude:
+                rows.append(
+                    [
+                        row_index,
+                        locked,
+                        str(event.get("mode", "")),
+                        str(event.get("name", "")),
+                        round(start_min, 6),
+                        round(end_min, 6),
+                        round(duration, 6),
+                    ]
+                )
+            else:
+                rows.append(
+                    [
+                        row_index,
+                        locked,
+                        str(event.get("name", "")),
+                        round(start_min, 6),
+                        round(end_min, 6),
+                        round(duration, 6),
+                        "是" if instant else "否",
+                    ]
+                )
+        return rows
 
     def _autosave_program(self) -> None:
         if self._suppress_autosave or self._workspace.current_project is None:
@@ -1861,7 +1962,6 @@ class FlightProgramPage(QtWidgets.QWidget):
             self._window_combo,
             self._manual_launch_edit,
             self._orbit_point_combo,
-            self._reload_windows_button,
             self._calculate_refs_button,
             self._generate_button,
             self._save_button,
@@ -1956,6 +2056,119 @@ class FlightProgramPage(QtWidgets.QWidget):
         epoch = parse_utc(value)
         milliseconds = int(round(epoch.timestamp() * 1000.0))
         return QtCore.QDateTime.fromMSecsSinceEpoch(milliseconds, _beijing_qtimezone())
+
+
+def _write_flight_program_xlsx(path: Path, sheets: list[tuple[str, list[list[Any]]]]) -> None:
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", _xlsx_content_types_xml(len(sheets)))
+        archive.writestr("_rels/.rels", _xlsx_root_rels_xml())
+        archive.writestr("xl/workbook.xml", _xlsx_workbook_xml([name for name, _rows in sheets]))
+        archive.writestr("xl/_rels/workbook.xml.rels", _xlsx_workbook_rels_xml(len(sheets)))
+        archive.writestr("xl/styles.xml", _xlsx_styles_xml())
+        for index, (_name, rows) in enumerate(sheets, start=1):
+            archive.writestr(f"xl/worksheets/sheet{index}.xml", _xlsx_sheet_xml(rows))
+
+
+def _xlsx_sheet_xml(rows: list[list[Any]]) -> str:
+    ET.register_namespace("", _XLSX_NS)
+    worksheet = ET.Element(f"{{{_XLSX_NS}}}worksheet")
+    max_columns = max((len(row) for row in rows), default=1)
+    ET.SubElement(worksheet, f"{{{_XLSX_NS}}}dimension", {"ref": f"A1:{_xlsx_col_name(max_columns)}{max(len(rows), 1)}"})
+    sheet_views = ET.SubElement(worksheet, f"{{{_XLSX_NS}}}sheetViews")
+    ET.SubElement(sheet_views, f"{{{_XLSX_NS}}}sheetView", {"workbookViewId": "0"})
+    cols = ET.SubElement(worksheet, f"{{{_XLSX_NS}}}cols")
+    ET.SubElement(cols, f"{{{_XLSX_NS}}}col", {"min": "1", "max": str(max_columns), "width": "18", "customWidth": "1"})
+    sheet_data = ET.SubElement(worksheet, f"{{{_XLSX_NS}}}sheetData")
+    for row_index, values in enumerate(rows, start=1):
+        row = ET.SubElement(sheet_data, f"{{{_XLSX_NS}}}row", {"r": str(row_index)})
+        for col_index, value in enumerate(values, start=1):
+            _append_xlsx_cell(row, row_index, col_index, value, style_id=1 if row_index == 1 else 2)
+    return ET.tostring(worksheet, encoding="utf-8", xml_declaration=True).decode("utf-8")
+
+
+def _append_xlsx_cell(row: ET.Element, row_index: int, col_index: int, value: Any, *, style_id: int) -> None:
+    cell = ET.SubElement(row, f"{{{_XLSX_NS}}}c", {"r": f"{_xlsx_col_name(col_index)}{row_index}", "s": str(style_id)})
+    if value is None or value == "":
+        return
+    if isinstance(value, str):
+        cell.set("t", "inlineStr")
+        inline = ET.SubElement(cell, f"{{{_XLSX_NS}}}is")
+        text = ET.SubElement(inline, f"{{{_XLSX_NS}}}t")
+        text.text = value
+        return
+    value_node = ET.SubElement(cell, f"{{{_XLSX_NS}}}v")
+    value_node.text = f"{float(value):.12g}"
+
+
+def _xlsx_col_name(index: int) -> str:
+    name = ""
+    while index > 0:
+        index, remainder = divmod(index - 1, 26)
+        name = chr(65 + remainder) + name
+    return name
+
+
+def _xlsx_content_types_xml(sheet_count: int) -> str:
+    worksheet_overrides = "\n".join(
+        f'  <Override PartName="/xl/worksheets/sheet{index}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+        for index in range(1, sheet_count + 1)
+    )
+    return f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+{worksheet_overrides}
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+</Types>"""
+
+
+def _xlsx_root_rels_xml() -> str:
+    return f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="{_REL_NS}">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>"""
+
+
+def _xlsx_workbook_rels_xml(sheet_count: int) -> str:
+    sheet_rels = "\n".join(
+        f'  <Relationship Id="rId{index}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet{index}.xml"/>'
+        for index in range(1, sheet_count + 1)
+    )
+    return f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="{_REL_NS}">
+{sheet_rels}
+  <Relationship Id="rId{sheet_count + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>"""
+
+
+def _xlsx_workbook_xml(sheet_names: list[str]) -> str:
+    sheets = "\n".join(
+        f'    <sheet name="{_escape_xlsx_attr(name)}" sheetId="{index}" r:id="rId{index}"/>'
+        for index, name in enumerate(sheet_names, start=1)
+    )
+    return f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="{_XLSX_NS}" xmlns:r="{_XLSX_REL_NS}">
+  <sheets>
+{sheets}
+  </sheets>
+</workbook>"""
+
+
+def _escape_xlsx_attr(value: str) -> str:
+    return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+
+def _xlsx_styles_xml() -> str:
+    return f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="{_XLSX_NS}">
+  <fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>
+  <fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFD9EAF7"/><bgColor indexed="64"/></patternFill></fill></fills>
+  <borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color auto="1"/></left><right style="thin"><color auto="1"/></right><top style="thin"><color auto="1"/></top><bottom style="thin"><color auto="1"/></bottom><diagonal/></border></borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf></cellXfs>
+  <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>"""
 
 def _parse_yes_no(value: str) -> bool:
     text = value.strip().lower()
