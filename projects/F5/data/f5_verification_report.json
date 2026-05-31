@@ -1,0 +1,374 @@
+{
+  "project": "D:\\Spark\\SMART\\projects\\F5",
+  "config_source": "D:\\Spark\\SMART\\projects\\F4",
+  "ignored_pages": [
+    "3D 设置",
+    "AI 分析"
+  ],
+  "steps": [
+    {
+      "page": "项目",
+      "action": "新建项目",
+      "path": "D:\\Spark\\SMART\\projects\\F5"
+    },
+    {
+      "page": "设计变轨策略",
+      "action": "状态设置保存",
+      "path": "D:\\Spark\\SMART\\projects\\F5\\config\\design_maneuver_strategy.json"
+    },
+    {
+      "page": "设计变轨策略",
+      "action": "生成脉冲规划",
+      "status": "硬约束全部通过"
+    },
+    {
+      "page": "设计变轨策略",
+      "action": "优化连续推力模型参数",
+      "status": "连续推力参数优化完成，硬约束全部通过，ΔG=2600.984 kg，结果存档：D:\\Spark\\SMART\\projects\\F5\\data\\design_continuous_thrust_results.json，轨道数据：D:\\Spark\\SMART\\projects\\F5\\data\\design_continuous_thrust_orbit_history.csv，导入配置：D:\\Spark\\SMART\\projects\\F5\\config\\design_import_maneuver_strategy.json"
+    },
+    {
+      "page": "设计变轨策略",
+      "action": "导出连续推力策略 Excel"
+    },
+    {
+      "page": "导入变轨策略",
+      "action": "引入变轨策略",
+      "path": "D:\\Spark\\SMART\\projects\\F5\\config\\maneuver_strategy.json"
+    },
+    {
+      "page": "导入变轨策略",
+      "action": "计算变轨策略",
+      "status": "变轨策略计算完成：D:\\Spark\\SMART\\projects\\F5\\data\\full_orbit_history.csv"
+    },
+    {
+      "page": "发射窗口",
+      "action": "状态设置保存",
+      "path": "D:\\Spark\\SMART\\projects\\F5\\config\\launch_window.json"
+    },
+    {
+      "page": "发射窗口",
+      "action": "计算发射窗口",
+      "status": "发射窗口计算完成：4 个窗口，已自动保存结果 CSV：D:\\Spark\\SMART\\projects\\F5\\data\\launch_window_results.csv"
+    },
+    {
+      "page": "跟踪弧段",
+      "action": "设置保存",
+      "path": "D:\\Spark\\SMART\\projects\\F5\\config\\tracking_arc.json"
+    },
+    {
+      "page": "跟踪弧段",
+      "action": "计算跟踪弧段",
+      "status": "跟踪弧段计算完成并已存档：D:\\Spark\\SMART\\projects\\F5\\data\\tracking_arc_results.json"
+    },
+    {
+      "page": "飞行程序",
+      "action": "计算参考轨",
+      "status": "参考轨计算完成：3 条。"
+    },
+    {
+      "page": "数据可视化",
+      "action": "计算并导出图表",
+      "status": "已计算：发射 2026-05-15 15:18:00，T0 2026-05-15 15:53:34。",
+      "charts": [
+        "D:\\Spark\\SMART\\projects\\F5\\charts\\altitude_trend.png",
+        "D:\\Spark\\SMART\\projects\\F5\\charts\\velocity_trend.png"
+      ]
+    },
+    {
+      "page": "STK 链接",
+      "action": "离线导入链路测试",
+      "scenario_name": "F5_SMART",
+      "satellite_name": "F5",
+      "ground_station_count": 3,
+      "relay_satellite_count": 2,
+      "command_count": 68,
+      "artifacts": {
+        "orbit_ephemeris_path": "D:\\Spark\\SMART\\projects\\F5\\data\\stk_link\\20260531_110037\\F5_orbit.e",
+        "attitude_path": "D:\\Spark\\SMART\\projects\\F5\\data\\stk_link\\20260531_110037\\F5_attitude.a",
+        "relay_ephemeris_paths": [
+          "D:\\Spark\\SMART\\projects\\F5\\data\\stk_link\\20260531_110037\\TL2_2_geo.e",
+          "D:\\Spark\\SMART\\projects\\F5\\data\\stk_link\\20260531_110037\\TL2_3_geo.e"
+        ]
+      }
+    }
+  ],
+  "comparisons": [
+    {
+      "name": "设计变轨配置",
+      "path": "config/design_maneuver_strategy.json",
+      "exists_f5": true,
+      "match": true
+    },
+    {
+      "name": "发射窗口配置",
+      "path": "config/launch_window.json",
+      "exists_f5": true,
+      "match": true
+    },
+    {
+      "name": "跟踪弧段配置",
+      "path": "config/tracking_arc.json",
+      "exists_f5": true,
+      "match": true
+    },
+    {
+      "name": "飞行程序配置",
+      "path": "config/flight_program.json",
+      "exists_f5": true,
+      "match": true
+    },
+    {
+      "name": "脉冲规划结果",
+      "path": "data/design_maneuver_results.json",
+      "exists_f5": true,
+      "match": true
+    },
+    {
+      "name": "连续推力结果",
+      "path": "data/design_continuous_thrust_results.json",
+      "exists_f5": true,
+      "match": true
+    },
+    {
+      "name": "跟踪弧段结果",
+      "path": "data/tracking_arc_results.json",
+      "exists_f5": true,
+      "match": false
+    },
+    {
+      "name": "飞行程序参考轨结果",
+      "path": "data/flight_program_reference_results.json",
+      "exists_f5": true,
+      "match": false
+    },
+    {
+      "name": "导入变轨配置",
+      "path": "config/design_import_maneuver_strategy.json",
+      "exists_f5": true,
+      "match": true,
+      "normalization": "ignored generated_utc"
+    },
+    {
+      "name": "变轨策略配置",
+      "path": "config/maneuver_strategy.json",
+      "exists_f5": true,
+      "match": true,
+      "normalization": "ignored generated_utc"
+    },
+    {
+      "name": "连续推力轨道历史",
+      "path": "data/design_continuous_thrust_orbit_history.csv",
+      "exists_f5": true,
+      "match": true
+    },
+    {
+      "name": "全轨道历史",
+      "path": "data/full_orbit_history.csv",
+      "exists_f5": true,
+      "match": true
+    },
+    {
+      "name": "发射窗口样本",
+      "path": "data/launch_window_samples.csv",
+      "exists_f5": true,
+      "match": true
+    },
+    {
+      "name": "发射窗口结果",
+      "path": "data/launch_window_results.csv",
+      "exists_f5": true,
+      "match": true,
+      "normalization": "datetime minutes expanded to :00 seconds"
+    }
+  ],
+  "csv_summaries": {
+    "f4_launch_window_samples": {
+      "rows": 2670,
+      "columns": [
+        "launch_utc",
+        "t0_utc",
+        "rocket_flight_time_s",
+        "ok",
+        "failure",
+        "first_orbit_shadow_min",
+        "no_shadow_period_shadow_min",
+        "separation_shadow_min",
+        "longest_shadow_min",
+        "min_burn_sun_margin_deg",
+        "max_tracking_gap_min",
+        "inclination_deg",
+        "constraint_results"
+      ],
+      "first": {
+        "launch_utc": "2026-05-15T07:00:00Z",
+        "t0_utc": "2026-05-15T07:35:34Z",
+        "rocket_flight_time_s": "2134.412",
+        "ok": "False",
+        "failure": "转移轨道",
+        "first_orbit_shadow_min": "16.0",
+        "no_shadow_period_shadow_min": "1.0",
+        "separation_shadow_min": "16.0",
+        "longest_shadow_min": "32.0",
+        "min_burn_sun_margin_deg": "28.38206971699134",
+        "max_tracking_gap_min": "713.0",
+        "inclination_deg": "16.506137572551648",
+        "constraint_results": "[{\"name\":\"转移轨道 - 无地影\",\"passed\":false,\"enabled\":true},{\"name\":\"一远点测控 - 中继星可见\",\"passed\":false,\"enabled\":true},{\"name\":\"第一次点火测控 - 地面站可见\",\"passed\":true,\"enabled\":true},{\"name\":\"第一次点火太阳角 - 太阳角\",\"passed\":true,\"enabled\":true},{\"name\":\"第二次点火测控 - 地面站可见\",\"passed\":true,\"enabled\":true},{\"name\":\"第二次点火太阳角 - 太阳角\",\"passed\":true,\"enabled\":true},{\"name\":\"第三次点火测控 - 地面站可见\",\"passed\":false,\"enabled\":true},{\"name\":\"第三次点火太阳角 - 太阳角\",\"passed\":true,\"enabled\":true},{\"name\":\"第四次点火测控 - 地面站可见\",\"passed\":false,\"enabled\":true},{\"name\":\"第四次点火太阳角 - 太阳角\",\"passed\":true,\"enabled\":true},{\"name\":\"第五次点火太阳角 - 太阳角\",\"passed\":true,\"enabled\":true}]"
+      },
+      "last": {
+        "launch_utc": "2026-05-18T23:58:00Z",
+        "t0_utc": "2026-05-19T00:33:34Z",
+        "rocket_flight_time_s": "2134.412",
+        "ok": "False",
+        "failure": "转移轨道",
+        "first_orbit_shadow_min": "14.0",
+        "no_shadow_period_shadow_min": "14.0",
+        "separation_shadow_min": "0.0",
+        "longest_shadow_min": "12.0",
+        "min_burn_sun_margin_deg": "17.775534235665674",
+        "max_tracking_gap_min": "965.0",
+        "inclination_deg": "16.506137572551648",
+        "constraint_results": "[{\"name\":\"转移轨道 - 无地影\",\"passed\":false,\"enabled\":true},{\"name\":\"一远点测控 - 中继星可见\",\"passed\":false,\"enabled\":true},{\"name\":\"第一次点火测控 - 地面站可见\",\"passed\":false,\"enabled\":true},{\"name\":\"第一次点火太阳角 - 太阳角\",\"passed\":true,\"enabled\":true},{\"name\":\"第二次点火测控 - 地面站可见\",\"passed\":false,\"enabled\":true},{\"name\":\"第二次点火太阳角 - 太阳角\",\"passed\":true,\"enabled\":true},{\"name\":\"第三次点火测控 - 地面站可见\",\"passed\":false,\"enabled\":true},{\"name\":\"第三次点火太阳角 - 太阳角\",\"passed\":true,\"enabled\":true},{\"name\":\"第四次点火测控 - 地面站可见\",\"passed\":false,\"enabled\":true},{\"name\":\"第四次点火太阳角 - 太阳角\",\"passed\":true,\"enabled\":true},{\"name\":\"第五次点火太阳角 - 太阳角\",\"passed\":true,\"enabled\":true}]"
+      }
+    },
+    "f5_launch_window_samples": {
+      "rows": 2670,
+      "columns": [
+        "launch_utc",
+        "t0_utc",
+        "rocket_flight_time_s",
+        "ok",
+        "failure",
+        "first_orbit_shadow_min",
+        "no_shadow_period_shadow_min",
+        "separation_shadow_min",
+        "longest_shadow_min",
+        "min_burn_sun_margin_deg",
+        "max_tracking_gap_min",
+        "inclination_deg",
+        "constraint_results"
+      ],
+      "first": {
+        "launch_utc": "2026-05-15T07:00:00Z",
+        "t0_utc": "2026-05-15T07:35:34Z",
+        "rocket_flight_time_s": "2134.412",
+        "ok": "False",
+        "failure": "转移轨道",
+        "first_orbit_shadow_min": "16.0",
+        "no_shadow_period_shadow_min": "1.0",
+        "separation_shadow_min": "16.0",
+        "longest_shadow_min": "32.0",
+        "min_burn_sun_margin_deg": "28.38206971699134",
+        "max_tracking_gap_min": "713.0",
+        "inclination_deg": "16.506137572551648",
+        "constraint_results": "[{\"name\":\"转移轨道 - 无地影\",\"passed\":false,\"enabled\":true},{\"name\":\"一远点测控 - 中继星可见\",\"passed\":false,\"enabled\":true},{\"name\":\"第一次点火测控 - 地面站可见\",\"passed\":true,\"enabled\":true},{\"name\":\"第一次点火太阳角 - 太阳角\",\"passed\":true,\"enabled\":true},{\"name\":\"第二次点火测控 - 地面站可见\",\"passed\":true,\"enabled\":true},{\"name\":\"第二次点火太阳角 - 太阳角\",\"passed\":true,\"enabled\":true},{\"name\":\"第三次点火测控 - 地面站可见\",\"passed\":false,\"enabled\":true},{\"name\":\"第三次点火太阳角 - 太阳角\",\"passed\":true,\"enabled\":true},{\"name\":\"第四次点火测控 - 地面站可见\",\"passed\":false,\"enabled\":true},{\"name\":\"第四次点火太阳角 - 太阳角\",\"passed\":true,\"enabled\":true},{\"name\":\"第五次点火太阳角 - 太阳角\",\"passed\":true,\"enabled\":true}]"
+      },
+      "last": {
+        "launch_utc": "2026-05-18T23:58:00Z",
+        "t0_utc": "2026-05-19T00:33:34Z",
+        "rocket_flight_time_s": "2134.412",
+        "ok": "False",
+        "failure": "转移轨道",
+        "first_orbit_shadow_min": "14.0",
+        "no_shadow_period_shadow_min": "14.0",
+        "separation_shadow_min": "0.0",
+        "longest_shadow_min": "12.0",
+        "min_burn_sun_margin_deg": "17.775534235665674",
+        "max_tracking_gap_min": "965.0",
+        "inclination_deg": "16.506137572551648",
+        "constraint_results": "[{\"name\":\"转移轨道 - 无地影\",\"passed\":false,\"enabled\":true},{\"name\":\"一远点测控 - 中继星可见\",\"passed\":false,\"enabled\":true},{\"name\":\"第一次点火测控 - 地面站可见\",\"passed\":false,\"enabled\":true},{\"name\":\"第一次点火太阳角 - 太阳角\",\"passed\":true,\"enabled\":true},{\"name\":\"第二次点火测控 - 地面站可见\",\"passed\":false,\"enabled\":true},{\"name\":\"第二次点火太阳角 - 太阳角\",\"passed\":true,\"enabled\":true},{\"name\":\"第三次点火测控 - 地面站可见\",\"passed\":false,\"enabled\":true},{\"name\":\"第三次点火太阳角 - 太阳角\",\"passed\":true,\"enabled\":true},{\"name\":\"第四次点火测控 - 地面站可见\",\"passed\":false,\"enabled\":true},{\"name\":\"第四次点火太阳角 - 太阳角\",\"passed\":true,\"enabled\":true},{\"name\":\"第五次点火太阳角 - 太阳角\",\"passed\":true,\"enabled\":true}]"
+      }
+    },
+    "f4_launch_window_results": {
+      "rows": 4,
+      "columns": [
+        "窗口前沿 (北京时间)",
+        "窗口后沿 (北京时间)",
+        "长度/min",
+        "入轨 T0 前沿 (北京时间)",
+        "第一圈地影/min",
+        "窗口前沿轨道最长地影/min",
+        "窗口后沿轨道最长地影/min",
+        "窗口前沿限制条件",
+        "窗口后沿限制条件"
+      ],
+      "first": {
+        "窗口前沿 (北京时间)": "2026-05-15 15:18:00",
+        "窗口后沿 (北京时间)": "2026-05-15 17:08:00",
+        "长度/min": "110.0",
+        "入轨 T0 前沿 (北京时间)": "2026-05-15 15:53:34",
+        "第一圈地影/min": "15.0",
+        "窗口前沿轨道最长地影/min": "31.0",
+        "窗口后沿轨道最长地影/min": "28.0",
+        "窗口前沿限制条件": "一远点测控",
+        "窗口后沿限制条件": "第一次点火太阳角"
+      },
+      "last": {
+        "窗口前沿 (北京时间)": "2026-05-18 15:20:00",
+        "窗口后沿 (北京时间)": "2026-05-18 17:08:00",
+        "长度/min": "108.0",
+        "入轨 T0 前沿 (北京时间)": "2026-05-18 15:55:34",
+        "第一圈地影/min": "14.0",
+        "窗口前沿轨道最长地影/min": "30.0",
+        "窗口后沿轨道最长地影/min": "28.0",
+        "窗口前沿限制条件": "一远点测控",
+        "窗口后沿限制条件": "第一次点火太阳角"
+      }
+    },
+    "f5_launch_window_results": {
+      "rows": 4,
+      "columns": [
+        "窗口前沿 (北京时间)",
+        "窗口后沿 (北京时间)",
+        "长度/min",
+        "入轨 T0 前沿 (北京时间)",
+        "第一圈地影/min",
+        "窗口前沿轨道最长地影/min",
+        "窗口后沿轨道最长地影/min",
+        "窗口前沿限制条件",
+        "窗口后沿限制条件"
+      ],
+      "first": {
+        "窗口前沿 (北京时间)": "2026-05-15 15:18",
+        "窗口后沿 (北京时间)": "2026-05-15 17:08",
+        "长度/min": "110.0",
+        "入轨 T0 前沿 (北京时间)": "2026-05-15 15:53",
+        "第一圈地影/min": "15.0",
+        "窗口前沿轨道最长地影/min": "31.0",
+        "窗口后沿轨道最长地影/min": "28.0",
+        "窗口前沿限制条件": "一远点测控",
+        "窗口后沿限制条件": "第一次点火太阳角"
+      },
+      "last": {
+        "窗口前沿 (北京时间)": "2026-05-18 15:20",
+        "窗口后沿 (北京时间)": "2026-05-18 17:08",
+        "长度/min": "108.0",
+        "入轨 T0 前沿 (北京时间)": "2026-05-18 15:55",
+        "第一圈地影/min": "14.0",
+        "窗口前沿轨道最长地影/min": "30.0",
+        "窗口后沿轨道最长地影/min": "28.0",
+        "窗口前沿限制条件": "一远点测控",
+        "窗口后沿限制条件": "第一次点火太阳角"
+      }
+    }
+  },
+  "visualization": {
+    "f4": {
+      "launch_utc": "2026-05-15T07:18:00Z",
+      "t0_utc": "2026-05-15T07:53:34Z",
+      "samples": 11861,
+      "first_elapsed_min": 0.0,
+      "last_elapsed_min": 11844.466692228349,
+      "final_mass_kg": 3914.0156161084697,
+      "maneuver_intervals": 5
+    },
+    "f5": {
+      "launch_utc": "2026-05-15T07:18:00Z",
+      "t0_utc": "2026-05-15T07:53:34Z",
+      "samples": 11861,
+      "first_elapsed_min": 0.0,
+      "last_elapsed_min": 11844.466692228349,
+      "final_mass_kg": 3914.0156161084697,
+      "maneuver_intervals": 5
+    }
+  }
+}

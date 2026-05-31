@@ -1,0 +1,208 @@
+{
+  "planner": {
+    "version": "V5.1_hard_constrained_phase_search",
+    "auto_recommend_count": true,
+    "maneuver_count_user": 6,
+    "force_user_count": true
+  },
+  "initial": {
+    "t0_epoch": "2026-05-14T13:09:19Z",
+    "m0_kg": 6515.0,
+    "state_input_type": "keplerian",
+    "a_km": 29478.137,
+    "e": 0.77684692,
+    "i_deg": 16.5,
+    "lon_node_deg": 8.53237,
+    "argp_deg": 200.0,
+    "mean_anomaly_deg": 1.85437
+  },
+  "orbit_type": {
+    "mode": "auto",
+    "supersync_transfer_margin_km": 500.0,
+    "standard_transfer_apogee_margin_km": 500.0
+  },
+  "target": {
+    "a_km": 42164.2,
+    "e": 0.0,
+    "i_deg": 6.0,
+    "lon_degE": 120.0,
+    "dv_lon_margin_mps": 50.0
+  },
+  "earth": {
+    "mu_km3_s2": 398600.4418,
+    "Re_km": 6378.137,
+    "J2": 0.00108262668,
+    "omega_e_rad_s": 7.2921158553e-05,
+    "use_J2": true,
+    "numerical_propagation_step_s": 120.0
+  },
+  "engine": {
+    "F_main_N": 490.0,
+    "Isp_main_s": 314.1,
+    "attitude_control_efficiency": 0.0173,
+    "F_set_N": 20.0,
+    "Isp_set_s": 290.0,
+    "tau_set_s": 240.0,
+    "use_settling": true
+  },
+  "burn_limit": {
+    "include_settling_in_burn_time": true,
+    "max_total_burn_time_min": 90.0,
+    "preferred_total_burn_time_min": 80.0,
+    "burn_utilization": 0.75,
+    "design_dv_per_burn_mps": 350.0
+  },
+  "longitude": {
+    "raw_window_degE": [
+      40.0,
+      180.0
+    ],
+    "planning_window_degE": [
+      45.0,
+      175.0
+    ],
+    "finite_margin_window_degE": [
+      50.0,
+      170.0
+    ],
+    "constraint_mode": "impulse_point"
+  },
+  "maneuver_count": {
+    "min": 1,
+    "max": 5,
+    "user": 6,
+    "engineering_min_count": 1,
+    "engineering_min_count_supersync": 5,
+    "engineering_min_count_standard": 3,
+    "total_dv_est_user_mps": 0.0
+  },
+  "distribution": {
+    "mode": "auto",
+    "max_uniform_dv_spread_mps": 70.0,
+    "dv_min_per_burn_mps": 20.0,
+    "front_dv_total_user_mps": 0.0,
+    "first_post_a_control_km": null,
+    "tail_dv_est_user_mps": 625.0,
+    "standard_terminal_reserve_mps": 0.0,
+    "allow_small_dv_correction": true,
+    "small_dv_correction_bound_mps": 25.0,
+    "user_dv_template_mps": [],
+    "weights": []
+  },
+  "supersynchronous_transfer": {
+    "strategy": "n_apogee_plus_1_perigee",
+    "tail_fixed_enabled": true,
+    "tail_fixed_count": 2,
+    "tail_control_mode": "fixed_post_a",
+    "a_tail_apogee_plus_fixed_km": 47271.168509,
+    "a_tail_perigee_plus_fixed_km": 42164.2,
+    "dv_tail_apogee_fixed_mps": 0.0,
+    "dv_tail_perigee_fixed_mps": 0.0
+  },
+  "standard_transfer": {
+    "strategy": "n_apogee",
+    "use_fixed_tail": false,
+    "terminal_reserve_mps": 0.0
+  },
+  "apsis": {
+    "pattern_mode": "user",
+    "pattern_user": "",
+    "q_AA_default": 3,
+    "q_sequence_user": [],
+    "search_revolutions_max": 40,
+    "search_initial_apogees": 20,
+    "max_event_search": 30,
+    "q_count_eligible_only": true
+  },
+  "alpha": {
+    "optimize_alpha": true,
+    "alpha_default_deg": 10.0,
+    "front_bounds_deg": [
+      -20.0,
+      40.0
+    ],
+    "tail_apogee_bounds_deg": [
+      -20.0,
+      40.0
+    ],
+    "tail_perigee_bounds_deg": [
+      -180.0,
+      180.0
+    ],
+    "standard_bounds_deg": [
+      -30.0,
+      40.0
+    ],
+    "smooth_alpha_weight": 0.01,
+    "initial_template_deg": [
+      15.0,
+      10.0,
+      9.0,
+      11.37,
+      -176.29
+    ]
+  },
+  "terminal_tolerance": {
+    "a_km": 1.0,
+    "e": 0.0001,
+    "i_deg": 0.01,
+    "lon_deg": 0.02
+  },
+  "optimizer": {
+    "enabled": true,
+    "method": "POWELL",
+    "maxiter": 900,
+    "maxfev": 25000,
+    "q_fast_optimize_top_k": 10,
+    "slsqp_top_k": 6,
+    "slsqp_multistart_top_k": 2,
+    "slsqp_maxiter": 120,
+    "time_budget_sec": 30.0,
+    "terminal_weight": 1000000.0,
+    "longitude_weight": 1000000.0,
+    "inclination_weight": 10000000.0,
+    "eccentricity_weight": 100000000.0,
+    "semi_major_axis_weight": 100000.0,
+    "duration_weight": 1000000.0,
+    "uniform_weight": 1000.0,
+    "tail_weight": 1000000000.0,
+    "correction_weight": 100.0,
+    "random_seed": 7
+  },
+  "continuous_thrust_optimizer": {
+    "time_step_s": 10.0,
+    "yaw_step_deg": 0.05,
+    "time_window_min": 40.0,
+    "yaw_window_deg": 10.0,
+    "coarse_time_step_s": 300.0,
+    "coarse_yaw_step_deg": 2.0,
+    "fine_time_window_min": 2.0,
+    "fine_yaw_window_deg": 0.25,
+    "search_integration_step_s": 300.0,
+    "final_integration_step_s": 10.0,
+    "history_sample_interval_s": 60.0,
+    "terminal_lon_tolerance_deg": 0.01
+  },
+  "hard_constraint_planner": {
+    "enabled": true,
+    "q_AA_user": [
+      3,
+      3,
+      2
+    ],
+    "q_AP_user": 0,
+    "q_AP_candidates": [
+      0,
+      1,
+      2
+    ],
+    "fixed_hp_targets_km": {
+      "1": 3933.0
+    },
+    "hard_raw_window": true,
+    "hard_planning_window": true,
+    "prefilter_top_k": 10,
+    "max_local_starts_per_sequence": 5,
+    "local_maxiter": 45
+  }
+}

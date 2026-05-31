@@ -774,6 +774,10 @@
 - 提交：`cb3d1d6`
 - 影响文件：`src/smart/ui/widgets/design_maneuver_strategy_page.py`、`tests/test_design_maneuver_strategy.py`、`HANDOFF.md`。
 
-## 2026-05-31T17:57:09+08:00 | Export flight program to Excel
-- 提交：`本次提交`
+## 2026-05-31T17:57:17+08:00 | Export flight program to Excel
+- 提交：`d852d02`
 - 影响文件：`src/smart/ui/widgets/flight_program_page.py`、`tests/test_flight_program_page.py`、`HANDOFF.md`。
+
+## 2026-05-31T19:01:48+08:00 | Add regenerated F5 project verification
+- 提交：`本次提交`
+- 影响文件：`scripts/verify_f5_from_f4.py`、`HANDOFF.md`、`projects/F5/config/design_import_maneuver_strategy.json`、`projects/F5/config/design_maneuver_strategy.json`、`projects/F5/config/flight_program.json`、`projects/F5/config/launch_window.json`、`projects/F5/config/maneuver_strategy.json`、`projects/F5/config/satellite_3d_model.json` 等 27 个文件。
