@@ -1,0 +1,8 @@
+# STK ephemeris/attitude/export data, not source code
+projects/**/data/**/*.e linguist-generated=true
+projects/**/data/**/*.a linguist-generated=true
+
+# Generated project outputs, not source code
+projects/**/data/**/*.csv linguist-generated=true
+projects/**/data/**/*.xlsx linguist-generated=true
+projects/**/data/**/*.json linguist-generated=true

@@ -798,6 +798,10 @@
 - 提交：`df49259`
 - 影响文件：`README.md`、`HANDOFF.md`、`readme_assets/dashboard.png`、`readme_assets/data_visualization.png`、`readme_assets/flight_program.png`、`readme_assets/launch_window.png`、`readme_assets/maneuver_design.png`、`readme_assets/maneuver_import.png`。
 
-## 2026-06-01T08:56:33+08:00 | Refresh README body
-- 提交：`本次提交`
+## 2026-06-01T08:56:41+08:00 | Refresh README body
+- 提交：`0f057fe`
 - 影响文件：`README.md`、`HANDOFF.md`。
+
+## 2026-06-01T09:03:27+08:00 | Mark generated project data for Linguist
+- 提交：`本次提交`
+- 影响文件：`.gitattributes`、`HANDOFF.md`。
