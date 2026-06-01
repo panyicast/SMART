@@ -45,7 +45,8 @@ SMART 的目标不是单独替代 STK 或 SPICE，而是把任务建模、约束
 - 飞行程序设计：复用变轨结果和 STK 联动数据，形成飞行程序参考段、事件表和时间线
 - 任务可视化：2D/3D 轨道视图、科学曲线与结果图表
 - STK 联动：面向 STK 11.6 的对象创建、轨道/姿态/图形标注和结果导出链路
-- SPICE 内核管理：本地内核扫描、加载、下载提示和运行状态检查
+- SPICE 内核管理：通过顶部 `设置 / SPICE 内核` 进入本地内核扫描、加载、下载提示和运行状态检查
+- 常用工具：提供轨道根数/状态向量转换、近远地点参数换算、圆轨道参数、近点角转换、日月位置、Hohmann 转移、平面变轨、Lambert 转移和二体传播等工程计算对话框
 - AI 辅助解读：面向项目摘要的任务分析说明页，支持报告式输出
 
 ## 技术选型
@@ -68,10 +69,11 @@ SMART 的目标不是单独替代 STK 或 SPICE，而是把任务建模、约束
 - 飞行程序设计（Flight Program）
 - 科学数据可视化（Scientific Data Visualization）
 - STK 联动（STK Link）
-- SPICE 内核管理（SPICE Kernels）
+- 常用工具（Common Tools，顶部菜单）
+- SPICE 内核管理（SPICE Kernels，顶部设置菜单）
 - AI 项目分析（AI Project Analysis）
 
-当前开发重点是设计变轨策略、连续推力优化、导入变轨策略、发射窗口和飞行程序之间的数据闭环。后续仍需要继续补强 STK/Astrogator 精化、更多约束配置校验、结果版本校验和端到端工程验收。
+当前开发重点是稳定设计变轨、连续推力优化、导入变轨策略、发射窗口、跟踪弧段、飞行程序和 STK 联动之间的端到端工程闭环。后续仍需要继续补强 STK/Astrogator 精化、更多约束配置校验、缓存版本校验和端到端工程验收。
 
 ## 功能文档
 
@@ -144,12 +146,16 @@ python .\scripts\update_updates_md.py
 - 轨道与状态数据：`data/orbit_elements.json`
 - 设计变轨脉冲规划结果：`data/design_maneuver_results.json`
 - 设计变轨连续推力结果：`data/design_continuous_thrust_results.json`
+- 设计变轨连续推力 Excel 导出：`data/design_continuous_thrust_maneuver_strategy.xlsx`
 - 设计变轨连续推力轨道历史：`data/design_continuous_thrust_orbit_history.csv`
 - 变轨策略计算结果：`data/full_orbit_history.csv`
 - 发射窗口样本缓存：`data/launch_window_samples.csv`
+- 发射窗口样本缓存元数据：`data/launch_window_samples.meta.json`
 - 发射窗口结果表：`data/launch_window_results.csv`
 - 跟踪弧段结果：`data/tracking_arc_results.json`
 - 飞行程序参考结果：`data/flight_program_reference_results.json`
+- STK 联动导出：`data/stk_link/`
+- 项目级 SPICE 内核：`data/kernels/`
 - 图表文件：`charts/altitude_trend.png`、`charts/velocity_trend.png`
 
 其中 `config/satellite_3d_model.json`、`config/design_maneuver_strategy.json`、`config/maneuver_strategy.json` 等会在项目创建时自动生成。设计变轨策略页面会存档脉冲规划和连续推力结果；重新打开项目时，如果存档存在，页面会直接加载并显示结果，不需要先重新计算。
@@ -202,5 +208,5 @@ data/kernels/     # 本地 SPICE 内核
 
 ```powershell
 $env:PYTHONPATH = "src"
-python -m pytest
+D:\Spark\SMART\.venv\Scripts\python.exe -m pytest
 ```
