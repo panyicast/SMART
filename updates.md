@@ -790,6 +790,10 @@
 - 提交：`6fd344d`
 - 影响文件：`src/smart/services/stk_ephemeris.py`、`tests/test_stk_ephemeris.py`、`HANDOFF.md`。
 
-## 2026-06-01T08:49:32+08:00 | Checkpoint F4 F5 project data
-- 提交：`本次提交`
+## 2026-06-01T08:49:40+08:00 | Checkpoint F4 F5 project data
+- 提交：`4379c9c`
 - 影响文件：`HANDOFF.md`、`projects/F4/smart_project.json`、`projects/F5/data/orbit_elements.json`、`projects/F5/smart_project.json`、`projects/F4/charts/altitude_trend.png`、`projects/F4/charts/velocity_trend.png`、`projects/F5/charts/altitude_trend.png`、`projects/F5/charts/velocity_trend.png`。
+
+## 2026-06-01T08:53:06+08:00 | Update README screenshots
+- 提交：`本次提交`
+- 影响文件：`README.md`、`HANDOFF.md`、`readme_assets/dashboard.png`、`readme_assets/data_visualization.png`、`readme_assets/flight_program.png`、`readme_assets/launch_window.png`、`readme_assets/maneuver_design.png`、`readme_assets/maneuver_import.png`。

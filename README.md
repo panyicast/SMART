@@ -5,18 +5,21 @@ SMART 全称为 `Spacecraft Mission Analysis, Research & Toolkit`，是一个面
 当前仓库提供的是一版可运行的桌面工程原型，已经覆盖项目管理、卫星3D模型配置、轨道初始化、设计变轨策略、连续推力参数优化、导入变轨策略、发射窗口计算、跟踪弧段分析、飞行程序设计、STK 联动、SPICE 内核管理、项目化数据落盘和 AI 辅助项目解读等核心链路。
 
 <p align="center">
-  <img src="projects/F4/charts/smart_workflow.svg" alt="SMART mission workflow" width="92%" />
+  <img src="readme_assets/dashboard.png" alt="SMART 项目总览页面截图" width="92%" />
 </p>
 
 <p align="center">
-  <img src="projects/F4/charts/orbit_3d.png" alt="SMART 3D orbit view" width="30%" />
-  <img src="projects/F4/charts/orbit_2d.png" alt="SMART 2D orbit plot" width="30%" />
-  <img src="projects/F4/charts/launch_20260515_1640_bjt_first_maneuver_theta_s.svg" alt="SMART launch window geometry" width="30%" />
+  <img src="readme_assets/maneuver_design.png" alt="SMART 设计变轨策略页面截图" width="45%" />
+  <img src="readme_assets/maneuver_import.png" alt="SMART 导入变轨策略页面截图" width="45%" />
 </p>
 
 <p align="center">
-  <img src="projects/F4/charts/altitude_trend.png" alt="SMART altitude trend" width="45%" />
-  <img src="projects/F4/charts/velocity_trend.png" alt="SMART velocity trend" width="45%" />
+  <img src="readme_assets/launch_window.png" alt="SMART 发射窗口页面截图" width="45%" />
+  <img src="readme_assets/flight_program.png" alt="SMART 飞行程序页面截图" width="45%" />
+</p>
+
+<p align="center">
+  <img src="readme_assets/data_visualization.png" alt="SMART 科学数据可视化页面截图" width="92%" />
 </p>
 
 ## 项目定位
