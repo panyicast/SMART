@@ -786,6 +786,10 @@
 - 提交：`dcbaf85`
 - 影响文件：`src/smart/services/flight_program.py`、`tests/test_flight_program.py`、`HANDOFF.md`。
 
-## 2026-05-31T22:36:09+08:00 | Preserve subpoint track in STK ephemeris export
-- 提交：`本次提交`
+## 2026-05-31T22:36:15+08:00 | Preserve subpoint track in STK ephemeris export
+- 提交：`6fd344d`
 - 影响文件：`src/smart/services/stk_ephemeris.py`、`tests/test_stk_ephemeris.py`、`HANDOFF.md`。
+
+## 2026-06-01T08:49:32+08:00 | Checkpoint F4 F5 project data
+- 提交：`本次提交`
+- 影响文件：`HANDOFF.md`、`projects/F4/smart_project.json`、`projects/F5/data/orbit_elements.json`、`projects/F5/smart_project.json`、`projects/F4/charts/altitude_trend.png`、`projects/F4/charts/velocity_trend.png`、`projects/F5/charts/altitude_trend.png`、`projects/F5/charts/velocity_trend.png`。
